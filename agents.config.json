@@ -1,0 +1,14 @@
+{
+  "agents": [
+    {
+      "id": "main-agent",
+      "name": "main-agent",
+      "model": "claude-sonnet-4-5",
+      "workspaceDir": "./workspaces/main-agent",
+      "allowedTools": ["filesystem", "browser", "task-manager"],
+      "bigBrother": {
+        "enabled": false
+      }
+    }
+  ]
+}

@@ -2,5 +2,36 @@ node_modules/
 dist/
 .env
 *.env.local
-workspaces/
 .DS_Store
+data/
+
+# Workspaces — runtime agent data, never commit
+workspaces/
+
+# IDE
+.idea/
+.vscode/
+
+# MCP config — developer-local
+.mcp.json
+
+# Playwright artifacts
+.playwright-mcp/
+test-results/
+packages/frontend/test-results/
+
+# Legacy agent package data
+packages/agent/data/
+
+# Vault — local project wiki, not shipped
+vault/
+
+# Superpowers planning docs — internal dev artifacts, contain absolute
+# paths and agent-specific context, never commit
+docs/superpowers/
+
+# Legacy packages/agent/ (superseded by packages/backend/src/agent/)
+packages/agent/
+
+# Screenshots / temp images
+img_*.png

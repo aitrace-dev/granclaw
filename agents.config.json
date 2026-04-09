@@ -5,10 +5,22 @@
       "name": "main-agent",
       "model": "claude-sonnet-4-5",
       "workspaceDir": "./workspaces/main-agent",
-      "allowedTools": ["filesystem", "browser", "task-manager"],
-      "bigBrother": {
-        "enabled": false
-      }
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
+    },
+    {
+      "id": "demo",
+      "name": "Demo",
+      "model": "claude-sonnet-4-5",
+      "workspaceDir": "./workspaces/demo",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
     }
   ]
 }

@@ -1,0 +1,358 @@
+import { useState, useEffect, useRef } from 'react';
+import { fetchUsage, type UsageSummary } from '../lib/api.ts';
+import { Chart, registerables } from 'chart.js';
+
+Chart.register(...registerables);
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function TokenChart({ data }: { data: UsageSummary }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const chartRef = useRef<Chart | null>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || data.daily.length === 0) return;
+
+    if (chartRef.current) chartRef.current.destroy();
+
+    chartRef.current = new Chart(canvasRef.current, {
+      type: 'bar',
+      data: {
+        labels: data.daily.map(d => d.date.slice(5)), // MM-DD
+        datasets: [
+          {
+            label: 'Input',
+            data: data.daily.map(d => d.inputTokens),
+            backgroundColor: 'rgba(167, 139, 250, 0.7)', // purple
+            borderRadius: 2,
+          },
+          {
+            label: 'Output',
+            data: data.daily.map(d => d.outputTokens),
+            backgroundColor: 'rgba(56, 189, 248, 0.7)', // blue
+            borderRadius: 2,
+          },
+          {
+            label: 'Cache Read',
+            data: data.daily.map(d => d.cacheReadTokens),
+            backgroundColor: 'rgba(74, 222, 128, 0.4)', // green
+            borderRadius: 2,
+          },
+          {
+            label: 'Cache Write',
+            data: data.daily.map(d => d.cacheCreateTokens),
+            backgroundColor: 'rgba(250, 204, 21, 0.4)', // yellow
+            borderRadius: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#94a3b8', font: { size: 10, family: 'monospace' }, boxWidth: 12 },
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${formatTokens(ctx.raw as number)} tokens`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            stacked: true,
+            grid: { color: 'rgba(255,255,255,0.03)' },
+            ticks: { color: '#64748b', font: { size: 9, family: 'monospace' } },
+          },
+          y: {
+            stacked: true,
+            grid: { color: 'rgba(255,255,255,0.03)' },
+            ticks: {
+              color: '#64748b',
+              font: { size: 9, family: 'monospace' },
+              callback: (v) => formatTokens(v as number),
+            },
+          },
+        },
+      },
+    });
+
+    return () => { chartRef.current?.destroy(); };
+  }, [data]);
+
+  return <canvas ref={canvasRef} />;
+}
+
+function CostChart({ data }: { data: UsageSummary }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const chartRef = useRef<Chart | null>(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || data.daily.length === 0) return;
+
+    if (chartRef.current) chartRef.current.destroy();
+
+    chartRef.current = new Chart(canvasRef.current, {
+      type: 'line',
+      data: {
+        labels: data.daily.map(d => d.date.slice(5)),
+        datasets: [
+          {
+            label: 'Est. Cost (USD)',
+            data: data.daily.map(d => Number(d.estimatedCostUsd.toFixed(2))),
+            borderColor: 'rgba(248, 113, 113, 0.8)',
+            backgroundColor: 'rgba(248, 113, 113, 0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: '#94a3b8', font: { size: 10, family: 'monospace' }, boxWidth: 12 },
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `$${(ctx.raw as number).toFixed(2)}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255,255,255,0.03)' },
+            ticks: { color: '#64748b', font: { size: 9, family: 'monospace' } },
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.03)' },
+            ticks: {
+              color: '#64748b',
+              font: { size: 9, family: 'monospace' },
+              callback: (v) => `$${v}`,
+            },
+          },
+        },
+      },
+    });
+
+    return () => { chartRef.current?.destroy(); };
+  }, [data]);
+
+  return <canvas ref={canvasRef} />;
+}
+
+export function UsageView({ agentId }: { agentId: string }) {
+  const [data, setData] = useState<UsageSummary | null>(null);
+  const [days, setDays] = useState(30);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchUsage(agentId, days).then(setData).catch(console.error).finally(() => setLoading(false));
+  }, [agentId, days]);
+
+  if (loading || !data) {
+    return <div className="text-on-surface-variant/40 text-xs p-6">Scanning sessions...</div>;
+  }
+
+  const models = Object.entries(data.byModel).sort((a, b) => b[1].estimatedCostUsd - a[1].estimatedCostUsd);
+
+  return (
+    <div className="flex flex-col h-full w-full min-w-0" style={{ background: '#111319' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] opacity-60">📊</span>
+          <span className="text-[11px] uppercase tracking-[0.14em] font-medium text-on-surface-variant">
+            Usage
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {[7, 14, 30].map(d => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className={`px-2 py-0.5 rounded text-[9px] font-mono transition-colors ${
+                days === d ? 'bg-primary/20 text-primary' : 'text-on-surface-variant/40 hover:text-on-surface-variant/70'
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+
+        {/* Summary cards */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="rounded-lg bg-[#1e1f26] p-4">
+            <p className="text-[9px] uppercase text-on-surface-variant/30 mb-1.5">Total Tokens</p>
+            <p className="font-mono text-[20px] text-on-surface/80">{formatTokens(data.totalInputTokens + data.totalOutputTokens)}</p>
+            <p className="font-mono text-[9px] text-on-surface-variant/30 mt-1">{formatTokens(data.totalCacheReadTokens + data.totalCacheCreateTokens)} cached</p>
+          </div>
+          <div className="rounded-lg bg-[#1e1f26] p-4">
+            <p className="text-[9px] uppercase text-on-surface-variant/30 mb-1.5">Sessions</p>
+            <p className="font-mono text-[20px] text-on-surface/80">{data.totalSessions}</p>
+            <p className="font-mono text-[9px] text-on-surface-variant/30 mt-1">{Object.keys(data.byModel).length} models</p>
+          </div>
+          <div className="rounded-lg bg-[#1e1f26] p-4">
+            <p className="text-[9px] uppercase text-on-surface-variant/30 mb-1.5">Est. Cost</p>
+            <p className="font-mono text-[20px] text-red-400/80">${data.totalEstimatedCostUsd.toFixed(2)}</p>
+            <p className="font-mono text-[9px] text-on-surface-variant/30 mt-1">{days} day period</p>
+          </div>
+          <div className="rounded-lg bg-[#1e1f26] p-4">
+            <p className="text-[9px] uppercase text-on-surface-variant/30 mb-1.5">Avg/Day</p>
+            <p className="font-mono text-[20px] text-amber-400/80">${data.daily.length > 0 ? (data.totalEstimatedCostUsd / data.daily.length).toFixed(2) : '0.00'}</p>
+            <p className="font-mono text-[9px] text-on-surface-variant/30 mt-1">{data.daily.length > 0 ? Math.round(data.totalSessions / data.daily.length) : 0} sessions/day</p>
+          </div>
+        </div>
+
+        {/* Token chart */}
+        <div>
+          <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+            Daily Token Usage
+          </p>
+          <div className="rounded-lg bg-[#1e1f26] p-4" style={{ height: '300px' }}>
+            {data.daily.length > 0 ? (
+              <TokenChart data={data} />
+            ) : (
+              <p className="text-on-surface-variant/25 text-xs text-center pt-20">No usage data</p>
+            )}
+          </div>
+        </div>
+
+        {/* Cost chart */}
+        <div>
+          <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+            Daily Estimated Cost
+          </p>
+          <div className="rounded-lg bg-[#1e1f26] p-4" style={{ height: '250px' }}>
+            {data.daily.length > 0 ? (
+              <CostChart data={data} />
+            ) : (
+              <p className="text-on-surface-variant/25 text-xs text-center pt-16">No cost data</p>
+            )}
+          </div>
+        </div>
+
+        {/* Model breakdown */}
+        {models.length > 0 && (
+          <div>
+            <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+              By Model
+            </p>
+            <div className="space-y-1">
+              {models.map(([model, stats]) => (
+                <div key={model} className="rounded bg-[#1e1f26] p-2.5 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <span className="font-mono text-[10px] text-on-surface/70 truncate block">{model}</span>
+                    <span className="font-mono text-[9px] text-on-surface-variant/30">
+                      {stats.sessions} sessions · {formatTokens(stats.inputTokens)} in · {formatTokens(stats.outputTokens)} out
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10px] text-red-400/60 flex-shrink-0">
+                    ${stats.estimatedCostUsd.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Token breakdown */}
+        <div>
+          <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+            Token Breakdown
+          </p>
+          <div className="rounded bg-[#1e1f26] p-3 space-y-1.5">
+            <div className="flex justify-between">
+              <span className="font-mono text-[10px] text-on-surface-variant/50">Input tokens</span>
+              <span className="font-mono text-[10px] text-[#a78bfa]">{formatTokens(data.totalInputTokens)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-mono text-[10px] text-on-surface-variant/50">Output tokens</span>
+              <span className="font-mono text-[10px] text-[#38bdf8]">{formatTokens(data.totalOutputTokens)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-mono text-[10px] text-on-surface-variant/50">Cache read</span>
+              <span className="font-mono text-[10px] text-[#4ade80]">{formatTokens(data.totalCacheReadTokens)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-mono text-[10px] text-on-surface-variant/50">Cache write</span>
+              <span className="font-mono text-[10px] text-[#facc15]">{formatTokens(data.totalCacheCreateTokens)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tool usage */}
+        {Object.keys(data.byTool).length > 0 && (
+          <div>
+            <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+              Tool Invocations
+            </p>
+            <div className="rounded-lg bg-[#1e1f26] p-3 space-y-1">
+              {Object.entries(data.byTool).sort((a, b) => b[1] - a[1]).map(([tool, count]) => {
+                const maxCount = Math.max(...Object.values(data.byTool));
+                return (
+                  <div key={tool} className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] text-on-surface-variant/50 w-40 truncate flex-shrink-0" title={tool}>{tool}</span>
+                    <div className="flex-1 h-3 rounded-sm bg-[#111319] overflow-hidden">
+                      <div
+                        className="h-full rounded-sm bg-primary/40"
+                        style={{ width: `${(count / maxCount) * 100}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-[9px] text-on-surface-variant/40 w-8 text-right flex-shrink-0">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Daily detail table */}
+        <div>
+          <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+            Daily Breakdown
+          </p>
+          <div className="rounded-lg bg-[#1e1f26] overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/5">
+                  <th className="px-3 py-2 text-left text-[9px] font-mono text-on-surface-variant/40 font-medium">Date</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/40 font-medium">Sessions</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/40 font-medium">Input</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/40 font-medium">Output</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/40 font-medium">Cache</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/40 font-medium">Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...data.daily].reverse().map(d => (
+                  <tr key={d.date} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-on-surface/70">{d.date}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-on-surface-variant/50 text-right">{d.sessions}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-[#a78bfa] text-right">{formatTokens(d.inputTokens)}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-[#38bdf8] text-right">{formatTokens(d.outputTokens)}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-[#4ade80] text-right">{formatTokens(d.cacheReadTokens + d.cacheCreateTokens)}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-red-400/60 text-right">${d.estimatedCostUsd.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

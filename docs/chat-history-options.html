@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chat History — Architecture Options</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d0d0d;
+      --surface: #161616;
+      --card: #1e1e1e;
+      --border: #2a2a2a;
+      --text: #e8e8e8;
+      --muted: #888;
+      --accent-a: #7c3aed;
+      --accent-b: #0ea5e9;
+      --accent-c: #10b981;
+      --warn: #f59e0b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      padding: 48px 32px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-bottom: 48px;
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 48px;
+    }
+
+    .option {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .option-header {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .option-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .option-a .option-label { color: var(--accent-a); }
+    .option-b .option-label { color: var(--accent-b); }
+    .option-c .option-label { color: var(--accent-c); }
+
+    .option-title {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .diagram {
+      padding: 20px;
+    }
+
+    /* Hand-drawn style diagrams with SVG */
+    .diagram svg {
+      width: 100%;
+      height: auto;
+    }
+
+    .tradeoffs {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .tradeoff {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .tradeoff .icon {
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .pro { color: var(--accent-c); }
+    .con { color: #f87171; }
+
+    .recommendation {
+      background: var(--card);
+      border: 1px solid var(--accent-c);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .recommendation h2 {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent-c);
+      margin-bottom: 8px;
+    }
+
+    .recommendation h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .rec-diagram {
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    /* Mermaid theme overrides */
+    .mermaid {
+      background: transparent !important;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Chat History — Architecture Options</h1>
+<p class="subtitle">How should agent-brother store messages so agents remember across channels and the UI can display history?</p>
+
+<div class="options">
+
+  <!-- OPTION A -->
+  <div class="option option-a">
+    <div class="option-header">
+      <div class="option-label">Option A</div>
+      <div class="option-title">Session per conversation</div>
+    </div>
+    <div class="diagram">
+      <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#1e1e1e', 'primaryColor': '#7c3aed', 'primaryTextColor': '#e8e8e8', 'primaryBorderColor': '#7c3aed', 'lineColor': '#555', 'secondaryColor': '#2a2a2a', 'tertiaryColor': '#1e1e1e', 'edgeLabelBackground': '#1e1e1e', 'fontSize': '12px'}}}%%
+flowchart TD
+    WA["📱 WhatsApp"] -->|msg + channel:wa| B
+    LI["💼 LinkedIn"] -->|msg + channel:li| B
+    UI["🖥 Dashboard UI"] -->|msg + channel:ui| B
+
+    B["Backend\nOrchestrator"]
+
+    B -->|resume session_wa| AG
+    B -->|resume session_li| AG
+    B -->|resume session_ui| AG
+
+    AG["🤖 Agent\nRunner"]
+    AG -->|spawns| CL["claude CLI\n--resume &lt;session_id&gt;"]
+
+    AG -->|stores| DB[("SQLite\nsession_wa\nsession_li\nsession_ui")]
+
+    B -->|log msg| MG[("MongoDB\nmessages")]
+
+    MG -->|history| UI
+      </div>
+    </div>
+    <div class="tradeoffs">
+      <div class="tradeoff pro"><span class="icon">✓</span><span>Each channel has its own Claude context window — no cross-talk</span></div>
+      <div class="tradeoff pro"><span class="icon">✓</span><span>Fast — no extra tokens injected per request</span></div>
+      <div class="tradeoff con"><span class="icon">✗</span><span>Claude sessions expire — agent loses memory cold on restart</span></div>
+      <div class="tradeoff con"><span class="icon">✗</span><span>Can't move a conversation between channels</span></div>
+    </div>
+  </div>
+
+  <!-- OPTION B -->
+  <div class="option option-b">
+    <div class="option-header">
+      <div class="option-label">Option B</div>
+      <div class="option-title">Inject history, no sessions</div>
+    </div>
+    <div class="diagram">
+      <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#1e1e1e', 'primaryColor': '#0ea5e9', 'primaryTextColor': '#e8e8e8', 'primaryBorderColor': '#0ea5e9', 'lineColor': '#555', 'secondaryColor': '#2a2a2a', 'tertiaryColor': '#1e1e1e', 'edgeLabelBackground': '#1e1e1e', 'fontSize': '12px'}}}%%
+flowchart TD
+    WA["📱 WhatsApp"] -->|msg| B
+    LI["💼 LinkedIn"] -->|msg| B
+    UI["🖥 Dashboard UI"] -->|msg| B
+
+    B["Backend\nOrchestrator"]
+
+    B -->|fetch last N msgs| MG[("MongoDB\nmessages")]
+    MG -->|history| B
+
+    B -->|prompt = history + msg| AG["🤖 Agent\nRunner"]
+    AG -->|spawns fresh| CL["claude CLI\n-p 'prev: ...\nuser: ...'"]
+
+    AG -->|save reply| MG
+
+    MG -->|display| UI
+      </div>
+    </div>
+    <div class="tradeoffs">
+      <div class="tradeoff pro"><span class="icon">✓</span><span>Full control over what agent sees — no session expiry surprises</span></div>
+      <div class="tradeoff pro"><span class="icon">✓</span><span>Conversation can move freely across channels</span></div>
+      <div class="tradeoff con"><span class="icon">✗</span><span>Extra tokens on every request — slower and more expensive</span></div>
+      <div class="tradeoff con"><span class="icon">✗</span><span>Context window fills up on long conversations</span></div>
+    </div>
+  </div>
+
+  <!-- OPTION C -->
+  <div class="option option-c">
+    <div class="option-header">
+      <div class="option-label">Option C — Recommended</div>
+      <div class="option-title">Hybrid: resume + fallback inject</div>
+    </div>
+    <div class="diagram">
+      <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#1e1e1e', 'primaryColor': '#10b981', 'primaryTextColor': '#e8e8e8', 'primaryBorderColor': '#10b981', 'lineColor': '#555', 'secondaryColor': '#2a2a2a', 'tertiaryColor': '#1e1e1e', 'edgeLabelBackground': '#1e1e1e', 'fontSize': '12px'}}}%%
+flowchart TD
+    WA["📱 WhatsApp"] --> B
+    LI["💼 LinkedIn"] --> B
+    UI["🖥 Dashboard UI"] --> B
+
+    B["Backend\nOrchestrator"]
+    B -->|save msg| MG[("MongoDB\nmessages")]
+    B -->|run| AG["🤖 Agent\nRunner"]
+
+    AG -->|happy path| CL1["claude CLI\n--resume session_id"]
+    CL1 -->|exit 1 / expired| FB["⚠ Session expired\nfallback"]
+
+    FB -->|fetch last 20 msgs| MG
+    MG --> FB
+    FB -->|inject as context| CL2["claude CLI\nfresh + history"]
+
+    CL1 -->|reply| B
+    CL2 -->|reply + new session_id| B
+
+    B -->|save reply| MG
+    MG -->|display| UI
+      </div>
+    </div>
+    <div class="tradeoffs">
+      <div class="tradeoff pro"><span class="icon">✓</span><span>Fast on happy path (--resume, no extra tokens)</span></div>
+      <div class="tradeoff pro"><span class="icon">✓</span><span>Survives session expiry — injects history automatically</span></div>
+      <div class="tradeoff pro"><span class="icon">✓</span><span>Full message log in MongoDB for UI + cross-channel queries</span></div>
+      <div class="tradeoff con"><span class="icon">✗</span><span>Slightly more complex runner logic (already partially there)</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- DATA MODEL -->
+<div class="recommendation">
+  <h2>Recommended data model — Option C</h2>
+  <h3>MongoDB <code>messages</code> collection + SQLite <code>agent_sessions</code> per (agent, channel, conversation)</h3>
+  <div class="rec-diagram">
+    <div class="mermaid">
+%%{init: {'theme': 'dark', 'themeVariables': {'background': '#161616', 'primaryColor': '#10b981', 'primaryTextColor': '#e8e8e8', 'primaryBorderColor': '#10b981', 'lineColor': '#555', 'secondaryColor': '#2a2a2a', 'tertiaryColor': '#161616', 'edgeLabelBackground': '#161616', 'fontSize': '13px'}}}%%
+erDiagram
+    MESSAGE {
+        string id PK
+        string agentId
+        string channelId "ui | whatsapp | linkedin"
+        string conversationId "groups a thread"
+        string role "user | assistant"
+        string content
+        number createdAt
+    }
+
+    AGENT_SESSION {
+        string agentId PK
+        string channelId PK
+        string conversationId PK
+        string sessionId "Claude resume token"
+        number updatedAt
+    }
+
+    MESSAGE }o--|| AGENT_SESSION : "linked by agentId+channelId+conversationId"
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+</script>
+</body>
+</html>

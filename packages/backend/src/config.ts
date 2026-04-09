@@ -7,14 +7,19 @@ export interface AgentConfig {
   model: string;
   workspaceDir: string;
   allowedTools: string[];
-  bigBrother: { enabled: boolean };
+  /** @deprecated Guardian not yet implemented — kept for legacy configs */
+  bigBrother?: { enabled: boolean };
 }
 
 interface AppConfig {
   agents: AgentConfig[];
 }
 
-const CONFIG_PATH = path.resolve(process.cwd(), '../../agents.config.json');
+const CONFIG_PATH = process.env.CONFIG_PATH
+  ? path.resolve(process.env.CONFIG_PATH)
+  : path.resolve(process.cwd(), '../../agents.config.json');
+
+export const REPO_ROOT = path.dirname(CONFIG_PATH);
 
 function load(): AppConfig {
   const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
@@ -27,4 +32,11 @@ export function getAgents(): AgentConfig[] {
 
 export function getAgent(id: string): AgentConfig | undefined {
   return getAgents().find((a) => a.id === id);
+}
+
+export function saveAgents(agents: AgentConfig[]): void {
+  const configPath = process.env.CONFIG_PATH
+    ? path.resolve(process.env.CONFIG_PATH)
+    : path.resolve(process.cwd(), '../../agents.config.json');
+  fs.writeFileSync(configPath, JSON.stringify({ agents }, null, 2) + '\n');
 }

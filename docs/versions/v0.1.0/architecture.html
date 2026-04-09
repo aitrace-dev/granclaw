@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>agent-brother v0.1.0 — Architecture</title>
+  <style>
+    :root {
+      --bg:           #111319;
+      --bg-low:       #191b22;
+      --bg-card:      #1e1f26;
+      --bg-high:      #282a30;
+      --bg-highest:   #33343b;
+      --bg-lowest:    #0c0e14;
+      --primary:      #d0bcff;
+      --primary-dim:  #a078ff;
+      --secondary:    #4edea3;
+      --error:        #ffb4ab;
+      --text:         #e2e2eb;
+      --text-muted:   #cbc3d7;
+      --outline:      #494454;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: 100vh; }
+
+    nav {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--bg-lowest);
+      padding: 2rem 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--outline);
+    }
+
+    nav .logo {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--primary);
+      padding: 0 1.5rem 1.5rem;
+      border-bottom: 1px solid var(--outline);
+      margin-bottom: 1rem;
+    }
+    nav .logo span { color: var(--text-muted); font-weight: 400; font-size: 0.75rem; display: block; margin-top: 2px; }
+
+    nav a {
+      display: block;
+      padding: 0.4rem 1.5rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: color 0.15s;
+    }
+    nav a:hover { color: var(--text); }
+    nav .nav-section {
+      padding: 1rem 1.5rem 0.25rem;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--outline);
+      font-weight: 600;
+    }
+
+    main {
+      flex: 1;
+      padding: 3rem 4rem;
+      max-width: 860px;
+    }
+
+    /* ── Typography ── */
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+    }
+    h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--outline);
+    }
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--primary);
+      margin-top: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    p { margin-bottom: 1rem; color: var(--text-muted); }
+    strong { color: var(--text); font-weight: 600; }
+
+    /* ── Version badge ── */
+    .version-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg-card);
+      border: 1px solid var(--outline);
+      border-radius: 99px;
+      padding: 0.25rem 0.75rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8rem;
+      color: var(--secondary);
+      margin-bottom: 2rem;
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--secondary); }
+
+    /* ── Code blocks ── */
+    pre {
+      background: var(--bg-lowest);
+      border: 1px solid var(--outline);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      overflow-x: auto;
+      margin: 1rem 0 1.5rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: var(--text);
+    }
+    code {
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+      background: var(--bg-card);
+      padding: 0.1em 0.4em;
+      border-radius: 4px;
+      color: var(--primary);
+    }
+    pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+
+    /* comment colour in code blocks */
+    .cm { color: var(--text-muted); }
+    .ck { color: var(--primary); }
+    .cv { color: var(--secondary); }
+    .cs { color: #f9c74f; }
+
+    /* ── Diagram boxes ── */
+    .diagram {
+      background: var(--bg-lowest);
+      border: 1px solid var(--outline);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1rem 0 1.5rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8rem;
+      line-height: 1.8;
+      color: var(--text-muted);
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .diagram .hi   { color: var(--secondary); }
+    .diagram .hi2  { color: var(--primary); }
+    .diagram .warn { color: var(--error); }
+
+    /* ── Flow steps ── */
+    .steps { list-style: none; margin: 1rem 0 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .steps li {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+    .step-num {
+      background: var(--primary-dim);
+      color: #1a0050;
+      font-weight: 700;
+      font-size: 0.75rem;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .steps li p { margin: 0; }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; }
+    th {
+      text-align: left;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0.6rem 0.75rem;
+      background: var(--bg-lowest);
+      border-bottom: 1px solid var(--outline);
+    }
+    td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--outline);
+      vertical-align: top;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+    td:first-child { font-family: 'Courier New', monospace; color: var(--secondary); font-size: 0.8rem; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Callout ── */
+    .callout {
+      background: var(--bg-card);
+      border-left: 3px solid var(--primary);
+      border-radius: 0 8px 8px 0;
+      padding: 0.9rem 1.2rem;
+      margin: 1rem 0 1.5rem;
+      font-size: 0.9rem;
+    }
+    .callout.green { border-color: var(--secondary); }
+    .callout.red   { border-color: var(--error); }
+    .callout p { margin: 0; }
+
+    /* ── Tags ── */
+    .tag {
+      display: inline-block;
+      padding: 0.15rem 0.6rem;
+      border-radius: 99px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 0.3rem;
+    }
+    .tag.done  { background: #00a57233; color: var(--secondary); }
+    .tag.next  { background: #a078ff22; color: var(--primary); }
+    .tag.later { background: var(--bg-high); color: var(--text-muted); }
+
+    hr { border: none; border-top: 1px solid var(--outline); margin: 2.5rem 0; }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar nav -->
+  <nav>
+    <div class="logo">agent-brother <span>architecture docs</span></div>
+    <div class="nav-section">Overview</div>
+    <a href="#what-is-this">What is this?</a>
+    <a href="#how-to-run">How to run</a>
+    <a href="#file-structure">File structure</a>
+    <div class="nav-section">Architecture</div>
+    <a href="#big-picture">Big picture</a>
+    <a href="#config">Config as code</a>
+    <a href="#backend">Backend</a>
+    <a href="#agent-runner">Agent runner</a>
+    <a href="#websocket">WebSocket protocol</a>
+    <a href="#mongodb">MongoDB / memory</a>
+    <div class="nav-section">UI</div>
+    <a href="#ui-overview">UI overview</a>
+    <a href="#dashboard">Dashboard screen</a>
+    <a href="#chat">Chat screen</a>
+    <a href="#logs">Logs screen</a>
+    <div class="nav-section">Message lifecycle</div>
+    <a href="#message-flow">Full message flow</a>
+    <a href="#session-memory">Session memory</a>
+    <div class="nav-section">Roadmap</div>
+    <a href="#roadmap">Phases</a>
+  </nav>
+
+  <!-- Content -->
+  <main>
+    <h1>agent-brother</h1>
+    <div class="version-badge"><div class="dot"></div> v0.1.0 — MVP</div>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="what-is-this">What is this?</h2>
+
+    <p>
+      <strong>agent-brother</strong> is a minimal multi-agent AI framework. You run it locally, open a dashboard,
+      and chat with AI agents that can use tools — browse the web, read/write files, run code. Every action is logged
+      to MongoDB. The design is deliberately small so the entire codebase is readable.
+    </p>
+
+    <p>
+      It takes inspiration from three open-source projects: <strong>NanoClaw</strong> (small codebase, container isolation),
+      <strong>IronClaw</strong> (security model, endpoint allowlisting), and <strong>ClaudeClaw</strong>
+      (Claude Code CLI integration). The "Big Brother" oversight agent — which intercepts and can cancel any agent action
+      in real time — is the core original idea.
+    </p>
+
+    <div class="callout green">
+      <p><strong>v0.1.0 scope:</strong> one agent, no guardrails, working chat + logs dashboard. This version proves the core loop. Big Brother, multi-agent, and Docker isolation come in later phases.</p>
+    </div>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="how-to-run">How to run</h2>
+    <pre><code><span class="cm"># 1. Start MongoDB</span>
+docker compose up -d
+
+<span class="cm"># 2. Copy env</span>
+cp .env.example .env
+
+<span class="cm"># 3. Install dependencies (once)</span>
+npm install
+
+<span class="cm"># 4. Start everything</span>
+npm run dev
+<span class="cm"># → backend on http://localhost:3001</span>
+<span class="cm"># → frontend on http://localhost:5173</span></code></pre>
+
+    <p>Prerequisites: <strong>Node 20+</strong>, <strong>Docker</strong>, and the <strong>Claude Code CLI</strong> installed (<code>claude</code> must be on your PATH).</p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="file-structure">File structure</h2>
+
+    <div class="diagram"><span class="hi">agent-brother/</span>
+├── <span class="hi2">agents.config.json</span>        ← defines every agent (model, tools, workspace)
+├── .env                          ← MONGODB_URI, PORT
+├── docker-compose.yml            ← spins up MongoDB
+│
+├── packages/
+│   ├── <span class="hi">backend/</span>
+│   │   └── src/
+│   │       ├── <span class="hi2">index.ts</span>          ← entry point, connects DB, starts server
+│   │       ├── <span class="hi2">server.ts</span>         ← Express + WebSocket server
+│   │       ├── <span class="hi2">agent-runner.ts</span>   ← spawns claude CLI, streams output
+│   │       ├── <span class="hi2">config.ts</span>         ← reads agents.config.json
+│   │       ├── <span class="hi2">db.ts</span>             ← MongoDB schemas + helpers
+│   │       └── routes/
+│   │           ├── agents.ts     ← GET /agents, GET /agents/:id
+│   │           └── logs.ts       ← GET /logs
+│   │
+│   └── <span class="hi">frontend/</span>
+│       └── src/
+│           ├── <span class="hi2">App.tsx</span>           ← router (3 pages)
+│           ├── lib/api.ts        ← typed REST API calls
+│           ├── hooks/
+│           │   └── <span class="hi2">useAgentSocket.ts</span>  ← WebSocket hook
+│           ├── components/
+│           │   ├── AppShell.tsx  ← sidebar + top bar layout
+│           │   └── AgentCard.tsx ← agent summary card
+│           └── pages/
+│               ├── DashboardPage.tsx
+│               ├── ChatPage.tsx
+│               └── LogsPage.tsx</div>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="big-picture">Big picture</h2>
+
+    <p>There are three separate processes running at the same time:</p>
+
+    <div class="diagram">┌─────────────────────────────────────────────────────────┐
+│                 YOUR MACHINE                             │
+│                                                         │
+│  ┌──────────────┐    WebSocket    ┌──────────────────┐  │
+│  │   Browser    │◄───────────────►│ Backend (3001)   │  │
+│  │ (port 5173)  │   REST (HTTP)   │ Express + WS     │  │
+│  └──────────────┘◄───────────────►└────────┬─────────┘  │
+│                                            │             │
+│                                    spawn   │ child_process│
+│                                            ▼             │
+│                                   ┌────────────────┐     │
+│                                   │  claude  CLI   │     │
+│                                   │  (subprocess)  │     │
+│                                   └────────────────┘     │
+│                                            │             │
+│                                     reads  │             │
+│                                            ▼             │
+│                                   ┌────────────────┐     │
+│                                   │    MongoDB     │     │
+│                                   │  (port 27017)  │     │
+│                                   └────────────────┘     │
+└─────────────────────────────────────────────────────────┘</div>
+
+    <p>
+      The <strong>frontend</strong> (React) never talks to Claude directly — everything goes through the backend.
+      The <strong>backend</strong> is the only piece that knows about Claude, MongoDB, and your config file.
+      The <strong>claude CLI</strong> is a child process spawned per message — it runs, responds, and exits.
+    </p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="config">Config as code</h2>
+
+    <p>
+      <strong>Every agent is defined in <code>agents.config.json</code></strong> at the project root.
+      There is no database table for agent configuration — the file is the source of truth.
+      The backend reads it fresh on every request, so changes take effect immediately without a restart.
+    </p>
+
+<pre><code><span class="cm">// agents.config.json</span>
+{
+  <span class="ck">"agents"</span>: [
+    {
+      <span class="ck">"id"</span>:           <span class="cs">"main-agent"</span>,        <span class="cm">// unique, used in URLs + logs</span>
+      <span class="ck">"name"</span>:         <span class="cs">"main-agent"</span>,        <span class="cm">// display name in UI</span>
+      <span class="ck">"model"</span>:        <span class="cs">"claude-sonnet-4-5"</span>, <span class="cm">// passed to claude CLI</span>
+      <span class="ck">"workspaceDir"</span>: <span class="cs">"./workspaces/main-agent"</span>, <span class="cm">// agent's working directory</span>
+      <span class="ck">"allowedTools"</span>: [<span class="cs">"filesystem"</span>, <span class="cs">"browser"</span>],
+      <span class="ck">"bigBrother"</span>:   { <span class="ck">"enabled"</span>: <span class="cv">false</span> }  <span class="cm">// P2: BB oversight</span>
+    }
+  ]
+}</code></pre>
+
+    <p>
+      In later phases, when you tell the admin agent "disable browser for main-agent",
+      it will write to this file and commit it to git. The change is visible in version history — that's what "config as code" means.
+    </p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="backend">Backend</h2>
+
+    <p>The backend is a single <strong>Node.js + TypeScript</strong> process (<code>packages/backend</code>). It does four things:</p>
+
+    <table>
+      <thead><tr><th>File</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td>index.ts</td><td>Entry point. Connects to MongoDB, then starts the HTTP + WebSocket server.</td></tr>
+        <tr><td>server.ts</td><td>Express for REST routes. WebSocket server for real-time streaming. Both run on port 3001.</td></tr>
+        <tr><td>config.ts</td><td>Reads and parses <code>agents.config.json</code>. Used by routes and agent-runner.</td></tr>
+        <tr><td>db.ts</td><td>Mongoose connection + two schemas: AgentAction and AgentSession. Helper functions for logging and session lookup.</td></tr>
+        <tr><td>agent-runner.ts</td><td>The core. Spawns the Claude CLI, streams output, saves sessions. Explained in detail below.</td></tr>
+        <tr><td>routes/agents.ts</td><td><code>GET /agents</code> — list all agents with status. <code>GET /agents/:id</code> — single agent.</td></tr>
+        <tr><td>routes/logs.ts</td><td><code>GET /logs</code> — paginated log query with agentId/type filters.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="agent-runner">Agent runner — the core</h2>
+
+    <p>
+      <code>agent-runner.ts</code> is where the AI runs. It uses the same technique as ClaudeClaw:
+      instead of calling an API directly, it spawns the <code>claude</code> CLI as a child process
+      and communicates with it via stdin/stdout.
+    </p>
+
+    <h3>Why the CLI instead of the API?</h3>
+    <p>
+      The Claude Code CLI handles tool use (filesystem, browser, bash) natively. You don't have to implement
+      tool execution yourself — Claude calls tools, gets results, and reasons about them, all within the same process.
+      If you called the raw Anthropic API, you'd have to implement every tool yourself.
+    </p>
+
+    <h3>What command gets run?</h3>
+<pre><code><span class="cm"># First message (no session yet)</span>
+claude -p <span class="cs">"your message"</span> --output-format stream-json --verbose
+
+<span class="cm"># Follow-up messages (resume same conversation)</span>
+claude -p <span class="cs">"your message"</span> --output-format stream-json --verbose --resume abc123</code></pre>
+
+    <p>
+      The <code>--output-format stream-json</code> flag makes Claude emit one JSON object per line
+      instead of a human-readable text block. Each line describes something that happened:
+      a piece of text, a tool call, a tool result, or the final summary with the session ID.
+    </p>
+
+    <h3>What does the streamed output look like?</h3>
+<pre><code><span class="cm">// Text chunk from Claude</span>
+{<span class="ck">"type"</span>:<span class="cs">"assistant"</span>,<span class="ck">"message"</span>:{<span class="ck">"content"</span>:[{<span class="ck">"type"</span>:<span class="cs">"text"</span>,<span class="ck">"text"</span>:<span class="cs">"I found 3 files..."</span>}]}}
+
+<span class="cm">// Tool use (Claude calling a tool)</span>
+{<span class="ck">"type"</span>:<span class="cs">"assistant"</span>,<span class="ck">"message"</span>:{<span class="ck">"content"</span>:[{<span class="ck">"type"</span>:<span class="cs">"tool_use"</span>,<span class="ck">"name"</span>:<span class="cs">"filesystem"</span>,<span class="ck">"input"</span>:{...}}]}}
+
+<span class="cm">// Final result (session ID for memory)</span>
+{<span class="ck">"type"</span>:<span class="cs">"result"</span>,<span class="ck">"session_id"</span>:<span class="cs">"abc123xyz"</span>,<span class="ck">"result"</span>:<span class="cs">"Done."</span>}</code></pre>
+
+    <p>
+      The runner parses each line, converts it to a <code>StreamChunk</code> (our own simpler type),
+      and immediately forwards it to the WebSocket client. The user sees text appearing in real time,
+      and tool calls appear as they happen.
+    </p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="websocket">WebSocket protocol</h2>
+
+    <p>
+      The frontend keeps a single persistent WebSocket connection open to the backend (port 3001).
+      All real-time communication goes through it. The protocol is simple JSON messages.
+    </p>
+
+    <h3>Client → Server</h3>
+<pre><code>{ <span class="ck">"type"</span>: <span class="cs">"message"</span>, <span class="ck">"agentId"</span>: <span class="cs">"main-agent"</span>, <span class="ck">"text"</span>: <span class="cs">"list files in /workspace"</span> }</code></pre>
+
+    <h3>Server → Client (streamed, one per chunk)</h3>
+<pre><code><span class="cm">// A piece of text</span>
+{ <span class="ck">"type"</span>: <span class="cs">"chunk"</span>, <span class="ck">"agentId"</span>: <span class="cs">"main-agent"</span>, <span class="ck">"chunk"</span>: { <span class="ck">"type"</span>: <span class="cs">"text"</span>, <span class="ck">"text"</span>: <span class="cs">"I found..."</span> } }
+
+<span class="cm">// A tool call</span>
+{ <span class="ck">"type"</span>: <span class="cs">"chunk"</span>, <span class="ck">"agentId"</span>: <span class="cs">"main-agent"</span>, <span class="ck">"chunk"</span>: { <span class="ck">"type"</span>: <span class="cs">"tool_call"</span>, <span class="ck">"tool"</span>: <span class="cs">"filesystem"</span>, <span class="ck">"input"</span>: {...} } }
+
+<span class="cm">// Conversation finished (includes new session ID)</span>
+{ <span class="ck">"type"</span>: <span class="cs">"chunk"</span>, <span class="ck">"agentId"</span>: <span class="cs">"main-agent"</span>, <span class="ck">"chunk"</span>: { <span class="ck">"type"</span>: <span class="cs">"done"</span>, <span class="ck">"sessionId"</span>: <span class="cs">"abc123"</span> } }
+
+<span class="cm">// Error</span>
+{ <span class="ck">"type"</span>: <span class="cs">"error"</span>, <span class="ck">"agentId"</span>: <span class="cs">"main-agent"</span>, <span class="ck">"message"</span>: <span class="cs">"claude exited with code 1"</span> }</code></pre>
+
+    <p>
+      The frontend hook (<code>useAgentSocket.ts</code>) keeps a map of <em>agentId → callback function</em>.
+      When a chunk arrives for <code>"main-agent"</code>, it calls the callback registered by the ChatPage for that agent.
+      This means in the future, multiple agents can stream simultaneously through the same connection.
+    </p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="mongodb">MongoDB — memory and logging</h2>
+
+    <p>MongoDB stores two things: <strong>every action an agent takes</strong>, and <strong>the session ID</strong> that lets conversations continue.</p>
+
+    <h3>AgentAction collection — the audit trail</h3>
+    <p>Every message in, every tool call, every tool result, every error, every system event is a document here.</p>
+
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>What it holds</th></tr></thead>
+      <tbody>
+        <tr><td>agentId</td><td>string</td><td>Which agent this belongs to (<code>"main-agent"</code>)</td></tr>
+        <tr><td>type</td><td>enum</td><td><code>message</code> / <code>tool_call</code> / <code>tool_result</code> / <code>error</code> / <code>system</code></td></tr>
+        <tr><td>input</td><td>Mixed</td><td>What went in (the user's text, the tool's arguments)</td></tr>
+        <tr><td>output</td><td>Mixed</td><td>What came back (tool result, exit code)</td></tr>
+        <tr><td>durationMs</td><td>number</td><td>How long it took (set on system events at end of run)</td></tr>
+        <tr><td>createdAt</td><td>Date</td><td>Auto-set by Mongoose timestamps</td></tr>
+      </tbody>
+    </table>
+
+    <h3>AgentSession collection — conversation memory</h3>
+    <p>
+      The Claude CLI keeps full conversation history internally, indexed by a session ID.
+      When a run finishes, Claude emits that session ID in the final JSON line.
+      We save it to MongoDB keyed by <code>agentId</code>.
+    </p>
+    <p>
+      On the <em>next</em> message, the runner looks up the latest session ID for that agent,
+      and passes it as <code>--resume &lt;sessionId&gt;</code> to the CLI.
+      Claude reloads the conversation — the agent remembers everything from before.
+    </p>
+
+    <div class="callout">
+      <p><strong>What happens if you restart the backend?</strong> No problem — sessions are in MongoDB, not in memory. The next message will resume exactly where you left off.</p>
+    </div>
+
+    <table>
+      <thead><tr><th>Field</th><th>What it holds</th></tr></thead>
+      <tbody>
+        <tr><td>agentId</td><td>Which agent owns this session</td></tr>
+        <tr><td>sessionId</td><td>The Claude session identifier string</td></tr>
+        <tr><td>lastActiveAt</td><td>Updated on every message — useful for "last seen" UI</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="ui-overview">UI overview</h2>
+
+    <p>
+      The frontend is a React single-page app built with Vite. It uses Tailwind CSS with custom
+      design tokens from the <strong>"The Panopticon Aesthetic"</strong> design system
+      (created in Stitch during the design phase). There are three pages.
+    </p>
+
+    <p>All pages share the same shell: a <strong>60px icon sidebar</strong> on the left and a <strong>top bar</strong> with the app name. The sidebar has four navigation items: Dashboard, Agents, Logs, Settings. The active item gets a green left-border indicator.</p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="dashboard">Dashboard screen <code>/dashboard</code></h2>
+
+    <p>
+      Fetches <code>GET /agents</code> on load and renders one <strong>AgentCard</strong> per agent.
+      Each card shows: name, model (in monospace green), a status badge (RUNNING / IDLE),
+      which tools are enabled, and two action buttons — <strong>Chat</strong> and <strong>Logs</strong>.
+    </p>
+
+    <p>
+      The status comes from whether MongoDB has a session for that agent. If a session exists,
+      it shows RUNNING (the agent has had at least one conversation). If not, IDLE.
+      In a future version this will reflect whether the claude subprocess is actively running right now.
+    </p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="chat">Chat screen <code>/agents/:id/chat</code></h2>
+
+    <p>This is the main working screen. It has two panels side by side:</p>
+
+    <p><strong>Left panel (agent info):</strong> Fetches <code>GET /agents/:id</code> and shows the agent's name, model, status badge, and a list of its allowed MCP tools. Each tool appears with a green dot — these are read-only in v0.1.0 (toggles come in P2 when Big Brother can enforce them).</p>
+
+    <p><strong>Right panel (chat):</strong> The actual conversation. Messages are stored in React state (not in the DB — only the backend logs to DB). When you type and press Enter or click Send:</p>
+
+    <ul class="steps">
+      <li><div class="step-num">1</div><p>Your message appears immediately in the chat as a user bubble</p></li>
+      <li><div class="step-num">2</div><p>An empty agent bubble appears with a pulsing animation (streaming indicator)</p></li>
+      <li><div class="step-num">3</div><p>The WebSocket hook sends <code>{ type: "message", agentId, text }</code> to the backend</p></li>
+      <li><div class="step-num">4</div><p>As chunks arrive, the agent bubble fills in with text in real time</p></li>
+      <li><div class="step-num">5</div><p>Tool calls appear above the response as small monospace badges (e.g. <code>⚙ filesystem({path: '/workspace'})</code>)</p></li>
+      <li><div class="step-num">6</div><p>When the <code>done</code> chunk arrives, the pulsing stops and the input unlocks</p></li>
+    </ul>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="logs">Logs screen <code>/logs</code></h2>
+
+    <p>
+      Fetches <code>GET /logs</code> and shows a compact table of everything MongoDB has recorded.
+      Columns: <strong>Timestamp</strong> (ms precision), <strong>Agent</strong>, <strong>Type</strong>,
+      <strong>Details</strong> (summarised from input/output), <strong>Duration (ms)</strong>.
+    </p>
+
+    <p>
+      Five filter chips at the top let you narrow by type: ALL, MESSAGE, TOOL CALL, TOOL RESULT, ERROR.
+      If you arrive from an agent card's "Logs" button, the URL is pre-filtered to that agent's ID.
+      Rows are colour-tinted: error rows get a faint red background.
+    </p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="message-flow">Full message lifecycle</h2>
+
+    <p>Here is exactly what happens from the moment you press Enter to when you see the reply:</p>
+
+    <div class="diagram"><span class="hi">USER</span> presses Enter
+    │
+    ▼
+<span class="hi">ChatPage.tsx</span>  (React)
+  - adds user bubble + empty agent bubble to local state
+  - calls useAgentSocket.sendMessage(agentId, text, onChunk)
+    │
+    ▼ WebSocket frame
+<span class="hi">server.ts</span>  (Express/WS)
+  - receives { type:"message", agentId:"main-agent", text:"..." }
+  - looks up agent in agents.config.json via config.ts
+  - calls runAgent(agent, text, onChunk)
+    │
+    ▼
+<span class="hi">agent-runner.ts</span>
+  - getSession(agentId) → MongoDB lookup → returns sessionId or null
+  - logAction(agentId, "message", { text }) → writes to MongoDB
+  - spawns:  claude -p "..." --output-format stream-json [--resume id]
+    │
+    ▼  stdout (line by line)
+<span class="hi2">claude CLI</span>  (subprocess)
+  - reasons about the message
+  - calls tools (filesystem, browser, etc.) and gets results
+  - emits JSON lines as it goes
+    │
+    ▼  each line parsed by agent-runner
+<span class="hi">agent-runner.ts</span>  (stream parser)
+  - converts claude JSON events → StreamChunk objects
+  - calls onChunk(chunk) for each one
+    │
+    ▼  onChunk callback
+<span class="hi">server.ts</span>
+  - ws.send(JSON.stringify({ type:"chunk", agentId, chunk }))
+    │
+    ▼  WebSocket frame
+<span class="hi">useAgentSocket.ts</span>  (React hook)
+  - routes chunk to the ChatPage's handler by agentId
+    │
+    ▼
+<span class="hi">ChatPage.tsx</span>
+  - appends text to agent bubble  (type: "text")
+  - adds tool badge               (type: "tool_call")
+  - unlocks input                 (type: "done")
+    │
+    ▼  after "done" chunk
+<span class="hi">agent-runner.ts</span>
+  - saveSession(agentId, newSessionId) → MongoDB upsert
+  - logAction(agentId, "system", null, { exitCode }, durationMs)</div>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="session-memory">Session memory — how the agent remembers</h2>
+
+    <p>
+      The Claude CLI manages conversation history internally. When it finishes a run it emits a
+      <code>session_id</code> string. That ID is a pointer to the conversation stored on disk by the CLI.
+    </p>
+
+    <div class="diagram"><span class="hi">Message 1:</span>  "What files are in /workspace?"
+  agent-runner → no session in DB → runs claude without --resume
+  claude creates new session → emits session_id: <span class="cv">"ses_abc123"</span>
+  agent-runner → saveSession("main-agent", "ses_abc123")
+
+<span class="hi">Message 2:</span>  "Now delete the temp ones"
+  agent-runner → getSession("main-agent") → <span class="cv">"ses_abc123"</span>
+  runs:  claude -p "..." --resume <span class="cv">ses_abc123</span>
+  claude reloads history → already knows about the files from message 1
+  agent acts on the full context</div>
+
+    <div class="callout green">
+      <p><strong>Memory survives restarts.</strong> Session IDs live in MongoDB, not in process memory. Kill and restart the backend — the next message resumes the same conversation.</p>
+    </div>
+
+    <div class="callout red">
+      <p><strong>Memory is per-agent, not per-user.</strong> In v0.1.0 there is one session per agent. Multi-user or multi-session support is a future concern.</p>
+    </div>
+
+    <!-- ─────────────────────────────────────────── -->
+    <h2 id="roadmap">Roadmap</h2>
+
+    <table>
+      <thead><tr><th>Phase</th><th>Status</th><th>What it adds</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>P1 · MVP</td>
+          <td><span class="tag done">done</span></td>
+          <td>Single agent, chat UI, logs dashboard, MongoDB logging, config as code</td>
+        </tr>
+        <tr>
+          <td>P2 · Big Brother + Security</td>
+          <td><span class="tag next">next</span></td>
+          <td>Big Brother intercept agent (real-time cancel), guardrail engine, Docker isolation per agent, URL allowlist firewall, prompt injection defense</td>
+        </tr>
+        <tr>
+          <td>P3 · Multi-Agent + Queue</td>
+          <td><span class="tag later">later</span></td>
+          <td>Multiple agents, admin agent, inter-agent message queue, enable/disable per pair from UI</td>
+        </tr>
+        <tr>
+          <td>P4 · Skills Layer</td>
+          <td><span class="tag later">later</span></td>
+          <td>Per-agent task manager, Notion-style workspace (markdown editor), MongoDB skill, Asana skill, Slack/Telegram bridges</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr>
+    <p style="font-size:0.8rem; color:var(--outline);">
+      agent-brother v0.1.0 · generated 2026-03-29
+    </p>
+  </main>
+</div>
+</body>
+</html>

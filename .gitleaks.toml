@@ -1,0 +1,43 @@
+# gitleaks config for GranClaw's prepublish gate.
+#
+# This tuning excludes runtime state, build artifacts, and package-locks that
+# are not part of the shipped tarball. The gate scans the working tree AND the
+# built dist/ separately, so excluding them here only affects the working-tree
+# scan — any secret that makes it into dist/ is still caught.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "GranClaw prepublish-gate allowlist"
+paths = [
+  # Never ship-relevant
+  '''node_modules/''',
+  '''\.git/''',
+  '''package-lock\.json$''',
+
+  # Runtime state, gitignored, never packed
+  '''^data/''',
+  '''^workspaces/''',
+  '''^vault/''',
+  '''^\.docker-claude/''',
+  '''^landing/''',
+  '''^test-results/''',
+  '''^\.playwright-mcp/''',
+
+  # Internal dev docs (gitignored)
+  '''^docs/superpowers/''',
+
+  # Untracked landing screenshots sitting at the repo root
+  '''^granclaw-landing-.*\.png$''',
+  '''^landing-.*\.png$''',
+  '''^lightbox-open\.png$''',
+  '''^img\.png$''',
+
+  # Build caches/artifacts
+  '''^packages/frontend/dist/''',
+  '''^packages/backend/dist/''',
+
+  # Claude Code slash-command test fixtures — contain intentional dummy
+  # secrets like "stolen-key-123" used to exercise the secrets UI
+  '''^\.claude/commands/''',
+]

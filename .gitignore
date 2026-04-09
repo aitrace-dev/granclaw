@@ -41,3 +41,8 @@ img_*.png
 
 # Claude credentials copied in for the Docker test container
 .docker-claude/
+
+# Prepublish-gate artifacts
+packages/cli/.last-tarball
+granclaw-*.tgz
+packages/cli/granclaw-*.tgz

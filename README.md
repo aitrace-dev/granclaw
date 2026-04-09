@@ -20,54 +20,43 @@ GranClaw is a personal AI assistant you run on your own machine. Give it a brows
 
 No black boxes. No gated features. No surprise bans. Built on **Claude Code** — the CLI you already pay for, not the API.
 
-![GranClaw Mission Control](docs/images/mission-control.png)
+![GranClaw chat](docs/images/chat-streaming.png)
 
 ---
 
 ## The Wow
 
-<table>
-<tr>
-<td width="50%">
+- **Mission Control** — a built-in kanban board every agent already knows how to use. Say _"plan a LinkedIn launch week"_ and watch the cards appear, move through states, and report back. Zero configuration.
+
+- **Real browser, real sessions** — LinkedIn, Instagram, Reddit, Gmail, your internal tools. Log in once, save the profile, and the agent reuses it forever. No CAPTCHA loops, no API keys for sites that don't have APIs.
+
+- **Watch it browse** — every page, every click, every scroll. Click any session and you get a timeline of screenshots plus the exact DOM commands the agent ran.
+
+- **Secrets that stay secret** — API keys, bot tokens, credentials added in the UI are injected as env vars only inside the agent process. Never written to files. Never committed.
+
+- **Claude Code first** — runs on your Claude Code subscription, the same CLI you use every day. No API billing. No rate-limit terror. No risk of account action for "unusual usage" — because it *is* usual usage.
+
+- **Know what you're spending** — every token, every session, every day. Cost estimates, cache hit rates, per-model breakdown. No surprises at the end of the month.
+
+---
+
+## See it in action
 
 ### Mission Control
-Your agents ship with a built-in task board. They know how to break work into tasks, assign them, update status, and report progress — zero configuration. Open Mission Control on any agent and watch the kanban fill itself.
 
-**Just say: "plan a LinkedIn launch week for me"** and watch the cards appear.
+Kanban tasks created by the agent itself. Drag-drop, live updates, per-agent isolation.
 
-</td>
-<td width="50%">
+![Mission Control](docs/images/mission-control.png)
 
-### Real Browser, Real Sessions
-LinkedIn. Instagram. Reddit. Gmail. Your internal tools. Your agent logs in once — you save the profile — and it reuses those sessions forever. No CAPTCHA loops, no API keys for sites that don't have APIs.
+### Browser session replay
 
-**You can watch it browse in real time.** Click the Browser tab, see every page the agent loads, every click, every scroll.
+Every browser session the agent runs is recorded — screenshots + the exact DOM commands it ran. Scrub through the timeline, see what the agent clicked, what loaded, what it read.
 
-</td>
-</tr>
-<tr>
-<td width="50%">
+![Browser session replay](docs/images/browser-session-player.png)
 
-### Secrets That Stay Secret
-Your API keys never touch a .env file. Add them in the Secrets tab, injected into the agent process only at runtime. Your agents can `printenv LINKEDIN_EMAIL` — but nothing ever hits disk in the workspace.
+### Usage tracking
 
-**One place. Rotate anytime. No leaks.**
-
-</td>
-<td width="50%">
-
-### Claude Code First
-GranClaw runs on your **Claude Code subscription** — the same CLI you use every day. No API billing. No rate-limit terror. No risk of account action for "unusual usage" — because it *is* usual usage.
-
-**Your subscription. Your agents. Your rules.**
-
-</td>
-</tr>
-</table>
-
-### Know exactly what you're spending
-
-Every token, every session, every day. Cost estimates, cache hit rates, per-model breakdown. No surprises at the end of the month.
+Every token, every session, every day. Per-model breakdown, cost estimates, cache hit rates.
 
 ![Usage dashboard](docs/images/usage.png)
 
@@ -92,38 +81,17 @@ Open `http://localhost:5173` → **+ New Agent** → done.
 
 Every GranClaw agent ships with this out of the box — no setup, no plugins, no config:
 
-### 💬 Streaming Chat
-Every token streams live over WebSocket. See the agent thinking in real time. Stop it mid-action if you change your mind. Session memory survives restarts.
-
-### 📋 Mission Control (Tasks)
-A kanban board baked into every agent. Your agents already know how to create tasks, move them through states, and report back. Say "break this project into 10 tasks" and it happens.
-
-### 🌐 Persistent Browser Sessions
-Launch a real browser inside GranClaw, log in to any site once, close it. The agent reuses that profile. LinkedIn, Gmail, Instagram, Reddit, Notion, your internal dashboard — anything that runs in a browser, runs for your agent.
-
-### 📂 Workspace Files
-Each agent gets its own directory. Browse it in the UI. Read it, edit it, export it. Your agent's knowledge is yours — not trapped in a vendor database.
-
-### 🔐 Secrets Vault
-API keys, bot tokens, credentials — added in the UI, injected as environment variables only in the agent process. Never written to files. Never committed. Never leaked.
-
-### ⚡ Workflows
-Chain agent calls, code steps, and LLM calls into reusable pipelines. Run them manually or on a schedule. See every step, every input, every output.
-
-### ⏰ Schedules
-Cron-based scheduled tasks. Your agent wakes up at 9am, checks a website, writes you a summary, goes back to sleep.
-
-### 📡 Monitor
-CPU, memory, uptime for every agent process. Know instantly if something's stuck.
-
-### 📊 Usage Tracking
-Token consumption per session. No surprise bills at the end of the month.
-
-### 📋 Datadog-Style Logs
-Every message, every tool call, every result — searchable, filterable, live-polling. Expand any entry to see the full input and output. Debug what your agent actually did.
-
-### 🛡 Guardian *(Coming Soon)*
-Set up a second agent that watches the first. Define rules. Block sensitive actions. Require human approval for anything that could hurt.
+- **💬 Streaming Chat** — tokens stream live over WebSocket. See the agent thinking in real time. Stop it mid-action. Session memory survives restarts.
+- **📋 Mission Control (Tasks)** — kanban board baked into every agent. Agents create tasks, move them through states, and report back.
+- **🌐 Persistent Browser Sessions** — real browser with saved logins. LinkedIn, Gmail, Notion, your internal dashboard — anything that runs in a browser.
+- **📂 Workspace Files** — each agent gets its own directory. Browse, read, edit, export. Your agent's knowledge is yours.
+- **🔐 Secrets Vault** — API keys, bot tokens, credentials added in the UI, injected as env vars only in the agent process.
+- **⚡ Workflows** — chain agent calls, code steps, and LLM calls into reusable pipelines.
+- **⏰ Schedules** — cron-based scheduled tasks. Agent wakes up at 9am, writes you a summary, goes back to sleep.
+- **📡 Monitor** — CPU, memory, uptime for every agent process.
+- **📊 Usage Tracking** — token consumption, per-model cost breakdown, daily charts.
+- **📋 Datadog-Style Logs** — searchable, filterable, live-polling. Expand any entry to see the full input and output.
+- **🛡 Guardian** _(Coming Soon)_ — a second agent that watches the first. Define rules. Block sensitive actions. Require human approval.
 
 ---
 
@@ -131,7 +99,7 @@ Set up a second agent that watches the first. Define rules. Block sensitive acti
 
 One sentence: **because you want to sleep at night.**
 
-GranClaw was built by developers who got tired of waiting for features they already needed, fighting vendor lock-in, and worrying about bans on accounts they were paying for. Everything here runs locally, on your machine, from code you can read.
+GranClaw was built for people who got tired of waiting for features they already needed, fighting vendor lock-in, and worrying about bans on accounts they were paying for. Everything here runs locally, on your machine, from code you can read.
 
 Fork it. Modify it. Delete what you don't need. Nobody's watching.
 

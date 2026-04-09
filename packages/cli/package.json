@@ -26,10 +26,16 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@agent-brother/backend": "*"
+    "@anthropic-ai/sdk": "^0.81.0",
+    "better-sqlite3": "^12.8.0",
+    "cors": "^2.8.5",
+    "cron-parser": "^4.9.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-telegram-bot-api": "^0.67.0",
+    "ws": "^8.17.1"
   },
   "devDependencies": {
-    "@agent-brother/frontend": "*",
     "@types/node": "^20.14.2",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"

@@ -142,4 +142,72 @@ else
   echo "$TARBALL_PATH" > "$CLI_ROOT/.last-tarball"
 fi
 
-log "steps 1-4" "✓ safety gates passed"
+# ── Step 5: Tarball install verification ─────────────────────────────────────
+if [ "${GRANCLAW_GATE_SKIP_INSTALL:-}" = "1" ]; then
+  log 5 "⚠ SKIPPED via GRANCLAW_GATE_SKIP_INSTALL (beta escape hatch)"
+else
+  log 5 "ephemeral install of packed tarball"
+
+  if [ ! -f "$CLI_ROOT/.last-tarball" ]; then
+    fail 5 ".last-tarball marker missing — Step 4 did not complete"
+  fi
+  TARBALL_PATH=$(cat "$CLI_ROOT/.last-tarball")
+  [ -f "$TARBALL_PATH" ] || fail 5 "tarball not found at $TARBALL_PATH"
+
+  VERIFY_HOME=$(mktemp -d)
+  VERIFY_GLOBAL=$(mktemp -d)
+
+  cleanup_step5() {
+    if [ -n "${SERVER_PID:-}" ]; then
+      kill "$SERVER_PID" 2>/dev/null || true
+      wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    rm -rf "$VERIFY_HOME" "$VERIFY_GLOBAL"
+  }
+  trap cleanup_step5 EXIT
+
+  log 5 "installing to ephemeral prefix $VERIFY_GLOBAL"
+  npm install --prefix "$VERIFY_GLOBAL" --global "$TARBALL_PATH" > /tmp/gate-install.log 2>&1 || {
+    tail -20 /tmp/gate-install.log >&2
+    fail 5 "global install failed (see /tmp/gate-install.log)"
+  }
+
+  GRANCLAW_BIN="$VERIFY_GLOBAL/bin/granclaw"
+  [ -x "$GRANCLAW_BIN" ] || fail 5 "binary not executable at $GRANCLAW_BIN"
+
+  log 5 "$($GRANCLAW_BIN --version)"
+
+  log 5 "starting server on port 18787 with temp home"
+  GRANCLAW_HOME="$VERIFY_HOME" "$GRANCLAW_BIN" start --port 18787 > /tmp/gate-server.log 2>&1 &
+  SERVER_PID=$!
+
+  # Poll /health for up to 12 seconds to allow cold-start + claude-cli check
+  HEALTH_OK=0
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    sleep 1
+    if curl -sf http://localhost:18787/health >/dev/null 2>&1; then
+      HEALTH_OK=1
+      break
+    fi
+  done
+
+  if [ "$HEALTH_OK" -ne 1 ]; then
+    tail -30 /tmp/gate-server.log >&2
+    fail 5 "health endpoint unreachable after 12s"
+  fi
+  log 5 "✓ health OK"
+
+  log 5 "verifying home was seeded"
+  for sub in agents.config.json data workspaces logs; do
+    [ -e "$VERIFY_HOME/$sub" ] || fail 5 "home missing $sub"
+  done
+  log 5 "✓ home seeded"
+
+  kill "$SERVER_PID" 2>/dev/null || true
+  wait "$SERVER_PID" 2>/dev/null || true
+  SERVER_PID=""
+
+  log 5 "✓ tarball install verified"
+fi
+
+log "steps 1-5" "✓ safety gates passed"

@@ -16,9 +16,9 @@
 
 ---
 
-GranClaw is an open-source, self-hostable agent framework for developers who actually want to see what their agents are doing. Your agents get a real desktop, a real browser, persistent memory, and a real-time dashboard you can trust. No black boxes, no gated features, no surprise bans.
+GranClaw is a personal AI assistant you run on your own machine. Give it a browser, saved logins, persistent memory, and a real-time dashboard — then tell it what to do. It drafts your posts, runs your errands on the web, tracks your work in a kanban, and writes back to you on Telegram. Everything happens locally, on your hardware, where you can see it.
 
-Built to run on **Claude Code** — not the API. No API keys. No per-token anxiety. Just your subscription.
+No black boxes. No gated features. No surprise bans. Built on **Claude Code** — the CLI you already pay for, not the API.
 
 ![GranClaw Mission Control](docs/images/mission-control.png)
 

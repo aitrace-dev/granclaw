@@ -968,7 +968,8 @@ export function createServer() {
       const upstreamUrl = `ws://127.0.0.1:${managed.wsPort}`;
       const upstream = new WebSocket(upstreamUrl);
       let upstreamOpen = false;
-      const clientQueue: (string | Buffer)[] = [];
+      type Queued = { data: Buffer | string; isBinary: boolean };
+      const clientQueue: Queued[] = [];
 
       const closeBoth = () => {
         try { clientWs.close(); } catch { /* ignore */ }
@@ -977,11 +978,17 @@ export function createServer() {
 
       upstream.on('open', () => {
         upstreamOpen = true;
-        for (const msg of clientQueue) upstream.send(msg);
+        for (const q of clientQueue) upstream.send(q.data, { binary: q.isBinary });
         clientQueue.length = 0;
       });
-      upstream.on('message', (data) => {
-        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data);
+      // Preserve the frame type (text vs binary) both ways. The agent
+      // emits JSON as text frames; forwarding them as binary would give
+      // the browser a Blob, which JSON.parse swallows silently and the
+      // UI never sees the response.
+      upstream.on('message', (data, isBinary) => {
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(data, { binary: isBinary });
+        }
       });
       upstream.on('close', closeBoth);
       upstream.on('error', (err) => {
@@ -989,12 +996,12 @@ export function createServer() {
         closeBoth();
       });
 
-      clientWs.on('message', (data) => {
+      clientWs.on('message', (data, isBinary) => {
         // Buffer messages sent before the upstream connection is ready,
         // so the first message a freshly-connected client sends isn't lost.
-        const payload = Buffer.isBuffer(data) ? data : data.toString();
-        if (upstreamOpen) upstream.send(payload);
-        else clientQueue.push(payload);
+        const payload = data as Buffer;
+        if (upstreamOpen) upstream.send(payload, { binary: isBinary });
+        else clientQueue.push({ data: payload, isBinary });
       });
       clientWs.on('close', closeBoth);
       clientWs.on('error', closeBoth);

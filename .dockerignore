@@ -1,0 +1,23 @@
+# Never bake host-built artefacts or user data into the image.
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+.vscode
+.idea
+
+# Local state that must come from bind-mounts, not the image
+data
+workspaces
+test-results
+playwright-report
+.docker-claude
+
+# Editor / OS junk
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# The landing page is a separate project (see .gitignore)
+landing

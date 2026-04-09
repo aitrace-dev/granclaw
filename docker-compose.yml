@@ -1,0 +1,42 @@
+# GranClaw — single-port test container.
+#
+# Ships the whole stack (backend + agents + built frontend) on one port.
+# The browser talks only to the host port you map below — REST, WebSockets,
+# and the UI all come from the same origin, so you can remap freely.
+#
+# One-time setup:
+#   ./scripts/docker-extract-credentials.sh    # copies your claude login
+#   docker compose up --build
+#
+# Open: http://localhost:3002  (host port → container port 3001)
+
+services:
+  granclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: granclaw:test
+    container_name: granclaw-test
+    ports:
+      # host:container — remap the host side freely. 3002 by default so
+      # you can keep `npm run dev` (port 3001) running for comparison.
+      - "3002:3001"
+    # Container runs as the non-root `node` user (uid 1000) because the
+    # claude CLI refuses --dangerously-skip-permissions under uid 0.
+    user: "node"
+    environment:
+      PORT: "3001"
+      HOME: "/home/node"
+      NODE_ENV: "production"
+    volumes:
+      # Agent definitions — editing this file on the host takes effect on
+      # the next request without a container restart.
+      - ./agents.config.json:/app/agents.config.json
+      # Persistent state the agents write to.
+      - ./data:/app/data
+      - ./workspaces:/app/workspaces
+      # Claude Code credentials. See scripts/docker-extract-credentials.sh
+      # for how this directory is populated on macOS (keychain) vs Linux.
+      - ./.docker-claude:/home/node/.claude
+    shm_size: "1gb"
+    stop_grace_period: 10s

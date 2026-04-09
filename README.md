@@ -77,6 +77,19 @@ Open `http://localhost:5173` → **+ New Agent** → done.
 
 **Prerequisites:** Node 20+, the `claude` CLI on your PATH ([Claude Code](https://claude.ai/download)).
 
+### Or run it in Docker
+
+The whole stack ships on a single port. The only things the container needs from the host are your Claude Code credentials and (optionally) your workspaces and agent config.
+
+```bash
+./scripts/docker-extract-credentials.sh   # mac: pulls from keychain; linux: copies ~/.claude
+docker compose up --build
+```
+
+Open `http://localhost:3002` (the host port is remappable in `docker-compose.yml` — same-origin WebSockets mean the port can be anything).
+
+The image installs its own `claude` CLI, `agent-browser`, and Chromium, so the host only needs Docker Desktop 4.30+. See `.claude/commands/docker/test-container-works.md` for the full UI walkthrough.
+
 ---
 
 ## What's Inside

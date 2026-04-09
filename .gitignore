@@ -38,3 +38,6 @@ landing/
 
 # Screenshots / temp images
 img_*.png
+
+# Claude credentials copied in for the Docker test container
+.docker-claude/

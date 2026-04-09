@@ -1,0 +1,42 @@
+{
+  "name": "granclaw",
+  "version": "0.0.1-beta.0",
+  "description": "A personal AI assistant you run on your own machine.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aitrace-dev/granclaw.git"
+  },
+  "homepage": "https://granclaw.com",
+  "bugs": {
+    "url": "https://github.com/aitrace-dev/granclaw/issues"
+  },
+  "main": "./dist/index.js",
+  "bin": {
+    "granclaw": "./bin/granclaw.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "templates/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@agent-brother/backend": "*"
+  },
+  "devDependencies": {
+    "@agent-brother/frontend": "*",
+    "@types/node": "^20.14.2",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  },
+  "scripts": {
+    "build": "rm -rf dist && node scripts/build.js",
+    "test": "vitest run",
+    "prepublishOnly": "bash scripts/prepublish-gate.sh"
+  }
+}

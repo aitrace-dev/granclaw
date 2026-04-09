@@ -99,7 +99,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
             <ProcessCard
               info={data.agent}
               label="Agent Process"
-              extra={data.agent ? <span className="font-mono text-[9px] text-primary/40">ws://localhost:{data.agent.wsPort}</span> : undefined}
+              extra={data.agent ? <span className="font-mono text-[9px] text-primary/40">pid {data.agent.pid}</span> : undefined}
             />
             <ProcessCard
               info={data.guardian}

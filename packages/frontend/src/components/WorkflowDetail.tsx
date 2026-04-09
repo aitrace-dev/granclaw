@@ -72,7 +72,7 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
       <h3 style={{ fontSize: '0.9rem', color: '#cbd5e1', margin: '0 0 0.5rem' }}>Steps ({workflow.steps.length})</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '1.5rem' }}>
         {workflow.steps.map((step: WorkflowStep, i: number) => {
-          const config = step.config as Record<string, unknown>;
+          const config = step.config as unknown as Record<string, unknown>;
           const prompt = (config.prompt ?? config.script ?? '') as string;
           const isExpanded = expandedSteps.has(step.id);
           const timeoutMs = config.timeout_ms as number | undefined;

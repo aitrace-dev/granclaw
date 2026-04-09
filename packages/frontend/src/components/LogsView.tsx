@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { fetchLogs, type LogEntry, type LogsResponse } from '../lib/api.ts';
+import { fetchLogs, type LogEntry } from '../lib/api.ts';
 
 // ── Normalize API response ──────────────────────────────────────────────────
 
@@ -335,7 +335,7 @@ export function LogsView({ agentId }: { agentId: string }) {
                   {/* Expanded detail */}
                   {isExpanded && (
                     <div className="ml-[79px] mt-1.5 mb-1 space-y-1.5">
-                      {entry.input && entry.input !== 'null' && (
+                      {!!entry.input && entry.input !== 'null' && (
                         <div>
                           <span className="text-[8px] uppercase text-on-surface-variant/20">input</span>
                           <pre className="text-[10px] text-on-surface-variant/40 mt-0.5 bg-black/30 rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
@@ -343,7 +343,7 @@ export function LogsView({ agentId }: { agentId: string }) {
                           </pre>
                         </div>
                       )}
-                      {entry.output && entry.output !== 'null' && (
+                      {!!entry.output && entry.output !== 'null' && (
                         <div>
                           <span className="text-[8px] uppercase text-on-surface-variant/20">output</span>
                           <pre className="text-[10px] text-on-surface-variant/40 mt-0.5 bg-black/30 rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">

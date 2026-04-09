@@ -1,16 +1,17 @@
 /**
  * useAgentSocket
  *
- * Connects to a single agent's (or Big Brother's) WebSocket endpoint.
- * Each process runs its own WS server on its own port.
+ * Connects to an agent's WebSocket endpoint via the backend's WS proxy
+ * at /ws/agents/:id. The browser only ever talks to the same origin that
+ * served the page, so the whole app works through a single port.
  *
  * Features:
  *   - Auto-reconnect on disconnect (exponential backoff, max 10s)
  *   - Fires onReconnect callback so UI can clear stale streaming state
- *   - Streaming timeout: if no chunks for 60s, fires error + done
+ *   - Streaming timeout: if no chunks for 90s, fires error + done
  *
  * Usage:
- *   const { sendMessage, connected } = useAgentSocket(agent.wsPort, undefined, onReconnect);
+ *   const { sendMessage, connected } = useAgentSocket(agent.id, undefined, onReconnect);
  *   sendMessage("hello", (chunk) => { ... });
  */
 
@@ -40,7 +41,7 @@ const RECONNECT_MAX_MS = 10000;
 const STREAM_TIMEOUT_MS = 90000; // 90s without chunks = stale
 
 export function useAgentSocket(
-  wsPort: number | undefined,
+  agentId: string | undefined,
   onServerMessage?: ChunkHandler,
   onReconnect?: () => void,
 ) {
@@ -78,14 +79,18 @@ export function useAgentSocket(
 
   useEffect(() => {
     mountedRef.current = true;
-    if (!wsPort) return;
+    if (!agentId) return;
 
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     function connect() {
       if (!mountedRef.current) return;
 
-      const url = `ws://${window.location.hostname}:${wsPort}`;
+      // Same-origin WS: the backend (or vite dev server) proxies /ws/agents/:id
+      // to the internal agent process. This means the whole app works through
+      // a single public port — no need to expose per-agent ports.
+      const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = `${scheme}//${window.location.host}/ws/agents/${encodeURIComponent(agentId!)}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -124,7 +129,7 @@ export function useAgentSocket(
       ws.onclose = () => {
         if (!mountedRef.current) return;
         setConnected(false);
-        console.warn(`[ws] :${wsPort} disconnected — reconnecting in ${reconnectDelayRef.current}ms`);
+        console.warn(`[ws] ${agentId} disconnected — reconnecting in ${reconnectDelayRef.current}ms`);
 
         // Clear any stale streaming state
         clearStreamTimeout();
@@ -150,7 +155,7 @@ export function useAgentSocket(
       wsRef.current?.close();
       setConnected(false);
     };
-  }, [wsPort, resetStreamTimeout, clearStreamTimeout]);
+  }, [agentId, resetStreamTimeout, clearStreamTimeout]);
 
   const sendMessage = useCallback((text: string, onChunk: ChunkHandler) => {
     handlerRef.current = onChunk;

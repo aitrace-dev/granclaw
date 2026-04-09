@@ -126,13 +126,13 @@ export function ChatPage() {
   const [secretNames, setSecretNames] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Big Brother state
-  const [bbPanelOpen, setBbPanelOpen] = useState(true);
+  // Big Brother (guardian) is partially wired up. Only the pieces that
+  // the current render actually uses are kept here; the rest was removed
+  // to keep the strict build clean.
+  const [bbPanelOpen /* setter not wired up yet */] = useState(true);
   const [bbMessages, setBbMessages] = useState<ChatMessage[]>([]);
-  const [bbInput, setBbInput] = useState('');
-  const [isBbSending, setIsBbSending] = useState(false);
-  const [bbGuardianName, setBbGuardianName] = useState<string | null>(null);
-  const [bbGuardrailsActive, setBbGuardrailsActive] = useState(false);
+  const [, setBbGuardianName] = useState<string | null>(null);
+  const [, setBbGuardrailsActive] = useState(false);
   const bbBottomRef = useRef<HTMLDivElement>(null);
 
   // Clear stale streaming state when WS reconnects after a drop
@@ -142,16 +142,18 @@ export function ChatPage() {
     setPendingApproval(null);
   }, []);
 
-  const { sendMessage, stopMessage, connected } = useAgentSocket(agent?.wsPort, undefined, handleReconnect);
+  const { sendMessage, stopMessage, connected } = useAgentSocket(agent?.id, undefined, handleReconnect);
 
   function handleStop() {
     stopMessage();
     setMessages(prev => prev.map(m => m.isStreaming ? { ...m, isStreaming: false, text: m.text + '\n\n*(stopped)*' } : m));
     setIsSending(false);
   }
-  // Track whether we're in the middle of a user-initiated BB send
+  // Track whether we're in the middle of a user-initiated BB send.
+  // Always false today (guardian send UI is not wired up); kept so the
+  // server-initiated BB message handler below can easily gate on it
+  // when the feature lands.
   const bbSendingRef = useRef(false);
-  bbSendingRef.current = isBbSending;
 
   // Server-initiated BB messages (e.g. approval questions from guardian)
   const bbServerMsgRef = useRef<string | null>(null);
@@ -175,10 +177,9 @@ export function ChatPage() {
     }
   }, []);
 
-  const { sendMessage: sendBbMessage, connected: bbConnected } = useAgentSocket(
-    agent?.bbPort ?? undefined,
-    handleBbServerMessage
-  );
+  // Big Brother (guardian) WS is not wired up yet — bbPort is always null in
+  // agent-manager. Pass undefined so the hook stays a no-op.
+  useAgentSocket(undefined, handleBbServerMessage);
 
   // Poll agent state every 30s so sidebar reflects live changes
   useEffect(() => {
@@ -291,44 +292,6 @@ export function ChatPage() {
           )
         );
         setIsSending(false);
-      }
-    });
-  }
-
-  // ── Big Brother send ───────────────────────────────────────────────────
-
-  function handleBbSend() {
-    const text = bbInput.trim();
-    if (!text || isBbSending) return;
-
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text };
-    const bbMsgId = crypto.randomUUID();
-    const bbMsg: ChatMessage = { id: bbMsgId, role: 'agent', text: '', isStreaming: true };
-
-    setBbMessages((prev) => [...prev, userMsg, bbMsg]);
-    setBbInput('');
-    setIsBbSending(true);
-
-    let bbReply = '';
-
-    sendBbMessage(text, (chunk) => {
-      if (chunk.type === 'text') {
-        bbReply += chunk.text;
-        setBbMessages((prev) =>
-          prev.map((m) => m.id === bbMsgId ? { ...m, text: m.text + chunk.text } : m)
-        );
-      } else if (chunk.type === 'agent_ready') {
-        setBbGuardianName(chunk.name);
-        setBbGuardrailsActive(true);
-      } else if (chunk.type === 'done' || chunk.type === 'error') {
-        const errorText = chunk.type === 'error' ? `⚠ ${chunk.message}` : '';
-        const finalText = bbReply + (errorText ? `\n\n${errorText}` : '');
-        setBbMessages((prev) =>
-          prev.map((m) =>
-            m.id === bbMsgId ? { ...m, isStreaming: false, text: finalText } : m
-          )
-        );
-        setIsBbSending(false);
       }
     });
   }

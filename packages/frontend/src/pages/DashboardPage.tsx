@@ -31,7 +31,6 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
         <div className="flex items-center gap-3 mt-1">
           <span className="font-mono text-[10px] text-primary/50">{agent.model}</span>
           <span className="font-mono text-[10px] text-on-surface-variant/30">id: {agent.id}</span>
-          <span className="font-mono text-[10px] text-on-surface-variant/30">ws:{agent.wsPort}</span>
         </div>
       </div>
       <div className="flex items-center gap-2">

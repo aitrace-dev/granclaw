@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Agent } from '../lib/api.ts';
 import { addSecret, deleteSecretApi, exportVaultUrl } from '../lib/api.ts';
 

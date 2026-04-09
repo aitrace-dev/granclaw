@@ -1,14 +1,17 @@
 /**
  * orchestrator/server.ts
  *
- * The orchestrator's HTTP server — REST API only.
- * No WebSocket here; WS lives on each agent process.
+ * The orchestrator's HTTP server: REST API, WebSocket proxy to agents,
+ * and (optionally) static hosting of the built frontend so everything
+ * ships on a single port.
  *
  * Routes:
- *   GET /health
- *   GET /agents          — list agents with their WS port
- *   GET /agents/:id      — single agent detail
- *   GET /logs            — action log with filters
+ *   GET  /health
+ *   GET  /agents                   — list agents
+ *   GET  /agents/:id               — single agent detail
+ *   GET  /logs                     — action log with filters
+ *   WS   /ws/agents/:id            — WebSocket proxy → internal agent process
+ *   GET  /*                        — built frontend (if packages/frontend/dist exists)
  */
 
 import express from 'express';
@@ -16,6 +19,7 @@ import cors from 'cors';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import { WebSocket, WebSocketServer } from 'ws';
 import { randomUUID } from 'crypto';
 import logsRouter from '../routes/logs.js';
 import { getManagedAgents, getManagedAgent, restartAgent, startNewAgent, stopAndRemoveAgent } from './agent-manager.js';
@@ -914,5 +918,88 @@ export function createServer() {
 
   app.use('/logs', logsRouter);
 
-  return http.createServer(app);
+  // ── Static frontend (production / Docker) ─────────────────────────────────
+  // In dev the frontend is served by vite on :5173 and proxies REST/WS here.
+  // In prod / Docker the frontend is built once into packages/frontend/dist
+  // and we serve it from this same port so the whole app ships as a single
+  // service on a single port. This block is a no-op in dev because dist
+  // does not exist.
+  const frontendDist = path.resolve(REPO_ROOT, 'packages/frontend/dist');
+  if (fs.existsSync(frontendDist)) {
+    console.log(`[orchestrator] serving built frontend from ${frontendDist}`);
+    app.use(express.static(frontendDist));
+    // SPA fallback: anything that wasn't matched by a REST route above and
+    // asks for HTML gets index.html so client-side routing takes over. API
+    // clients that send Accept: application/json fall through to 404.
+    app.get(/.*/, (req, res, next) => {
+      if (req.accepts('html')) {
+        res.sendFile(path.join(frontendDist, 'index.html'));
+      } else {
+        next();
+      }
+    });
+  }
+
+  // ── WebSocket proxy to internal agent processes ───────────────────────────
+  // The browser speaks ws:// to /ws/agents/:id on this server. We open an
+  // internal ws:// connection to the agent's private port (3100+index) and
+  // pipe messages in both directions. This keeps agent ports internal to
+  // the host/container and means only this server's port needs to be
+  // exposed externally.
+  const httpServer = http.createServer(app);
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    const url = new URL(req.url ?? '/', 'http://internal');
+    const match = url.pathname.match(/^\/ws\/agents\/([^/]+)$/);
+    if (!match) {
+      socket.destroy();
+      return;
+    }
+    const agentId = decodeURIComponent(match[1]);
+    const managed = getManagedAgent(agentId);
+    if (!managed) {
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    wss.handleUpgrade(req, socket, head, (clientWs) => {
+      const upstreamUrl = `ws://127.0.0.1:${managed.wsPort}`;
+      const upstream = new WebSocket(upstreamUrl);
+      let upstreamOpen = false;
+      const clientQueue: (string | Buffer)[] = [];
+
+      const closeBoth = () => {
+        try { clientWs.close(); } catch { /* ignore */ }
+        try { upstream.close(); } catch { /* ignore */ }
+      };
+
+      upstream.on('open', () => {
+        upstreamOpen = true;
+        for (const msg of clientQueue) upstream.send(msg);
+        clientQueue.length = 0;
+      });
+      upstream.on('message', (data) => {
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data);
+      });
+      upstream.on('close', closeBoth);
+      upstream.on('error', (err) => {
+        console.warn(`[ws-proxy] upstream error for ${agentId}:`, err.message);
+        closeBoth();
+      });
+
+      clientWs.on('message', (data) => {
+        // Buffer messages sent before the upstream connection is ready,
+        // so the first message a freshly-connected client sends isn't lost.
+        const payload = Buffer.isBuffer(data) ? data : data.toString();
+        if (upstreamOpen) upstream.send(payload);
+        else clientQueue.push(payload);
+      });
+      clientWs.on('close', closeBoth);
+      clientWs.on('error', closeBoth);
+    });
+  });
+
+  return httpServer;
 }

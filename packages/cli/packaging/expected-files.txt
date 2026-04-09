@@ -1,4 +1,5 @@
 LICENSE
+README.md
 bin/granclaw.js
 dist/backend/agent-db.js
 dist/backend/agent/process.js

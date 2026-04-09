@@ -23,12 +23,18 @@ interface AppConfig {
  *   1. GRANCLAW_HOME env var
  *   2. ~/.granclaw
  *
+ * Note: the exported GRANCLAW_HOME const is a snapshot of this function's
+ * return value at module load time. Calling resolveGranclawHome() directly
+ * AFTER startup may return a different value if process.env.GRANCLAW_HOME
+ * has changed since load — prefer importing GRANCLAW_HOME for stable reads.
+ *
  * The CLI entrypoint honors a --home flag by setting GRANCLAW_HOME before
- * importing this module, so we only need to read the env var here.
+ * importing this module, so normal callers only need the const.
  */
 export function resolveGranclawHome(): string {
-  if (process.env.GRANCLAW_HOME) {
-    return path.resolve(process.env.GRANCLAW_HOME);
+  const envHome = process.env.GRANCLAW_HOME?.trim();
+  if (envHome) {
+    return path.resolve(envHome);
   }
   return path.join(os.homedir(), '.granclaw');
 }

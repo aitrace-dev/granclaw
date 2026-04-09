@@ -2,10 +2,20 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchAgents, createAgent, deleteAgent, type Agent } from '../lib/api.ts';
 
+// Source: https://platform.claude.com/docs/en/docs/about-claude/models/overview
+// Grouped current → legacy. Pricing shown as input/output per 1M tokens so
+// operators can see the cost tier at a glance. Updated 2026-04-09.
 const MODELS = [
-  { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+  // Current (4.6 / 4.5 family)
+  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 — $5 / $25 per Mtok · most capable' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 — $3 / $15 per Mtok · recommended' },
+  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 — $1 / $5 per Mtok · fastest' },
+  // Legacy (still supported)
+  { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5 — $3 / $15 per Mtok · legacy' },
+  { value: 'claude-opus-4-5', label: 'Claude Opus 4.5 — $5 / $25 per Mtok · legacy' },
+  { value: 'claude-opus-4-1', label: 'Claude Opus 4.1 — $15 / $75 per Mtok · legacy' },
+  { value: 'claude-sonnet-4-0', label: 'Claude Sonnet 4 — $3 / $15 per Mtok · legacy' },
+  { value: 'claude-opus-4-0', label: 'Claude Opus 4 — $15 / $75 per Mtok · legacy' },
 ];
 
 function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
@@ -56,7 +66,7 @@ export function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState('');
   const [newName, setNewName] = useState('');
-  const [newModel, setNewModel] = useState('claude-sonnet-4-5');
+  const [newModel, setNewModel] = useState('claude-sonnet-4-6');
   const [newWorkspace, setNewWorkspace] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);

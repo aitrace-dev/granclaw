@@ -207,6 +207,14 @@ export async function runAgent(
   const attempt = (resume: string | null) =>
     new Promise<void>((resolve, reject) => {
       const args = ['-p', finalMessage, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'bypassPermissions'];
+      // Pin the model to what the agent config declares. Without this the
+      // Claude CLI falls back to its own default (currently Opus 4.6), which
+      // silently overrides every agent's config and burns Opus-tier money
+      // regardless of what the dashboard shows. Fixed after juanito racked
+      // up $11 in a single "simple" session running unconfigured.
+      if (agent.model && agent.model.trim()) {
+        args.push('--model', agent.model.trim());
+      }
       if (resume) args.push('--resume', resume);
 
       // Inject core system instructions that every agent must follow (vault, security, skills)

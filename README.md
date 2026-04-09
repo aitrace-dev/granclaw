@@ -67,15 +67,21 @@ Every token, every session, every day. Per-model breakdown, cost estimates, cach
 ## Quick Start
 
 ```bash
-git clone https://github.com/aitrace-dev/granclaw.git
-cd granclaw
-npm install
-npm run dev
+npx granclaw
 ```
 
-Open `http://localhost:5173` → **+ New Agent** → done.
+Open `http://localhost:8787` → **+ New Agent** → done.
 
 **Prerequisites:** Node 20+, the `claude` CLI on your PATH ([Claude Code](https://claude.ai/download)).
+
+### Or install globally
+
+```bash
+npm i -g granclaw
+granclaw
+```
+
+Runtime state lives in `~/.granclaw/` (override with `--home <path>` or `GRANCLAW_HOME`).
 
 ### Or run it in Docker
 
@@ -118,6 +124,29 @@ One sentence: **because you want to sleep at night.**
 GranClaw was built for people who got tired of waiting for features they already needed, fighting vendor lock-in, and worrying about bans on accounts they were paying for. Everything here runs locally, on your machine, from code you can read.
 
 Fork it. Modify it. Delete what you don't need. Nobody's watching.
+
+---
+
+## Developing GranClaw
+
+If you want to hack on the framework itself:
+
+```bash
+git clone https://github.com/aitrace-dev/granclaw.git
+cd granclaw
+npm install
+npm run dev                   # backend :3001 + frontend :5173 with hot reload
+```
+
+The dev script exports `GRANCLAW_HOME=$PWD` so `agents.config.json`, `data/`, and `workspaces/` continue to resolve to the repo root — no surprise conflicts with a production `~/.granclaw` install.
+
+Before cutting a release, run the prepublish gate locally:
+
+```bash
+npm run gate -w granclaw
+```
+
+See [CLAUDE.md](./CLAUDE.md) for the full developer guide.
 
 ---
 

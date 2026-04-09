@@ -1,0 +1,47 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-beta.*'
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write    # required for npm Trusted Publishing OIDC
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish   # required-reviewer gate, configured in repo settings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run prepublish gate
+        run: npm run gate -w granclaw
+        env:
+          CI: 'true'
+          # Step 6 (Playwright e2e) auto-skips when the claude CLI is unavailable.
+          # Steps 1-5 are hard blocks. Escape hatches (GRANCLAW_GATE_SKIP_*) are
+          # rejected under CI=true by the gate script itself.
+
+      - name: Publish to npm
+        run: npm publish --tag latest --provenance --access public -w granclaw
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

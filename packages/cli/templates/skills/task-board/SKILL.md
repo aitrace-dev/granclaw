@@ -1,175 +1,185 @@
 ---
 name: task-board
-description: Manage tasks in the kanban board via SQLite. Use when breaking down work, tracking progress, or reporting status.
+description: Manage tasks in the kanban board via the orchestrator REST API. Use when breaking down work, tracking progress, or reporting status.
 user-invocable: false
-allowed-tools: Bash(sqlite3 *)
+allowed-tools: Bash(curl *)
 ---
 
 # Task Manager Skill
 
-You have a SQLite database at `tasks.sqlite` in your workspace root. Use it to track tasks on a kanban board that your human operator can see in the dashboard.
+You have a kanban board your human operator can see in the dashboard. Create, update, and comment on tasks by calling the **orchestrator REST API** — never touch SQLite directly.
 
-## Schema Reference
+## Connection
 
-The database is **pre-provisioned by the host**. Never run CREATE TABLE, ALTER TABLE, or DROP TABLE. The schema is immutable.
+The orchestrator exposes a local HTTP API. Two environment variables are injected into every agent process:
 
-### tasks table
+| Var | Value |
+|---|---|
+| `GRANCLAW_API_URL` | Base URL, e.g. `http://localhost:3001` (dev) or `http://localhost:8787` (published) |
+| `GRANCLAW_AGENT_ID` | Your own agent ID, e.g. `lucia` |
 
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `id` | TEXT | PRIMARY KEY | Human-readable ID in format `TSK-NNN` (e.g. `TSK-001`, `TSK-042`). Zero-padded to 3 digits. |
-| `title` | TEXT | NOT NULL | Short, descriptive task title. Keep under 80 characters. |
-| `description` | TEXT | NOT NULL, DEFAULT '' | Full task description in **markdown**. Use headings, lists, code blocks as needed. |
-| `status` | TEXT | NOT NULL, DEFAULT 'backlog' | Current status. Must be one of: `backlog`, `in_progress`, `scheduled`, `to_review`, `done`. |
-| `source` | TEXT | NOT NULL, DEFAULT 'agent' | Who created the task. Always set to `'agent'` when you create tasks. |
-| `updated_by` | TEXT | DEFAULT NULL | Who last modified the task. Always set to `'agent'` when you update tasks. If this is `'human'`, the human edited it since you last saw it. |
-| `created_at` | INTEGER | NOT NULL | Unix timestamp in seconds. Use `strftime('%s', 'now')` in SQLite. |
-| `updated_at` | INTEGER | NOT NULL | Unix timestamp in seconds. Must be updated on every modification. |
+All task endpoints are rooted at `$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks`.
 
-### comments table
+**Sanity check before your first call:**
+```bash
+echo "API: $GRANCLAW_API_URL  Agent: $GRANCLAW_AGENT_ID"
+curl -sf "$GRANCLAW_API_URL/health" && echo " — orchestrator reachable"
+```
 
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `id` | TEXT | PRIMARY KEY | UUID string. Generate with `lower(hex(randomblob(16)))` in SQLite. |
-| `task_id` | TEXT | NOT NULL, FK → tasks(id) ON DELETE CASCADE | The task this comment belongs to. |
-| `body` | TEXT | NOT NULL | Comment content in **markdown**. |
-| `source` | TEXT | NOT NULL | Who wrote the comment. Always `'agent'` when you add comments. |
-| `created_at` | INTEGER | NOT NULL | Unix timestamp in seconds. |
+## Task shape
 
-### Indexes
+Every task has these JSON fields (camelCase — this is what the API returns and accepts):
 
-- `idx_tasks_status` on `tasks(status)`
-- `idx_comments_task` on `comments(task_id, created_at)`
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | `TSK-NNN` format, **auto-assigned by the server** on create. You never pick the ID. |
+| `title` | string | Short, under 80 characters. |
+| `description` | string | Full description in **markdown**. Use headings, lists, code blocks. |
+| `status` | string | One of: `backlog`, `in_progress`, `scheduled`, `to_review`, `done`. |
+| `source` | string | Who created it — `agent` for tasks you create, `human` for tasks the user created in the dashboard. |
+| `updatedBy` | string \| null | Who last modified it. If it's `human`, the user edited since you last saw it. |
+| `createdAt` | number | Unix seconds. |
+| `updatedAt` | number | Unix seconds. |
 
-## Status Lifecycle
-
-Use these statuses to communicate progress to your human operator:
+## Status lifecycle
 
 | Status | When to use |
 |---|---|
-| `backlog` | Task identified but work has not started. Use when breaking down a larger request into subtasks. |
-| `in_progress` | You are actively working on this task right now. Only one or two tasks should be `in_progress` at a time. |
-| `scheduled` | You plan to work on this task but not immediately. Use when you've identified future work. |
-| `to_review` | Work is complete and you want the human to review it. Move tasks here when you finish implementation and want feedback. |
-| `done` | Task is fully completed and verified. Move here after human confirms the work is acceptable, or for tasks that need no review. |
+| `backlog` | Identified but not started. Use when breaking down a larger request into subtasks. |
+| `in_progress` | Actively working on it. Only one or two tasks should be `in_progress` at a time. |
+| `scheduled` | Planned for future work. |
+| `to_review` | Work complete, awaiting human review. Move tasks here when you finish and want feedback. |
+| `done` | Fully completed and verified. |
 
 **Typical flow:** `backlog` → `in_progress` → `to_review` → `done`
-
 **Deferred work:** `backlog` → `scheduled` → `in_progress` → `to_review` → `done`
 
 ## Operations
 
-### Generate next task ID
-
-Before creating a task, query for the next available ID:
-
-```sql
-SELECT COALESCE(MAX(CAST(SUBSTR(id, 5) AS INTEGER)), 0) + 1 FROM tasks;
-```
-
-Then format as `TSK-` followed by zero-padded 3-digit number. Example: result is 7 → ID is `TSK-007`.
-
-### Create a task
-
-```sql
-INSERT INTO tasks (id, title, description, status, source, updated_by, created_at, updated_at)
-VALUES (
-  'TSK-001',
-  'Implement login page',
-  '## Requirements\n- Email/password form\n- Validation\n- Error messages',
-  'backlog',
-  'agent',
-  NULL,
-  strftime('%s', 'now'),
-  strftime('%s', 'now')
-);
-```
-
-### Update task status
-
-```sql
-UPDATE tasks
-SET status = 'in_progress', updated_by = 'agent', updated_at = strftime('%s', 'now')
-WHERE id = 'TSK-001';
-```
-
-### Update task title or description
-
-```sql
-UPDATE tasks
-SET title = 'New title', description = 'New description', updated_by = 'agent', updated_at = strftime('%s', 'now')
-WHERE id = 'TSK-001';
-```
-
 ### List all tasks
 
-```sql
-SELECT id, title, status, source, updated_by, created_at, updated_at FROM tasks ORDER BY created_at;
+```bash
+curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks"
 ```
+
+Returns a JSON array sorted by creation time.
 
 ### List tasks by status
 
-```sql
-SELECT id, title, description, source, updated_by, created_at, updated_at
-FROM tasks WHERE status = 'in_progress' ORDER BY updated_at DESC;
+```bash
+curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks?status=in_progress"
 ```
 
-### Get a single task with details
+### Get a single task (includes its comments)
 
-```sql
-SELECT * FROM tasks WHERE id = 'TSK-001';
+```bash
+curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks/TSK-001"
+```
+
+Response has the usual task fields **plus** a `comments` array of `{id, taskId, body, source, createdAt}`.
+
+### Create a task
+
+```bash
+curl -sf -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Implement login page","description":"## Requirements\n- Email/password form\n- Validation\n- Error messages","status":"backlog"}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks"
+```
+
+Returns the newly created task (including its auto-assigned `TSK-NNN` id). `status` defaults to `backlog` if omitted; `description` defaults to `""`.
+
+**Tip:** Write multi-line descriptions to a temp file and use `--data-binary @file` when the markdown gets complex:
+
+```bash
+cat > /tmp/desc.json <<'EOF'
+{
+  "title": "Implement login page",
+  "description": "## Requirements\n\n- Email/password form\n- Validation\n- Error messages\n\n## Notes\n\nSee the design doc.",
+  "status": "backlog"
+}
+EOF
+curl -sf -X POST \
+  -H "Content-Type: application/json" \
+  --data-binary @/tmp/desc.json \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks"
+rm /tmp/desc.json
+```
+
+### Update a task
+
+Send only the fields you want to change:
+
+```bash
+# Move to in_progress
+curl -sf -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"status":"in_progress"}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks/TSK-001"
+
+# Update title and description
+curl -sf -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"title":"New title","description":"New markdown body"}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks/TSK-001"
 ```
 
 ### Delete a task
 
-```sql
-DELETE FROM tasks WHERE id = 'TSK-001';
+```bash
+curl -sf -X DELETE "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks/TSK-001"
 ```
 
-Comments are deleted automatically via CASCADE.
+Comments are deleted automatically via cascade.
 
 ### Add a comment
 
-```sql
-INSERT INTO comments (id, task_id, body, source, created_at)
-VALUES (
-  lower(hex(randomblob(16))),
-  'TSK-001',
-  'Started working on the form layout. Using flexbox for responsive design.',
-  'agent',
-  strftime('%s', 'now')
-);
+```bash
+curl -sf -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Started working on the form layout. Using flexbox for responsive design."}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks/TSK-001/comments"
 ```
 
 ### List comments for a task
 
-```sql
-SELECT id, body, source, created_at FROM comments WHERE task_id = 'TSK-001' ORDER BY created_at ASC;
+```bash
+curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks/TSK-001/comments"
 ```
 
-## Attribution Rules
+(Or just `GET /tasks/TSK-001` — it already embeds comments.)
 
-- **Always** set `source = 'agent'` when creating tasks or comments.
-- **Always** set `updated_by = 'agent'` when updating tasks.
-- If you see `updated_by = 'human'` on a task, the human changed it since your last interaction. Check what changed before making further updates.
-- If you see a comment with `source = 'human'`, read it carefully — it may contain feedback or instructions.
+## Attribution rules
 
-## Best Practices
+- The server stamps `source: "agent"` on every task and comment you create, and sets `updatedBy: "agent"` on every update. You don't need to send these fields.
+- If a task's `source` or `updatedBy` is `"human"`, the human created or edited it. Check what changed before making further updates.
+- If a comment's `source` is `"human"`, read it carefully — it may contain feedback or instructions for you.
+
+## Best practices
 
 1. **Break down work.** When given a large request, create multiple tasks in `backlog` before starting.
-2. **Update status promptly.** Move tasks to `in_progress` when you start, `to_review` when you finish.
+2. **Update status promptly.** Move tasks to `in_progress` when you start and `to_review` when you finish.
 3. **Use `to_review` generously.** When you complete something the human should verify, move it to `to_review` and add a comment explaining what was done.
-4. **Check for human edits.** Before bulk-updating tasks, query for tasks where `updated_by = 'human'` to see if the human reorganized anything.
-5. **Use markdown in descriptions and comments.** Include code blocks, links, and lists to make your updates clear and structured.
-6. **One command at a time.** Run each sqlite3 command separately so you can verify the result.
+4. **Check for human edits.** Before bulk-updating, list tasks and look for `updatedBy: "human"` to see if the user reorganized anything.
+5. **Use markdown in descriptions and comments.** Code blocks, links, and lists make your updates clear.
+6. **Parse JSON with `jq` if needed.** Agents that have `jq` on PATH can pipe responses through it:
+   ```bash
+   curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/tasks" | jq -r '.[] | "\(.id) [\(.status)] \(.title)"'
+   ```
 
-## Prohibited Operations
+## Error handling
 
-**NEVER run any of these:**
-- `CREATE TABLE` — schema is pre-provisioned
-- `ALTER TABLE` — schema is immutable
-- `DROP TABLE` — destructive and irreversible
-- `PRAGMA` — database configuration is managed by the host
-- `.schema` — not needed, schema is documented above
+- **Empty env vars:** if `$GRANCLAW_API_URL` or `$GRANCLAW_AGENT_ID` is empty, the orchestrator isn't exposing them — report the problem to the human and stop.
+- **`curl: (7) Failed to connect`:** orchestrator is down or on a different port. Don't guess — report it.
+- **`404 Not Found`:** task ID doesn't exist. List tasks first to confirm.
+- **`400 Bad Request`:** usually a missing required field (title for tasks, body for comments). Check your JSON payload.
+- **Non-zero exit from curl:** `-sf` makes curl fail hard on HTTP errors. If that's inconvenient, drop the `-f` and parse the response status yourself.
 
-The database file `tasks.sqlite` is managed by the host system. You are a client — read and write data only.
+## Why this uses the REST API, not SQLite
+
+Earlier versions of this skill read and wrote `tasks.sqlite` directly in your workspace. That worked but bypassed the orchestrator, so:
+- Real-time dashboard updates didn't fire (the UI polls via REST/WS, not SQLite file watches)
+- Validation and cascade rules enforced by the API layer were skipped
+- Workspace-specific DB paths made cross-agent coordination impossible
+
+Now the orchestrator is the single source of truth. Treat the API as the contract; SQLite is an implementation detail you should never touch from here.

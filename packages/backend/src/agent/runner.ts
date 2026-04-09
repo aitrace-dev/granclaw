@@ -245,6 +245,16 @@ export async function runAgent(
       if (fs.existsSync(profileDir)) {
         agentEnv.AGENT_BROWSER_PROFILE = profileDir;
       }
+
+      // Expose the orchestrator REST API to the agent so skills (task-board,
+      // schedules, etc.) can talk to it via curl instead of poking at SQLite
+      // directly. Both vars are read by the skill templates in
+      // packages/cli/templates/skills/. GRANCLAW_API_URL points at the same
+      // port the orchestrator listens on (process.env.PORT ?? 3001).
+      const apiPort = process.env.PORT ?? '3001';
+      agentEnv.GRANCLAW_AGENT_ID = agent.id;
+      agentEnv.GRANCLAW_API_URL = `http://localhost:${apiPort}`;
+
       const proc = spawn(claudeBin, args, { cwd: workspaceDir, env: agentEnv, stdio: ['pipe', 'pipe', 'pipe'] });
       proc.stdin?.end();
       activeProcesses.set(agent.id, proc);

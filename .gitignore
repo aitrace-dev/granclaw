@@ -33,5 +33,8 @@ docs/superpowers/
 # Legacy packages/agent/ (superseded by packages/backend/src/agent/)
 packages/agent/
 
+# Landing page — built separately, not shipped with the repo
+landing/
+
 # Screenshots / temp images
 img_*.png

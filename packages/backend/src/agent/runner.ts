@@ -43,8 +43,8 @@ export const spawnEnv: NodeJS.ProcessEnv = {
  * Priority:
  *   1. GRANCLAW_TEMPLATES_DIR env var — set by the CLI entrypoint to the
  *      templates dir bundled inside the published package.
- *   2. <GRANCLAW_HOME>/templates — dev-mode fallback when the root dev
- *      script does not set the env var.
+ *   2. <GRANCLAW_HOME>/packages/cli/templates — dev-mode fallback when the
+ *      root dev script does not set the env var.
  *
  * Note: the env var is read on every call (not captured at module load)
  * so the CLI entrypoint can set it just before requiring the backend.
@@ -56,7 +56,7 @@ export function resolveTemplatesDir(): string {
   if (envDir) {
     return path.resolve(envDir);
   }
-  return path.resolve(REPO_ROOT, 'templates');
+  return path.resolve(REPO_ROOT, 'packages/cli/templates');
 }
 
 // Track active Claude processes so they can be killed on stop

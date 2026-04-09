@@ -30,14 +30,14 @@ describe('resolveTemplatesDir', () => {
     expect(resolveTemplatesDir()).toBe(tmp);
   });
 
-  it('fallback equals <REPO_ROOT>/templates when env unset', async () => {
+  it('fallback equals <REPO_ROOT>/packages/cli/templates when env unset', async () => {
     // REPO_ROOT is a module-level snapshot of GRANCLAW_HOME in config.ts,
     // so we compare against the same load-time snapshot here.
     // A full cache-busted test of the fallback requires re-importing runner.js
     // itself (not just config.js), because runner.ts closes over REPO_ROOT at
     // module load — see the next test for that coverage.
     const { GRANCLAW_HOME } = await import('../config.js');
-    expect(resolveTemplatesDir()).toBe(path.join(GRANCLAW_HOME, 'templates'));
+    expect(resolveTemplatesDir()).toBe(path.join(GRANCLAW_HOME, 'packages/cli/templates'));
   });
 
   it('fallback is stable once process starts (REPO_ROOT is a load-time snapshot)', async () => {
@@ -52,6 +52,6 @@ describe('resolveTemplatesDir', () => {
     // Cache-bust runner to get a fresh module instance; config.js is still cached.
     const freshRunner = await import('./runner.js?runnerfallback');
     // The fallback must equal the load-time snapshot, not the newly set env.
-    expect(freshRunner.resolveTemplatesDir()).toBe(path.join(originalHome, 'templates'));
+    expect(freshRunner.resolveTemplatesDir()).toBe(path.join(originalHome, 'packages/cli/templates'));
   });
 });

@@ -210,4 +210,61 @@ else
   log 5 "✓ tarball install verified"
 fi
 
-log "steps 1-5" "✓ safety gates passed"
+# ── Step 6: E2E smoke test ───────────────────────────────────────────────────
+if [ "${GRANCLAW_GATE_SKIP_E2E:-}" = "1" ]; then
+  log 6 "⚠ SKIPPED via GRANCLAW_GATE_SKIP_E2E (beta escape hatch)"
+else
+  log 6 "Playwright e2e smoke"
+
+  if ! command -v claude >/dev/null 2>&1; then
+    if [ "${CI:-}" = "true" ]; then
+      log 6 "⚠ skipped: claude CLI unavailable in CI runner"
+      echo "::warning::Step 6 skipped: claude CLI unavailable in CI runner"
+      log "final" "✓ gates 1-5 passed, step 6 skipped"
+      exit 0
+    else
+      fail 6 "claude CLI missing — install from https://claude.ai/download"
+    fi
+  fi
+
+  # The tarball we installed in Step 5 is still on disk. Reboot a fresh server
+  # with a new temp home so the e2e starts from a clean slate.
+  E2E_HOME=$(mktemp -d)
+  cleanup_step6() {
+    if [ -n "${E2E_PID:-}" ]; then
+      kill "$E2E_PID" 2>/dev/null || true
+      wait "$E2E_PID" 2>/dev/null || true
+    fi
+    rm -rf "$E2E_HOME"
+    cleanup_step5
+  }
+  trap cleanup_step6 EXIT
+
+  GRANCLAW_HOME="$E2E_HOME" "$GRANCLAW_BIN" start --port 18787 > /tmp/gate-e2e-server.log 2>&1 &
+  E2E_PID=$!
+
+  # Poll /health for up to 12 seconds
+  E2E_HEALTH=0
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    sleep 1
+    if curl -sf http://localhost:18787/health >/dev/null 2>&1; then
+      E2E_HEALTH=1
+      break
+    fi
+  done
+  if [ "$E2E_HEALTH" -ne 1 ]; then
+    tail -30 /tmp/gate-e2e-server.log >&2
+    fail 6 "server failed to restart for e2e"
+  fi
+
+  log 6 "running Playwright spec"
+  (cd "$CLI_ROOT" && npx playwright test --config playwright.config.ts) || fail 6 "Playwright spec failed"
+
+  kill "$E2E_PID" 2>/dev/null || true
+  wait "$E2E_PID" 2>/dev/null || true
+  E2E_PID=""
+
+  log 6 "✓ e2e smoke passed"
+fi
+
+log "final" "✓ all gates passed"

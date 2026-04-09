@@ -37,6 +37,26 @@ export const spawnEnv: NodeJS.ProcessEnv = {
   ].filter(Boolean).join(':'),
 };
 
+/**
+ * Resolve the templates directory.
+ *
+ * Priority:
+ *   1. GRANCLAW_TEMPLATES_DIR env var — set by the CLI entrypoint to the
+ *      templates dir bundled inside the published package.
+ *   2. <GRANCLAW_HOME>/templates — dev-mode fallback when the root dev
+ *      script does not set the env var.
+ *
+ * Note: the env var is read on every call (not captured at module load)
+ * so the CLI entrypoint can set it just before requiring the backend.
+ */
+export function resolveTemplatesDir(): string {
+  const envDir = process.env.GRANCLAW_TEMPLATES_DIR?.trim();
+  if (envDir) {
+    return path.resolve(envDir);
+  }
+  return path.resolve(REPO_ROOT, 'templates');
+}
+
 // Track active Claude processes so they can be killed on stop
 const activeProcesses = new Map<string, import('child_process').ChildProcess>();
 
@@ -64,7 +84,7 @@ export function bootstrapWorkspace(workspaceDir: string): void {
   fs.mkdirSync(workspaceDir, { recursive: true });
   const claudeMd = path.join(workspaceDir, 'CLAUDE.md');
   if (!fs.existsSync(claudeMd)) {
-    const template = path.resolve(REPO_ROOT, 'templates/CLAUDE.onboarding.md');
+    const template = path.join(resolveTemplatesDir(), 'CLAUDE.onboarding.md');
     fs.copyFileSync(template, claudeMd);
     console.log(`[runner] copied onboarding CLAUDE.md to ${workspaceDir}`);
   }
@@ -88,7 +108,7 @@ export function bootstrapWorkspace(workspaceDir: string): void {
   }
 
   // Bootstrap skills from templates
-  const skillsTemplateDir = path.resolve(REPO_ROOT, 'templates/skills');
+  const skillsTemplateDir = path.join(resolveTemplatesDir(), 'skills');
   if (fs.existsSync(skillsTemplateDir)) {
     const targetSkillsDir = path.join(workspaceDir, '.claude', 'skills');
     for (const skillName of fs.readdirSync(skillsTemplateDir)) {
@@ -188,7 +208,7 @@ export async function runAgent(
       if (resume) args.push('--resume', resume);
 
       // Inject core system instructions that every agent must follow (vault, security, skills)
-      const systemMd = path.resolve(REPO_ROOT, 'templates/DO_NOT_DELETE.md');
+      const systemMd = path.join(resolveTemplatesDir(), 'DO_NOT_DELETE.md');
       if (fs.existsSync(systemMd)) {
         args.push('--append-system-prompt-file', systemMd);
       }

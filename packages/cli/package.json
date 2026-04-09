@@ -44,6 +44,6 @@
   "scripts": {
     "build": "rm -rf dist && node scripts/build.js",
     "test": "vitest run",
-    "prepublishOnly": "bash scripts/prepublish-gate.sh"
+    "gate": "bash scripts/prepublish-gate.sh"
   }
 }

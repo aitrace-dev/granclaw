@@ -32,6 +32,8 @@ No black boxes. No gated features. No surprise bans. Built on **Claude Code** �
 
 - **Watch it browse** — every page, every click, every scroll. Click any session and you get a timeline of screenshots plus the exact DOM commands the agent ran.
 
+- **Obsidian-native memory** — every agent has its own **vault** of plain markdown files: daily journals, action logs, topic notes, research findings, wikilinks between everything. Open it in [Obsidian](https://obsidian.md) and browse your agent's brain like any other notebook. Your agent writes to it. You can too.
+
 - **Secrets that stay secret** — API keys, bot tokens, credentials added in the UI are injected as env vars only inside the agent process. Never written to files. Never committed.
 
 - **Claude Code first** — runs on your Claude Code subscription, the same CLI you use every day. No API billing. No rate-limit terror. No risk of account action for "unusual usage" — because it *is* usual usage.
@@ -84,7 +86,8 @@ Every GranClaw agent ships with this out of the box — no setup, no plugins, no
 - **💬 Streaming Chat** — tokens stream live over WebSocket. See the agent thinking in real time. Stop it mid-action. Session memory survives restarts.
 - **📋 Mission Control (Tasks)** — kanban board baked into every agent. Agents create tasks, move them through states, and report back.
 - **🌐 Persistent Browser Sessions** — real browser with saved logins. LinkedIn, Gmail, Notion, your internal dashboard — anything that runs in a browser.
-- **📂 Workspace Files** — each agent gets its own directory. Browse, read, edit, export. Your agent's knowledge is yours.
+- **🧠 Obsidian Vault** — every agent has its own `vault/` of plain markdown files (daily journals, action logs, topic notes, knowledge, wikilinks). Open it in [Obsidian](https://obsidian.md) and browse your agent's brain. It's yours, not trapped in a vendor DB.
+- **📂 Workspace Files** — each agent gets its own directory. Browse, read, edit, export — right from the dashboard.
 - **🔐 Secrets Vault** — API keys, bot tokens, credentials added in the UI, injected as env vars only in the agent process.
 - **⚡ Workflows** — chain agent calls, code steps, and LLM calls into reusable pipelines.
 - **⏰ Schedules** — cron-based scheduled tasks. Agent wakes up at 9am, writes you a summary, goes back to sleep.

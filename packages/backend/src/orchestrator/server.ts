@@ -924,7 +924,13 @@ export function createServer() {
   // and we serve it from this same port so the whole app ships as a single
   // service on a single port. This block is a no-op in dev because dist
   // does not exist.
-  const frontendDist = path.resolve(REPO_ROOT, 'packages/frontend/dist');
+  // In published mode, the CLI entrypoint sets GRANCLAW_STATIC_DIR to the
+  // bundled frontend dir inside the package. In dev / Docker, fall back to
+  // the existing in-repo path.
+  const staticDirEnv = process.env.GRANCLAW_STATIC_DIR?.trim();
+  const frontendDist = staticDirEnv
+    ? path.resolve(staticDirEnv)
+    : path.resolve(REPO_ROOT, 'packages/frontend/dist');
   if (fs.existsSync(frontendDist)) {
     console.log(`[orchestrator] serving built frontend from ${frontendDist}`);
     app.use(express.static(frontendDist));

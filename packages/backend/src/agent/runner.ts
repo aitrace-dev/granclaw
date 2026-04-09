@@ -48,6 +48,8 @@ export const spawnEnv: NodeJS.ProcessEnv = {
  *
  * Note: the env var is read on every call (not captured at module load)
  * so the CLI entrypoint can set it just before requiring the backend.
+ * The fallback path closes over REPO_ROOT, which is a load-time snapshot
+ * of GRANCLAW_HOME — once the process has started, the fallback is stable.
  */
 export function resolveTemplatesDir(): string {
   const envDir = process.env.GRANCLAW_TEMPLATES_DIR?.trim();

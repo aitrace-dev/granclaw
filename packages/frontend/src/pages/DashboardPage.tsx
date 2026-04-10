@@ -103,7 +103,8 @@ export function DashboardPage() {
 
   if (loading) return <div className="text-on-surface-variant/40 font-mono text-xs p-8">loading agents…</div>;
 
-  if (!loading && providerSettings && !providerSettings.configured) {
+  // Full-screen CTA only for truly fresh installs: no provider AND no agents
+  if (!loading && providerSettings && !providerSettings.configured && agents.length === 0) {
     return (
       <div className="max-w-3xl mx-auto py-8 px-4">
         <div className="text-center py-24">
@@ -126,6 +127,14 @@ export function DashboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
+      {/* Provider warning banner (shown when agents exist but provider not configured) */}
+      {providerSettings && !providerSettings.configured && (
+        <div className="rounded-lg bg-amber-950/20 border border-amber-600/20 px-4 py-3 mb-4 flex items-center justify-between">
+          <p className="font-mono text-[11px] text-amber-400/70">No provider configured — agents cannot run until you set one up.</p>
+          <Link to="/settings" className="font-mono text-[11px] text-primary/70 hover:text-primary">Configure →</Link>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -134,7 +143,8 @@ export function DashboardPage() {
         </div>
         <button
           onClick={() => setShowCreate(s => !s)}
-          className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90"
+          disabled={!providerSettings?.configured}
+          className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {showCreate ? 'Cancel' : '+ New Agent'}
         </button>

@@ -52,7 +52,6 @@ function getDb(workspaceDir: string): Database.Database {
       ON jobs (agent_id, status, created_at);
   `);
 
-  // Backward-compatible migration: add session_file column if missing
   const existingCols = (db.pragma('table_info(sessions)') as Array<{ name: string }>).map(c => c.name);
   if (!existingCols.includes('session_file')) {
     db.exec(`ALTER TABLE sessions ADD COLUMN session_file TEXT`);

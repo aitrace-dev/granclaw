@@ -117,17 +117,10 @@ export function bootstrapWorkspace(workspaceDir: string): void {
   } catch { /* schedules DB may not be ready yet */ }
 }
 
-// ── ESM imports — tsx handles interop at runtime ─────────────────────────────
-// The pi packages are ESM-only. The backend tsconfig targets CommonJS so
-// TypeScript's module resolution rejects these. @ts-ignore is intentional;
-// tsx resolves them correctly at runtime. Type information is inferred from
-// the d.ts files we inspected during development.
-// @ts-ignore
-import { createAgentSession, SessionManager, DefaultResourceLoader } from '@mariozechner/pi-coding-agent';
-// @ts-ignore
-import { getModel, type Model, type Api } from '@mariozechner/pi-ai';
-// @ts-ignore
-import type { AgentEvent } from '@mariozechner/pi-agent-core'; // eslint-disable-line @typescript-eslint/no-unused-vars
+// ── Pi packages are ESM-only — loaded via dynamic import() inside runAgent ───
+// Static top-level imports fail in a CommonJS backend because Node resolves
+// the "exports" map using the CJS condition, which these packages don't expose.
+// Dynamic import() uses the "import" condition and works correctly at runtime.
 
 // ── StreamChunk ──────────────────────────────────────────────────────────────
 // Identical to runner.ts so callers can switch without changes.
@@ -227,11 +220,15 @@ export async function runAgent(
   let prevValue: string | undefined;
 
   try {
+    // ── Load pi packages (ESM-only, must use dynamic import) ───────────
+    const { getModel } = await import('@mariozechner/pi-ai');
+    const { createAgentSession, SessionManager, DefaultResourceLoader } = await import('@mariozechner/pi-coding-agent');
+
     // ── Resolve model ───────────────────────────────────────────────────
     // getModel() expects KnownProvider literals at the type level, but our
     // provider string comes from runtime config. The cast is safe — getModel()
     // returns undefined for unknown provider/model combos, which we handle below.
-    const model = (getModel as (p: string, m: string) => Model<Api> | undefined)(
+    const model = (getModel as (p: string, m: string) => unknown)(
       providerCfg.provider,
       modelId,
     );

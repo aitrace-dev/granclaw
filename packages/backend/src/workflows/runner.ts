@@ -19,8 +19,6 @@ import {
   updateRunStep,
   type Step,
 } from '../workflows-db.js';
-// @ts-ignore — ESM-only package, tsx handles interop at runtime
-import { getModel, complete } from '@mariozechner/pi-ai';
 import { getProvider, getProviderApiKey } from '../providers-config.js';
 import { runAgent } from '../agent/runner-pi.js';
 import { randomUUID } from 'crypto';
@@ -103,6 +101,8 @@ async function executeLlmStep(
 
   const apiKey = getProviderApiKey();
   if (!apiKey) throw new Error('Provider API key missing. Go to Settings to reconfigure.');
+
+  const { getModel, complete } = await import('@mariozechner/pi-ai');
 
   const modelId = agentModel?.trim() || providerCfg.model;
   const model = (getModel as (p: string, m: string) => unknown)(providerCfg.provider, modelId);

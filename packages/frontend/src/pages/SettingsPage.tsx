@@ -1,6 +1,5 @@
 // packages/frontend/src/pages/SettingsPage.tsx
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   fetchProviderSettings,
   saveProviderSettings,
@@ -12,20 +11,21 @@ import {
 import { PROVIDERS, getModelsForProvider, getDefaultModel } from '../lib/models.ts';
 
 export function SettingsPage() {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [configured, setConfigured] = useState(false);
   const [provider, setProvider] = useState('google');
   const [model, setModel] = useState(getDefaultModel('google'));
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [replacingKey, setReplacingKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchProvider, setSearchProvider] = useState<'duckduckgo' | 'brave'>('duckduckgo');
   const [braveApiKey, setBraveApiKey] = useState('');
   const [searchSaving, setSearchSaving] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchSuccess, setSearchSuccess] = useState(false);
+  const [searchConfigured, setSearchConfigured] = useState(false);
 
   useEffect(() => {
     fetchProviderSettings()
@@ -38,8 +38,7 @@ export function SettingsPage() {
       .finally(() => setLoading(false));
 
     fetchSearchSettings().then(s => {
-      setSearchProvider(s.provider);
-      // never pre-fill braveApiKey — user must re-enter
+      setSearchConfigured(s.configured);
     }).catch(console.error);
   }, []);
 
@@ -52,11 +51,16 @@ export function SettingsPage() {
     if (!apiKey.trim()) { setError('API key is required'); return; }
     setSaving(true);
     setError(null);
+    setSaveSuccess(false);
     try {
       await saveProviderSettings(provider, model, apiKey.trim());
-      navigate('/');
+      setConfigured(true);
+      setSaveSuccess(true);
+      setApiKey('');
+      setReplacingKey(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
       setSaving(false);
     }
   }
@@ -65,20 +69,24 @@ export function SettingsPage() {
     if (!confirm('Remove provider configuration? Agents will stop responding until you reconfigure.')) return;
     try {
       await clearProviderSettings();
-      navigate('/');
+      setConfigured(false);
+      setSaveSuccess(false);
+      setReplacingKey(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove configuration');
     }
   }
 
   async function handleSearchSave() {
+    if (!braveApiKey.trim()) { setSearchError('API key is required'); return; }
     setSearchSaving(true);
     setSearchError(null);
     setSearchSuccess(false);
     try {
-      await saveSearchSettings(searchProvider, searchProvider === 'brave' ? braveApiKey : undefined);
+      await saveSearchSettings('brave', braveApiKey.trim());
       setSearchSuccess(true);
-      setBraveApiKey(''); // clear after save
+      setSearchConfigured(true);
+      setBraveApiKey('');
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -91,7 +99,7 @@ export function SettingsPage() {
     setSearchError(null);
     try {
       await clearSearchSettings();
-      setSearchProvider('duckduckgo');
+      setSearchConfigured(false);
       setBraveApiKey('');
       setSearchSuccess(false);
     } catch (err) {
@@ -110,7 +118,10 @@ export function SettingsPage() {
       <div className="mb-6">
         <h1 className="font-display text-2xl font-semibold text-on-surface">Provider Settings</h1>
         <p className="font-mono text-[11px] text-on-surface-variant/40 mt-1">
-          Configure the AI provider and API key used by all agents.
+          Configure the AI provider and API key used by all agents.{' '}
+          {configured
+            ? <span className="text-green-400">Configured ✓</span>
+            : <span className="text-amber-400">Not configured — agents will not respond.</span>}
         </p>
       </div>
 
@@ -148,27 +159,43 @@ export function SettingsPage() {
         </div>
 
         <div>
-          <label htmlFor="api-key-input" className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+          <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
             API Key
           </label>
-          <input
-            id="api-key-input"
-            type="password"
-            className={inputCls}
-            placeholder="Paste your API key here — never stored in plaintext on client"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            autoComplete="off"
-          />
-          <p className="font-mono text-[9px] text-on-surface-variant/30 mt-1">
-            The key is stored server-side only and never returned to the browser.
-          </p>
+          {configured && !replacingKey ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                className={inputCls}
+                value="••••••••••••••••••••"
+                readOnly
+              />
+              <button
+                type="button"
+                onClick={() => { setReplacingKey(true); setSaveSuccess(false); }}
+                className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant/50 hover:text-on-surface bg-[#33343b] transition-colors"
+              >
+                Replace
+              </button>
+            </div>
+          ) : (
+            <input
+              id="api-key-input"
+              type="password"
+              className={inputCls}
+              placeholder="Paste your API key here"
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); setError(null); }}
+              autoComplete="off"
+              autoFocus={replacingKey}
+            />
+          )}
         </div>
 
         <div className="flex items-center gap-3 pt-1">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || (configured && !replacingKey)}
             className="rounded bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
           >
             {saving ? 'Saving…' : 'Save'}
@@ -178,9 +205,10 @@ export function SettingsPage() {
               onClick={handleRemove}
               className="rounded px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-950/20 transition-colors"
             >
-              Remove configuration
+              Remove
             </button>
           )}
+          {saveSuccess && <span className="font-mono text-[11px] text-green-400">Saved</span>}
           {error && <span className="font-mono text-[10px] text-red-400">{error}</span>}
         </div>
       </div>
@@ -189,53 +217,41 @@ export function SettingsPage() {
       <div className="mt-8 pt-8 border-t border-[#33343b]">
         <h2 className="font-display text-lg font-semibold text-on-surface mb-1">Web Search</h2>
         <p className="font-mono text-[11px] text-on-surface-variant/40 mb-6">
-          DuckDuckGo works out of the box. Switch to Brave for higher-quality results (requires a Brave Search API key).
+          Brave Search gives agents real web search capability.{' '}
+          {searchConfigured
+            ? <span className="text-green-400">Configured ✓</span>
+            : <span className="text-amber-400">Not configured — agents cannot search the web.</span>}
         </p>
 
         <div className="space-y-4">
           <div>
-            <label htmlFor="search-provider-select" className="block font-mono text-[11px] text-on-surface-variant/50 mb-1">Search provider</label>
-            <select
-              id="search-provider-select"
-              className={inputCls + ' w-full appearance-none'}
-              value={searchProvider}
-              onChange={e => { setSearchProvider(e.target.value as 'duckduckgo' | 'brave'); setSearchSuccess(false); }}
-            >
-              <option value="duckduckgo">DuckDuckGo (default, no API key needed)</option>
-              <option value="brave">Brave Search</option>
-            </select>
+            <label htmlFor="brave-api-key-input" className="block font-mono text-[11px] text-on-surface-variant/50 mb-1">Brave Search API key</label>
+            <input
+              id="brave-api-key-input"
+              type="password"
+              className={inputCls + ' w-full'}
+              placeholder={searchConfigured ? 'Enter new key to replace existing' : 'Enter Brave Search API key'}
+              value={braveApiKey}
+              onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
+              autoComplete="off"
+            />
           </div>
-
-          {searchProvider === 'brave' && (
-            <div>
-              <label htmlFor="brave-api-key-input" className="block font-mono text-[11px] text-on-surface-variant/50 mb-1">Brave Search API key</label>
-              <input
-                id="brave-api-key-input"
-                type="password"
-                className={inputCls + ' w-full'}
-                placeholder="Enter Brave Search API key"
-                value={braveApiKey}
-                onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
-                autoComplete="off"
-              />
-            </div>
-          )}
 
           <div className="flex items-center gap-3">
             <button
               onClick={handleSearchSave}
-              disabled={searchSaving || (searchProvider === 'brave' && !braveApiKey.trim())}
+              disabled={searchSaving || !braveApiKey.trim()}
               className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {searchSaving ? 'Saving…' : 'Save search settings'}
+              {searchSaving ? 'Saving…' : 'Save'}
             </button>
-            {searchProvider !== 'duckduckgo' && (
+            {searchConfigured && (
               <button
                 onClick={handleSearchReset}
                 disabled={searchSaving}
                 className="rounded px-3 py-2 text-[12px] font-mono text-on-surface-variant/50 hover:text-red-400 hover:bg-red-950/20 transition-colors disabled:opacity-40"
               >
-                Reset to DuckDuckGo
+                Remove
               </button>
             )}
             {searchSuccess && <span className="font-mono text-[11px] text-green-400">Saved</span>}

@@ -15,7 +15,7 @@ import path from 'path';
 import { getAgents, getAgent, AgentConfig, REPO_ROOT } from '../config.js';
 import { getSecrets } from '../secrets-vault.js';
 
-const BASE_AGENT_PORT = 3100;
+const BASE_AGENT_PORT = Number(process.env.AGENT_BASE_PORT ?? 3100);
 
 export interface ManagedAgent {
   config: AgentConfig;
@@ -104,12 +104,14 @@ function spawnAgent(agent: AgentConfig, wsPort: number): ChildProcess {
   if (secretKeys.length > 0) {
     console.log(`[orchestrator] injecting ${secretKeys.length} secrets into agent "${agent.id}": ${secretKeys.join(', ')}`);
   }
+  const orchestratorPort = process.env.PORT ?? '3001';
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...secrets,
     AGENT_ID: agent.id,
     AGENT_PORT: String(wsPort),
     CONFIG_PATH: path.resolve(REPO_ROOT, 'agents.config.json'),
+    GRANCLAW_API_URL: `http://localhost:${orchestratorPort}`,
   };
 
   let child: ChildProcess;

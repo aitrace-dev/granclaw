@@ -653,21 +653,21 @@ export async function clearProviderSettings(): Promise<void> {
 // ── Search settings ───────────────────────────────────────────────────────────
 
 export interface SearchSettings {
-  provider: 'duckduckgo' | 'brave';
-  configured: boolean; // true if provider is 'brave' and apiKey is saved
+  provider: 'brave';
+  configured: boolean;
 }
 
 export async function fetchSearchSettings(): Promise<SearchSettings> {
   const res = await fetch(`${BASE}/settings/search`);
-  if (!res.ok) return { provider: 'duckduckgo', configured: false };
+  if (!res.ok) return { provider: 'brave', configured: false };
   return res.json() as Promise<SearchSettings>;
 }
 
-export async function saveSearchSettings(provider: 'duckduckgo' | 'brave', apiKey?: string): Promise<void> {
+export async function saveSearchSettings(_provider: string, apiKey?: string): Promise<void> {
   const res = await fetch(`${BASE}/settings/search`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, apiKey }),
+    body: JSON.stringify({ apiKey }),
   });
   if (!res.ok) throw new Error(`Failed to save search settings: ${res.status}`);
 }

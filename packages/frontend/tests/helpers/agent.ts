@@ -48,6 +48,17 @@ export async function createSeededAgent(id: string, seedDir: string): Promise<Te
   // Delete any leftover agent registration
   await fetch(`${API}/agents/${id}`, { method: 'DELETE' }).catch(() => {});
 
+  // Use the configured provider model so the agent doesn't fail with the wrong model ID.
+  // Falls back to the server default if settings are unavailable.
+  let model: string | undefined;
+  try {
+    const s = await fetch(`${API}/settings/provider`);
+    if (s.ok) {
+      const settings = await s.json() as { model?: string };
+      model = settings.model;
+    }
+  } catch { /* ignore — server will use its own default */ }
+
   // Register agent with the pre-seeded workspaceDir
   // .test/workspaceDir is relative to REPO_ROOT — the server resolves it via path.resolve(REPO_ROOT, ...)
   const res = await fetch(`${API}/agents`, {
@@ -56,6 +67,7 @@ export async function createSeededAgent(id: string, seedDir: string): Promise<Te
     body: JSON.stringify({
       id,
       name: id,
+      model,
       workspaceDir: `.test/workspaces/${id}`,
     }),
   });

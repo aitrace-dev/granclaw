@@ -19,7 +19,6 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
     { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini — fast, efficient' },
     { value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano — cheapest' },
     { value: 'gpt-5.4', label: 'GPT-5.4 — latest flagship' },
-    { value: 'o4-mini', label: 'o4-mini — reasoning' },
   ],
   anthropic: [
     { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 — recommended' },
@@ -33,7 +32,6 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
     { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B — fastest/cheapest' },
   ],
   openrouter: [
-    { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1 — top reasoning model' },
     { value: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2 — fast chat' },
     { value: 'deepseek/deepseek-chat-v3.1', label: 'DeepSeek Chat V3.1' },
     { value: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick' },

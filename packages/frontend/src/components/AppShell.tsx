@@ -21,7 +21,7 @@ export function AppShell() {
         <div className="flex items-center gap-4">
           <Link
             to="/settings"
-            className="font-mono text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant transition-colors"
+            className="font-mono text-[12px] text-on-surface-variant/70 hover:text-on-surface-variant transition-colors"
           >
             Settings
           </Link>

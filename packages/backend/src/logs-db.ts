@@ -39,6 +39,10 @@ function getDb(): Database.Database {
   const dbPath = path.join(dataDir, 'logs.db');
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
+  // Checkpoint any leftover WAL frames on open so new OS-level processes
+  // (agent sub-processes) can open the same file without SQLITE_NOTADB errors
+  // caused by a stale WAL that was never flushed by a previous run.
+  db.pragma('wal_checkpoint(TRUNCATE)');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS actions (

@@ -22,7 +22,7 @@ import path from 'path';
 import fs from 'fs';
 import { getAgent, REPO_ROOT } from '../config.js';
 import { enqueue, dequeueNext, markDone, markFailed, saveSession, cleanupStaleJobs } from '../agent-db.js';
-import { runAgent, stopAgent } from './runner-pi.js';
+import { runAgent, stopAgent, syncSearchMcpConfig } from './runner-pi.js';
 import { saveMessage } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 
@@ -81,7 +81,7 @@ function main() {
         clientChannelId = msg.channelId ?? 'ui';
         getChannelClients(clientChannelId).add(ws);
 
-        saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: clientChannelId, role: 'user', content: msg.text });
+        try { saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: clientChannelId, role: 'user', content: msg.text }); } catch { /* non-fatal */ }
 
         enqueue(workspaceDir, agentId as string, msg.text, clientChannelId);
         ws.send(JSON.stringify({ type: 'queued' }));
@@ -139,6 +139,9 @@ function main() {
     try {
       const isTelegramJob = telegramAdapter !== null && job.channelId.startsWith('telegram:');
 
+      // Sync Brave Search MCP server into tools.mcp.json before mtime snapshot
+      syncSearchMcpConfig(workspaceDir);
+
       // Snapshot MCP config mtime before the turn
       const mcpMtimeBefore = fs.existsSync(mcpConfigPath) ? fs.statSync(mcpConfigPath).mtimeMs : 0;
 
@@ -166,12 +169,14 @@ function main() {
 
       // Persist tool calls + response
       const saveTime = Date.now();
-      for (const [i, tc] of toolCallStrings.entries()) {
-        saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: job.channelId, role: 'tool_call', content: tc, createdAt: saveTime + i });
-      }
-      if (fullResponse) {
-        saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: job.channelId, role: 'assistant', content: fullResponse, createdAt: saveTime + toolCallStrings.length });
-      }
+      try {
+        for (const [i, tc] of toolCallStrings.entries()) {
+          saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: job.channelId, role: 'tool_call', content: tc, createdAt: saveTime + i });
+        }
+        if (fullResponse) {
+          saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: job.channelId, role: 'assistant', content: fullResponse, createdAt: saveTime + toolCallStrings.length });
+        }
+      } catch { /* non-fatal */ }
 
       markDone(workspaceDir, job.id);
 

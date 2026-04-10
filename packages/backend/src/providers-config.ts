@@ -50,53 +50,34 @@ export function clearProvider(): void {
 // ── Search config ─────────────────────────────────────────────────────────────
 
 export interface SearchConfig {
-  provider: 'duckduckgo' | 'brave';
-  apiKey?: string; // only for brave
+  provider: 'brave';
+  apiKey: string;
 }
 
-export function getSearch(): SearchConfig {
-  try {
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as { search?: SearchConfig };
-    return parsed.search ?? { provider: 'duckduckgo' };
-  } catch {
-    return { provider: 'duckduckgo' }; // default
-  }
-}
-
+/** Returns the Brave Search API key, or null if not configured. */
 export function getSearchApiKey(): string | null {
   try {
     const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as { search?: SearchConfig };
+    const parsed = JSON.parse(raw) as { search?: { apiKey?: string } };
     return parsed.search?.apiKey ?? null;
   } catch {
     return null;
   }
 }
 
-export function saveSearch(provider: 'duckduckgo' | 'brave', apiKey?: string): void {
-  // Read existing config to preserve the `active` section
+export function saveSearch(apiKey: string): void {
   let existing: Record<string, unknown> = {};
-  try {
-    existing = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-  } catch { /* first write */ }
-
+  try { existing = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); } catch { /* first write */ }
   const dir = path.dirname(CONFIG_PATH);
   fs.mkdirSync(dir, { recursive: true });
   const tmp = CONFIG_PATH + '.tmp';
-  const searchSection: SearchConfig = provider === 'brave' && apiKey
-    ? { provider: 'brave', apiKey }
-    : { provider: 'duckduckgo' };
-  fs.writeFileSync(tmp, JSON.stringify({ ...existing, search: searchSection }, null, 2));
+  fs.writeFileSync(tmp, JSON.stringify({ ...existing, search: { provider: 'brave', apiKey } }, null, 2));
   fs.renameSync(tmp, CONFIG_PATH);
 }
 
 export function clearSearch(): void {
-  // Reset to duckduckgo (the default) by removing the search section
   let existing: Record<string, unknown> = {};
-  try {
-    existing = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-  } catch { return; }
+  try { existing = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); } catch { return; }
   const { search: _removed, ...rest } = existing;
   const dir = path.dirname(CONFIG_PATH);
   fs.mkdirSync(dir, { recursive: true });

@@ -1,5 +1,5 @@
 {
-  "name": "agent-brother",
+  "name": "granclaw",
   "private": true,
   "workspaces": [
     "packages/*"
@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "GRANCLAW_HOME=\"$PWD\" GRANCLAW_TEMPLATES_DIR=\"$PWD/packages/cli/templates\" concurrently \"npm run dev -w packages/backend\" \"npm run dev -w packages/frontend\"",
     "build": "npm run build -w packages/backend && npm run build -w packages/frontend",
-    "test": "npm run test -w packages/backend"
+    "test": "npm run test -w packages/backend",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

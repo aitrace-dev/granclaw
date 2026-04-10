@@ -111,6 +111,27 @@ Edit `agents.config.json`, add an entry to the `agents` array. The backend reads
 
 ---
 
+## IMPORTANT: Pi extensions must ship with GranClaw
+
+**Never install framework extensions machine-locally.** Any capability you add to GranClaw agents must work for every user, including those who installed via `npx granclaw`. The global `~/.pi/agent/extensions/` path is machine-local and must not be used for framework features.
+
+**The rule:** every pi extension added to the framework goes in `packages/cli/templates/pi-extensions/`.
+
+- `packages/cli/templates/` is listed in the CLI package `"files"` array — it ships with `npx granclaw`
+- On every agent startup, `bootstrapWorkspace` in `runner-pi.ts` copies `templates/pi-extensions/` → `<workspaceDir>/.pi/extensions/` (always overwrites, so fixes propagate automatically)
+- Any npm packages the extension imports must be added to `packages/cli/package.json` `"dependencies"`
+
+**Adding a new extension:**
+1. Write it in `packages/cli/templates/pi-extensions/<name>.ts`
+2. Add any new `npm` deps to `packages/cli/package.json` → `"dependencies"`
+3. Restart the backend — `bootstrapWorkspace` will copy the extension on the next agent start
+
+**Do not:**
+- Install extensions into `~/.pi/agent/extensions/` — they only exist on your machine
+- Install extensions into `~/.pi/agent/extensions/` and consider the task done — this is not scalable
+
+---
+
 ## Development conventions
 
 - **Backend:** CommonJS modules (`"module": "CommonJS"` in tsconfig). Run with `tsx watch` in dev.

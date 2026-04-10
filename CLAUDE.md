@@ -38,7 +38,7 @@ npm install
 npm run dev                   # backend :3001 + frontend :5173
 ```
 
-**Prerequisites:** Node 20+, `claude` CLI on PATH (Claude Code subscription).
+**Prerequisites:** Node 20+. Configure a provider at `http://localhost:5173/settings` on first run.
 
 ---
 

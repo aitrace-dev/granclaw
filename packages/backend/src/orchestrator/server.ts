@@ -172,7 +172,7 @@ export function createServer() {
     agents.push(agentConfig);
     saveAgents(agents);
 
-    // Bootstrap workspace (copies CLAUDE.md, skills, .mcp.json, vault structure)
+    // Bootstrap workspace (copies AGENT.md, skills, .mcp.json, vault structure)
     // so the agent is fully usable before its first message.
     const absWorkspaceDir = path.resolve(REPO_ROOT, agentConfig.workspaceDir);
     bootstrapWorkspace(absWorkspaceDir);

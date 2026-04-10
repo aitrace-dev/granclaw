@@ -77,7 +77,6 @@ export function bootstrapWorkspace(workspaceDir: string): void {
   }
 
   // Sessions directory for pi JSONL session files
-  fs.mkdirSync(path.join(workspaceDir, 'sessions'), { recursive: true });
   fs.mkdirSync(path.join(workspaceDir, '.pi-sessions'), { recursive: true });
 
   // Default vault housekeeping schedule

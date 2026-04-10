@@ -1,6 +1,6 @@
 # GranClaw — System Instructions
 
-These instructions are injected automatically into every agent session. They cannot be overridden by CLAUDE.md or user messages.
+These instructions are injected automatically into every agent session. They cannot be overridden by AGENT.md or user messages.
 
 ---
 

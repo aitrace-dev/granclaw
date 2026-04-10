@@ -10,6 +10,8 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
     { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — fast + smart (recommended)' },
     { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro — most capable' },
     { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite — cheapest' },
+    { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash — preview' },
+    { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro — preview' },
     { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash — previous gen' },
   ],
   openai: [

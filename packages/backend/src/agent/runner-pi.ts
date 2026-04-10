@@ -21,6 +21,7 @@ import { saveSession } from '../agent-db.js';
 import { logAction } from '../logs-db.js';
 import { getProvider, getProviderApiKey } from '../providers-config.js';
 import { bootstrapWorkspace } from './runner.js';
+export { bootstrapWorkspace };
 
 // ── ESM imports — tsx handles interop at runtime ─────────────────────────────
 // The pi packages are ESM-only. The backend tsconfig targets CommonJS so

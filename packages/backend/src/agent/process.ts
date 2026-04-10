@@ -22,7 +22,7 @@ import path from 'path';
 import fs from 'fs';
 import { getAgent, REPO_ROOT } from '../config.js';
 import { enqueue, dequeueNext, markDone, markFailed, saveSession, cleanupStaleJobs } from '../agent-db.js';
-import { runAgent, stopAgent } from './runner.js';
+import { runAgent, stopAgent } from './runner-pi.js';
 import { saveMessage } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 

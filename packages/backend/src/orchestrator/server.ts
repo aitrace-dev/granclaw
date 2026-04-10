@@ -38,7 +38,7 @@ import {
   closeWorkflowsDb,
 } from '../workflows-db.js';
 import { executeWorkflow } from '../workflows/runner.js';
-import { bootstrapWorkspace } from '../agent/runner.js';
+import { bootstrapWorkspace } from '../agent/runner-pi.js';
 import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, closeSchedulesDb } from '../schedules-db.js';
 import { startScheduler } from '../scheduler.js';
 import { scanUsage } from '../usage-scanner.js';

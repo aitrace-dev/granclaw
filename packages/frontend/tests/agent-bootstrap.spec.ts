@@ -1,11 +1,11 @@
 /**
  * Agent Bootstrap Test
  *
- * Verifies that when an agent is created and receives its first message,
- * bootstrapWorkspace() sets up all required files and creates the default
- * "Vault housekeeping" schedule in the DB.
+ * Verifies that POST /agents calls bootstrapWorkspace() immediately,
+ * setting up all required files and the default "Vault housekeeping"
+ * schedule before the agent ever receives a message.
  *
- * Bootstrap creates:
+ * Bootstrap creates on registration:
  *   AGENT.md            — onboarding instructions
  *   .mcp.json           — empty MCP config (prevents inheriting host servers)
  *   .pi-sessions/       — pi JSONL session storage
@@ -29,11 +29,8 @@ const AGENT_ID = 'test-bootstrap-e2e';
 const API = 'http://localhost:3001';
 const WORKSPACE_DIR = path.resolve(REPO_ROOT, '.test', 'workspaces', AGENT_ID);
 
-const wsConnected = (page: import('@playwright/test').Page) =>
-  page.locator('[title="WS connected"]');
-
 test.describe('Agent Bootstrap', () => {
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async () => {
     // Start from a clean workspace so bootstrap runs from scratch
     if (fs.existsSync(WORKSPACE_DIR)) fs.rmSync(WORKSPACE_DIR, { recursive: true });
     fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
@@ -48,7 +45,8 @@ test.describe('Agent Bootstrap', () => {
       if (s.ok) { const cfg = await s.json() as { model?: string }; model = cfg.model; }
     } catch { /* fall back to server default */ }
 
-    // Register agent with the empty workspace
+    // POST /agents calls bootstrapWorkspace() synchronously before returning.
+    // No message needs to be sent — all files and the schedule are ready immediately.
     const res = await fetch(`${API}/agents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -60,21 +58,6 @@ test.describe('Agent Bootstrap', () => {
       }),
     });
     if (!res.ok) throw new Error(`Failed to register agent: ${await res.text()}`);
-
-    // bootstrapWorkspace() runs at the start of runAgent(), before any LLM call.
-    // Send a message via the chat UI to trigger it.
-    const page = await browser.newPage();
-    await page.goto(`http://localhost:5173/agents/${AGENT_ID}/chat`);
-    await expect(wsConnected(page)).toBeVisible({ timeout: 10_000 });
-
-    await page.getByPlaceholder(/message/i).fill('hi');
-    await page.getByPlaceholder(/message/i).press('Enter');
-
-    // Wait until the agent starts processing — bootstrap is synchronous and
-    // completes before the LLM is ever called, so it's done by this point.
-    await expect(page.locator('div.animate-pulse').first()).toBeVisible({ timeout: 20_000 });
-
-    await page.close();
   });
 
   test.afterAll(async () => {

@@ -111,10 +111,13 @@ export function bootstrapWorkspace(workspaceDir: string): void {
     }
   }
 
-  // Skills: .agent/skills/ (pi standard path)
+  // Skills: .pi/skills/ — CONFIG_DIR_NAME in the pi SDK is ".pi", so
+  // loadSkills() scans <cwd>/.pi/skills/ for project-level skills. Using
+  // .agent/skills/ (the previous path) meant the <available_skills> block
+  // in the system prompt was always empty and the agent had to explore manually.
   const skillsTemplateDir = path.join(resolveTemplatesDir(), 'skills');
   if (fs.existsSync(skillsTemplateDir)) {
-    const targetSkillsDir = path.join(workspaceDir, '.agent', 'skills');
+    const targetSkillsDir = path.join(workspaceDir, '.pi', 'skills');
     for (const skillName of fs.readdirSync(skillsTemplateDir)) {
       const srcDir = path.join(skillsTemplateDir, skillName);
       const destDir = path.join(targetSkillsDir, skillName);

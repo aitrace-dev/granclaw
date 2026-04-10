@@ -12,6 +12,9 @@
  *   GET  /logs                     — action log with filters
  *   WS   /ws/agents/:id            — WebSocket proxy → internal agent process
  *   GET  /*                        — built frontend (if packages/frontend/dist exists)
+ *   GET  /settings/provider         — read active provider (no apiKey)
+ *   PUT  /settings/provider         — save provider + apiKey
+ *   DELETE /settings/provider       — clear provider config
  */
 
 import express from 'express';

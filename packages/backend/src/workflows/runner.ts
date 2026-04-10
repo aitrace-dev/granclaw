@@ -19,6 +19,11 @@ import {
   updateRunStep,
   type Step,
 } from '../workflows-db.js';
+// claudeBin/spawnEnv are used by executeLlmStep (one-shot Claude CLI prompts in
+// workflow `llm` steps). These are intentionally kept on the Claude CLI path —
+// they are stateless single-shot LLM calls, not agent sessions, so the pi runner
+// and provider config are not applicable. TODO: migrate when multi-provider
+// one-shot calls are needed.
 import { claudeBin, spawnEnv } from '../agent/runner.js';
 import { runAgent } from '../agent/runner-pi.js';
 import { spawn } from 'child_process';

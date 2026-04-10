@@ -428,7 +428,11 @@ export function createServer() {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
-    const skillsDir = path.join(workspaceDir, '.claude', 'skills');
+    // pi runner bootstraps .agent/skills/; legacy workspaces used .claude/skills/
+    const agentSkillsDir = path.join(workspaceDir, '.agent', 'skills');
+    const skillsDir = fs.existsSync(agentSkillsDir)
+      ? agentSkillsDir
+      : path.join(workspaceDir, '.claude', 'skills');
     if (!fs.existsSync(skillsDir)) { res.json({ skills: [] }); return; }
 
     const skills: { name: string; description: string }[] = [];

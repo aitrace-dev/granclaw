@@ -21,8 +21,10 @@ import { test, expect } from '@playwright/test';
  * After save/remove, SettingsPage calls navigate('/') which lands on /dashboard.
  */
 
+const API = 'http://localhost:3001';
+
 async function clearProvider() {
-  const res = await fetch('http://localhost:3001/settings/provider', { method: 'DELETE' });
+  const res = await fetch(`${API}/settings/provider`, { method: 'DELETE' });
   // 204 = cleared, 404 = already gone — both are fine
   if (!res.ok && res.status !== 204 && res.status !== 404) {
     console.warn('clearProvider returned', res.status);

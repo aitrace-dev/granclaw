@@ -176,7 +176,7 @@ export function DashboardPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleCreate}
-              disabled={creating || !newId.trim() || !newName.trim()}
+              disabled={creating || !newId.trim() || !newName.trim() || !newModel}
               className="rounded bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
             >
               {creating ? 'Creating…' : 'Create'}

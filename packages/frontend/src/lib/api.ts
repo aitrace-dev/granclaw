@@ -621,3 +621,31 @@ export async function fetchLogs(params?: {
   if (!res.ok) throw new Error(`fetchLogs: ${res.status}`);
   return res.json() as Promise<LogsResponse>;
 }
+
+// ── Provider settings ─────────────────────────────────────────────────────────
+
+export interface ProviderSettings {
+  provider: string | null;
+  model: string | null;
+  configured: boolean;
+}
+
+export async function fetchProviderSettings(): Promise<ProviderSettings> {
+  const res = await fetch('/settings/provider');
+  if (!res.ok) throw new Error('Failed to fetch provider settings');
+  return res.json() as Promise<ProviderSettings>;
+}
+
+export async function saveProviderSettings(provider: string, model: string, apiKey: string): Promise<void> {
+  const res = await fetch('/settings/provider', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, model, apiKey }),
+  });
+  if (!res.ok) throw new Error('Failed to save provider settings');
+}
+
+export async function clearProviderSettings(): Promise<void> {
+  const res = await fetch('/settings/provider', { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to clear provider settings');
+}

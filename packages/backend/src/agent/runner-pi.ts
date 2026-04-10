@@ -158,7 +158,7 @@ export function bootstrapWorkspace(workspaceDir: string): void {
       const nextRun = parseExpression(cron, { tz: 'Asia/Singapore' }).next().getTime();
       createSchedule(agentId, {
         name: 'Vault housekeeping',
-        message: 'Run vault housekeeping: scan all vault folders, rebuild every index.md with one-line summaries for each file, update vault/index.md with folder counts and recent activity. Check for orphaned wikilinks and entities that need topic notes. Never delete files.',
+        message: 'Run the daily housekeeping skill: fetch today\'s messages and action logs from the API, process them in chunks of 30, write today\'s journal entry, update topic and knowledge pages with anything recurring or reusable, then rebuild all vault index files.',
         cron,
         timezone: 'Asia/Singapore',
         nextRun,

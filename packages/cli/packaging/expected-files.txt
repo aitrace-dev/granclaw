@@ -36,5 +36,5 @@ templates/skills/agent-browser/SKILL.md
 templates/skills/agent-browser/browser-wrapper.sh
 templates/skills/schedules/SKILL.md
 templates/skills/task-board/SKILL.md
-templates/skills/vault/SKILL.md
+templates/skills/memory/SKILL.md
 templates/skills/workflows/SKILL.md

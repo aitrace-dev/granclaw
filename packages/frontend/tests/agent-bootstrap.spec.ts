@@ -10,7 +10,7 @@
  *   .mcp.json           — empty MCP config (prevents inheriting host servers)
  *   .pi-sessions/       — pi JSONL session storage
  *   vault/{journal,sessions,actions,topics,knowledge}/
- *   .pi/skills/{agent-browser,housekeeping,schedules,task-board,vault,web-search,workflows}/
+ *   .pi/skills/{agent-browser,housekeeping,memory,schedules,task-board,web-search,workflows}/
  *   .pi/extensions/     — pi built-in extensions (web-search.ts, etc.)
  *   DB: "Vault housekeeping" schedule (cron 30 23 * * *)
  */
@@ -83,7 +83,7 @@ test.describe('Agent Bootstrap', () => {
     const skillsDir = path.join(WORKSPACE_DIR, '.pi', 'skills');
     expect(fs.existsSync(skillsDir), '.pi/skills/').toBe(true);
 
-    const expected = ['agent-browser', 'housekeeping', 'schedules', 'task-board', 'vault', 'web-search', 'workflows'];
+    const expected = ['agent-browser', 'housekeeping', 'memory', 'schedules', 'task-board', 'web-search', 'workflows'];
     const present = fs.readdirSync(skillsDir);
     for (const skill of expected) {
       expect(present, `skill "${skill}"`).toContain(skill);

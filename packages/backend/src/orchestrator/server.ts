@@ -32,7 +32,7 @@ import logsRouter from '../routes/logs.js';
 import { getManagedAgents, getManagedAgent, restartAgent, startNewAgent, stopAndRemoveAgent } from './agent-manager.js';
 import { listSecretNames, setSecret, deleteSecret } from '../secrets-vault.js';
 import { getSession, closeAgentDb, enqueue, getActiveJobs, markFailed } from '../agent-db.js';
-import { saveMessage, getMessages, deleteMessages } from '../messages-db.js';
+import { saveMessage, getMessages, deleteMessages, queryMessages, Message } from '../messages-db.js';
 import { listTasks, getTask, createTask, updateTask, deleteTask, listComments, createComment, closeTasksDb } from '../tasks-db.js';
 import {
   listWorkflows, getWorkflow, createWorkflow, updateWorkflow, deleteWorkflow,
@@ -272,9 +272,41 @@ export function createServer() {
 
   app.get('/agents/:id/messages', (req, res) => {
     const { id } = req.params;
-    const channelId = (req.query.channelId as string) ?? 'ui';
-    const limit = Math.min(Number(req.query.limit ?? 200), 500);
-    res.json(getMessages(id, channelId, limit));
+    const q = req.query;
+
+    // Legacy simple path: no advanced params → use fast getMessages
+    const hasAdvancedParams = q.contains || q.from || q.to || q.role || q.sortBy || q.count || q.format;
+    if (!hasAdvancedParams) {
+      const channelId = (q.channelId as string) ?? 'ui';
+      const limit = Math.min(Number(q.limit ?? 200), 500);
+      res.json(getMessages(id, channelId, limit));
+      return;
+    }
+
+    const result = queryMessages(id, {
+      channelId: q.channelId as string | undefined,
+      contains:  q.contains  as string | undefined,
+      from:      q.from      as string | undefined,
+      to:        q.to        as string | undefined,
+      role:      q.role      as 'user' | 'assistant' | 'tool_call' | undefined,
+      sortBy:    q.sortBy    as 'asc' | 'desc' | undefined,
+      limit:     q.limit     ? Number(q.limit) : undefined,
+      count:     q.count === 'true',
+    });
+
+    // count=true → {count: N}
+    if ('count' in result) { res.json(result); return; }
+
+    // format=csv → pipe-delimited timestamp|role|content (newlines escaped)
+    if (q.format === 'csv') {
+      const lines = (result as Message[]).map(
+        (m) => `${m.createdAt}|${m.role}|${m.content.replace(/\n/g, '\\n')}`,
+      );
+      res.type('text/plain').send(lines.join('\n'));
+      return;
+    }
+
+    res.json(result);
   });
 
   // Clear only the conversation session — workspace, vault, and skills are preserved.

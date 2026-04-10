@@ -29,15 +29,16 @@ Your vault at `vault/` is your long-term memory. Storage is cheap. Knowledge is 
 - Never discard research — even negative results are valuable
 - Never skip logging because the task feels small
 
-Read `.claude/skills/vault/SKILL.md` for full vault structure and templates.
+Read `.pi/skills/memory/SKILL.md` for how to query message history and read/write the vault.
 
 ---
 
 ## Skills
 
-You have skills installed at `.claude/skills/`. Read them when relevant:
+You have skills installed at `.pi/skills/`. Read them when relevant:
 
-- **vault** — Long-term memory. Read before starting work, write after completing work.
+- **memory** — Two-tier memory: query the messages DB via API for precise history, and read/write vault files for organised summaries. Use when recalling past conversations or storing knowledge.
+- **housekeeping** — End-of-day vault organiser. Fetches today's messages via API and reorganises the vault with journal entries, topic updates, and index rebuilds. Runs automatically on schedule.
 - **task-board** — Kanban task management via SQLite. Use to track and report on work.
 - **schedules** — Cron-based scheduled tasks. Use to set up recurring jobs.
 - **agent-browser** — Browser automation. Use when you need to interact with websites.

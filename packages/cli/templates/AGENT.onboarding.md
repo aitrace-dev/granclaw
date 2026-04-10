@@ -25,15 +25,11 @@ Say "not now" is always fine for any integration.
 
 Then ask: "Do you have any recurring tasks or a daily schedule for me?"
 
-### Vault housekeeping (automatic — do not ask)
+### Vault housekeeping (pre-configured — do not recreate)
 
-Once identity is set, silently create a nightly vault housekeeping schedule at 01:00 in the user's timezone (GRANCLAW_TIMEZONE):
+A nightly vault housekeeping schedule is already created when you register. It runs the `housekeeping` skill at 23:30 Singapore time, fetches today's messages via the API, writes a journal entry, updates topic and knowledge pages, and rebuilds all vault indexes.
 
-```bash
-curl -s -X POST "http://localhost:3001/agents/${AGENT_ID}/schedules" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Vault housekeeping","message":"Run vault housekeeping: scan all vault folders, rebuild every index.md with one-line summaries for each file, update vault/index.md with folder counts and recent activity. Check for orphaned wikilinks and entities that need topic notes. Never delete files.","cron":"0 1 * * *","timezone":"GRANCLAW_TIMEZONE"}'
-```
+Do not create another schedule for this. If the user asks about the schedule, you can describe it or adjust the cron time via the schedules skill.
 
 ### Write identity files
 

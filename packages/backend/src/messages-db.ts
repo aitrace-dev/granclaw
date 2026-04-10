@@ -96,6 +96,65 @@ export function getMessages(agentId: string, channelId = 'ui', limit = 200): Mes
   }));
 }
 
+// ── Queryable search ─────────────────────────────────────────────────────────
+
+export interface MessageQuery {
+  channelId?: string;
+  contains?: string;                             // LIKE %text% on content
+  from?: string;                                 // ISO date or datetime (inclusive)
+  to?: string;                                   // ISO date or datetime (inclusive)
+  role?: 'user' | 'assistant' | 'tool_call';
+  sortBy?: 'asc' | 'desc';
+  limit?: number;                                // capped at 200, default 50
+  count?: boolean;                               // return {count:N} only
+}
+
+function isoToMs(iso: string): number {
+  // Accept 'YYYY-MM-DD' (midnight UTC) or full ISO datetime
+  return new Date(iso.includes('T') ? iso : `${iso}T00:00:00.000Z`).getTime();
+}
+
+export function queryMessages(
+  agentId: string,
+  query: MessageQuery = {},
+): Message[] | { count: number } {
+  const { channelId, contains, from, to, role, sortBy = 'asc', limit = 50, count = false } = query;
+
+  const clauses: string[] = ['agent_id = ?'];
+  const params: unknown[] = [agentId];
+
+  if (channelId) { clauses.push('channel_id = ?'); params.push(channelId); }
+  if (contains)  { clauses.push('content LIKE ?');  params.push(`%${contains}%`); }
+  if (from)      { clauses.push('created_at >= ?'); params.push(isoToMs(from)); }
+  if (to)        { clauses.push('created_at <= ?'); params.push(isoToMs(to)); }
+  if (role)      { clauses.push('role = ?');        params.push(role); }
+
+  const where = clauses.join(' AND ');
+
+  if (count) {
+    const row = db.prepare(`SELECT COUNT(*) AS n FROM messages WHERE ${where}`)
+      .get(...params as []) as { n: number };
+    return { count: row.n };
+  }
+
+  const cappedLimit = Math.min(limit, 200);
+  const order = sortBy === 'desc' ? 'DESC' : 'ASC';
+
+  const rows = db.prepare(`
+    SELECT id, agent_id, channel_id, role, content, created_at
+    FROM messages WHERE ${where}
+    ORDER BY created_at ${order} LIMIT ?
+  `).all(...params as [], cappedLimit) as {
+    id: string; agent_id: string; channel_id: string;
+    role: string; content: string; created_at: number;
+  }[];
+
+  return rows.map((r) => ({
+    id: r.id, agentId: r.agent_id, channelId: r.channel_id,
+    role: r.role as Message['role'], content: r.content, createdAt: r.created_at,
+  }));
+}
+
 /** Get recent messages across ALL channels for an agent, ordered by time */
 export function getAllRecentMessages(agentId: string, limit = 50): Message[] {
   const rows = db.prepare(`

@@ -32,6 +32,14 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
     { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B — versatile' },
     { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B — fastest/cheapest' },
   ],
+  openrouter: [
+    { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1 — top reasoning model' },
+    { value: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2 — fast chat' },
+    { value: 'deepseek/deepseek-chat-v3.1', label: 'DeepSeek Chat V3.1' },
+    { value: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick' },
+    { value: 'qwen/qwen3-235b-a22b', label: 'Qwen3 235B' },
+    { value: 'x-ai/grok-4', label: 'Grok 4' },
+  ],
 };
 
 export const PROVIDERS = [
@@ -39,6 +47,7 @@ export const PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'groq', label: 'Groq' },
+  { value: 'openrouter', label: 'OpenRouter' },
 ] as const;
 
 export function getModelsForProvider(provider: string): ModelOption[] {

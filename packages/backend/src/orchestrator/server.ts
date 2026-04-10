@@ -42,6 +42,7 @@ import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
 import { listSessions, getSession as getBrowserSession, getSessionScreenshots, getScreenshotPath, generateSessionName } from '../browser-sessions.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
+import { getProvider, saveProvider, clearProvider } from '../providers-config.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -71,6 +72,28 @@ export function createServer() {
   const headedBrowsers = new Map<string, { url: string }>();
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
+
+  // ── Provider settings ─────────────────────────────────────────────────────────
+
+  app.get('/settings/provider', (_req, res) => {
+    const p = getProvider();
+    res.json({ provider: p?.provider ?? null, model: p?.model ?? null, configured: p !== null });
+  });
+
+  app.put('/settings/provider', (req, res) => {
+    const { provider, model, apiKey } = req.body as { provider?: string; model?: string; apiKey?: string };
+    if (!provider || !model || !apiKey) {
+      res.status(400).json({ error: 'provider, model, and apiKey are required' });
+      return;
+    }
+    saveProvider(provider, model, apiKey);
+    res.status(200).json({ ok: true });
+  });
+
+  app.delete('/settings/provider', (_req, res) => {
+    clearProvider();
+    res.status(204).end();
+  });
 
   // ── Agents ─────────────────────────────────────────────────────────────────
 

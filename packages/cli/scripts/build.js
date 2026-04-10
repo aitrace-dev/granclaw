@@ -6,8 +6,8 @@
  *
  * Steps:
  *   1. Clean packages/cli/dist/
- *   2. Build @agent-brother/backend (tsc)
- *   3. Build @agent-brother/frontend (vite build)
+ *   2. Build @granclaw/backend (tsc)
+ *   3. Build @granclaw/frontend (vite build)
  *   4. Compile packages/cli/src → packages/cli/dist/
  *   5. Copy backend dist → packages/cli/dist/backend/
  *   6. Copy frontend dist → packages/cli/dist/frontend/
@@ -16,8 +16,8 @@
  *   packages/cli/dist/
  *     index.js          (the CLI entrypoint compiled from src/index.ts)
  *     home.js
- *     backend/          (compiled @agent-brother/backend)
- *     frontend/         (built @agent-brother/frontend static assets)
+ *     backend/          (compiled @granclaw/backend)
+ *     frontend/         (built @granclaw/frontend static assets)
  */
 
 const { execSync } = require('child_process');
@@ -51,11 +51,11 @@ function main() {
   fs.rmSync(DIST, { recursive: true, force: true });
   fs.mkdirSync(DIST, { recursive: true });
 
-  console.log('[build] building @agent-brother/backend');
-  run('npm run build -w @agent-brother/backend');
+  console.log('[build] building @granclaw/backend');
+  run('npm run build -w @granclaw/backend');
 
-  console.log('[build] building @agent-brother/frontend');
-  run('npm run build -w @agent-brother/frontend');
+  console.log('[build] building @granclaw/frontend');
+  run('npm run build -w @granclaw/frontend');
 
   console.log('[build] compiling packages/cli/src');
   run('npx tsc -p packages/cli/tsconfig.json');

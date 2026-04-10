@@ -1,21 +1,10 @@
 {
   "agents": [
     {
-      "id": "main-agent",
-      "name": "main-agent",
-      "model": "claude-sonnet-4-5",
-      "workspaceDir": "./workspaces/main-agent",
-      "allowedTools": [
-        "filesystem",
-        "browser",
-        "task-manager"
-      ]
-    },
-    {
-      "id": "demo",
-      "name": "Demo",
-      "model": "claude-sonnet-4-5",
-      "workspaceDir": "./workspaces/demo",
+      "id": "test",
+      "name": "demo-agent",
+      "model": "deepseek/deepseek-v3.2",
+      "workspaceDir": "./workspaces/test",
       "allowedTools": [
         "filesystem",
         "browser",

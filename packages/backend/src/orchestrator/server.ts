@@ -12,6 +12,13 @@
  *   GET  /logs                     — action log with filters
  *   WS   /ws/agents/:id            — WebSocket proxy → internal agent process
  *   GET  /*                        — built frontend (if packages/frontend/dist exists)
+ *   GET  /settings/provider         — read active provider (no apiKey)
+ *   PUT  /settings/provider         — save provider + apiKey
+ *   DELETE /settings/provider       — clear provider config
+ *   GET  /settings/search           — read active search provider
+ *   PUT  /settings/search           — save search provider + apiKey
+ *   DELETE /settings/search         — clear search config (reset to duckduckgo)
+ *   GET  /search                    — proxy search query to configured provider
  */
 
 import express from 'express';
@@ -35,13 +42,14 @@ import {
   closeWorkflowsDb,
 } from '../workflows-db.js';
 import { executeWorkflow } from '../workflows/runner.js';
-import { bootstrapWorkspace } from '../agent/runner.js';
+import { bootstrapWorkspace } from '../agent/runner-pi.js';
 import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, closeSchedulesDb } from '../schedules-db.js';
 import { startScheduler } from '../scheduler.js';
 import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
 import { listSessions, getSession as getBrowserSession, getSessionScreenshots, getScreenshotPath, generateSessionName } from '../browser-sessions.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
+import { getProvider, saveProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -71,6 +79,75 @@ export function createServer() {
   const headedBrowsers = new Map<string, { url: string }>();
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
+
+  // ── Provider settings ─────────────────────────────────────────────────────────
+
+  app.get('/settings/provider', (_req, res) => {
+    const p = getProvider();
+    res.json({ provider: p?.provider ?? null, model: p?.model ?? null, configured: p !== null });
+  });
+
+  app.put('/settings/provider', (req, res) => {
+    const { provider, model, apiKey } = req.body as { provider?: string; model?: string; apiKey?: string };
+    if (!provider || !model || !apiKey) {
+      res.status(400).json({ error: 'provider, model, and apiKey are required' });
+      return;
+    }
+    saveProvider(provider, model, apiKey);
+    res.status(200).json({ ok: true });
+  });
+
+  app.delete('/settings/provider', (_req, res) => {
+    clearProvider();
+    res.status(204).end();
+  });
+
+  // ── Search settings ───────────────────────────────────────────────────────────
+  app.get('/settings/search', (_req, res) => {
+    const apiKey = getSearchApiKey();
+    res.json({ provider: 'brave', configured: !!apiKey });
+  });
+
+  app.put('/settings/search', (req, res) => {
+    const { apiKey } = req.body as { apiKey?: string };
+    if (!apiKey?.trim()) {
+      res.status(400).json({ error: 'apiKey required' });
+      return;
+    }
+    saveSearch(apiKey.trim());
+    res.sendStatus(200);
+  });
+
+  app.delete('/settings/search', (_req, res) => {
+    clearSearch();
+    res.sendStatus(204);
+  });
+
+  // ── Search proxy ──────────────────────────────────────────────────────────────
+  app.get('/search', async (req, res) => {
+    const q = (req.query.q as string | undefined)?.trim();
+    if (!q) { res.status(400).json({ error: 'q parameter required' }); return; }
+
+    const apiKey = getSearchApiKey();
+    if (!apiKey) { res.status(503).json({ error: 'Brave Search API key not configured. Add it in Settings.' }); return; }
+
+    try {
+      const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=10`;
+      const upstream = await fetch(url, {
+        headers: { 'X-Subscription-Token': apiKey, 'Accept': 'application/json' },
+      });
+      if (!upstream.ok) {
+        res.status(upstream.status).json({ error: `Brave API error: ${upstream.status}` });
+        return;
+      }
+      const data = await upstream.json() as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
+      const results = (data.web?.results ?? []).map(r => ({ title: r.title, url: r.url, description: r.description }));
+      res.json({ provider: 'brave', results });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: `Search failed: ${msg}` });
+    }
+  });
 
   // ── Agents ─────────────────────────────────────────────────────────────────
 
@@ -146,7 +223,7 @@ export function createServer() {
     agents.push(agentConfig);
     saveAgents(agents);
 
-    // Bootstrap workspace (copies CLAUDE.md, skills, .mcp.json, vault structure)
+    // Bootstrap workspace (copies AGENT.md, skills, .mcp.json, vault structure)
     // so the agent is fully usable before its first message.
     const absWorkspaceDir = path.resolve(REPO_ROOT, agentConfig.workspaceDir);
     bootstrapWorkspace(absWorkspaceDir);
@@ -198,6 +275,23 @@ export function createServer() {
     const channelId = (req.query.channelId as string) ?? 'ui';
     const limit = Math.min(Number(req.query.limit ?? 200), 500);
     res.json(getMessages(id, channelId, limit));
+  });
+
+  // Clear only the conversation session — workspace, vault, and skills are preserved.
+  app.delete('/agents/:id/session', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+    const sessionsDir = path.join(workspaceDir, '.pi-sessions');
+    if (fs.existsSync(sessionsDir)) {
+      for (const f of fs.readdirSync(sessionsDir)) {
+        fs.rmSync(path.join(sessionsDir, f), { force: true });
+      }
+    }
+    // Clear host message history so chat UI starts clean
+    deleteMessages(req.params.id);
+    console.log(`[orchestrator] agent "${req.params.id}" session cleared (workspace preserved)`);
+    res.json({ ok: true });
   });
 
   app.delete('/agents/:id/reset', async (req, res) => {
@@ -402,7 +496,11 @@ export function createServer() {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
-    const skillsDir = path.join(workspaceDir, '.claude', 'skills');
+    // pi runner bootstraps .agent/skills/; legacy workspaces used .claude/skills/
+    const agentSkillsDir = path.join(workspaceDir, '.agent', 'skills');
+    const skillsDir = fs.existsSync(agentSkillsDir)
+      ? agentSkillsDir
+      : path.join(workspaceDir, '.claude', 'skills');
     if (!fs.existsSync(skillsDir)) { res.json({ skills: [] }); return; }
 
     const skills: { name: string; description: string }[] = [];
@@ -970,23 +1068,54 @@ export function createServer() {
       return;
     }
 
-    wss.handleUpgrade(req, socket, head, (clientWs) => {
+    wss.handleUpgrade(req, socket, head, async (clientWs) => {
       const upstreamUrl = `ws://127.0.0.1:${managed.wsPort}`;
-      const upstream = new WebSocket(upstreamUrl);
-      let upstreamOpen = false;
       type Queued = { data: Buffer | string; isBinary: boolean };
       const clientQueue: Queued[] = [];
+      let clientClosed = false;
+
+      // Buffer client messages until upstream is ready
+      clientWs.on('message', (data, isBinary) => {
+        clientQueue.push({ data: data as Buffer, isBinary });
+      });
+      clientWs.on('close', () => { clientClosed = true; });
+      clientWs.on('error', () => { clientClosed = true; });
+
+      // Retry upstream connection — agent process may not be listening yet
+      // (startup race: orchestrator spawns the process, it takes ~100-500 ms to bind)
+      let upstream: WebSocket | null = null;
+      const maxAttempts = 20;
+      const retryDelayMs = 300;
+
+      for (let attempt = 0; attempt < maxAttempts && !clientClosed; attempt++) {
+        const ws = new WebSocket(upstreamUrl);
+        const connected = await new Promise<boolean>((resolve) => {
+          ws.once('open', () => resolve(true));
+          ws.once('error', () => resolve(false));
+        });
+        if (connected) { upstream = ws; break; }
+        ws.terminate();
+        if (attempt < maxAttempts - 1 && !clientClosed) {
+          await new Promise(r => setTimeout(r, retryDelayMs));
+        }
+      }
+
+      if (!upstream || clientClosed) {
+        console.warn(`[ws-proxy] could not reach ${agentId} after ${maxAttempts} attempts`);
+        try { clientWs.close(); } catch { /* ignore */ }
+        upstream?.terminate();
+        return;
+      }
 
       const closeBoth = () => {
         try { clientWs.close(); } catch { /* ignore */ }
-        try { upstream.close(); } catch { /* ignore */ }
+        try { upstream!.close(); } catch { /* ignore */ }
       };
 
-      upstream.on('open', () => {
-        upstreamOpen = true;
-        for (const q of clientQueue) upstream.send(q.data, { binary: q.isBinary });
-        clientQueue.length = 0;
-      });
+      // Flush buffered client messages
+      for (const q of clientQueue) upstream.send(q.data, { binary: q.isBinary });
+      clientQueue.length = 0;
+
       // Preserve the frame type (text vs binary) both ways. The agent
       // emits JSON as text frames; forwarding them as binary would give
       // the browser a Blob, which JSON.parse swallows silently and the
@@ -1002,13 +1131,13 @@ export function createServer() {
         closeBoth();
       });
 
+      // Replace buffering listener with live forwarding
+      clientWs.removeAllListeners('message');
       clientWs.on('message', (data, isBinary) => {
-        // Buffer messages sent before the upstream connection is ready,
-        // so the first message a freshly-connected client sends isn't lost.
-        const payload = data as Buffer;
-        if (upstreamOpen) upstream.send(payload, { binary: isBinary });
-        else clientQueue.push({ data: payload, isBinary });
+        if (upstream!.readyState === WebSocket.OPEN) upstream!.send(data as Buffer, { binary: isBinary });
       });
+      clientWs.removeAllListeners('close');
+      clientWs.removeAllListeners('error');
       clientWs.on('close', closeBoth);
       clientWs.on('error', closeBoth);
     });

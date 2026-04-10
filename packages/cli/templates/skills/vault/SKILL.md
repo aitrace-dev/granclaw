@@ -2,7 +2,7 @@
 name: vault
 description: Your long-term memory and second brain. Use when logging work sessions, recording external actions, creating topic notes, writing knowledge notes, or searching for past context before starting work.
 user-invocable: false
-allowed-tools: Bash(find *), Bash(grep *), Bash(cat *), Bash(mkdir *), Read, Write
+allowed-tools: [bash, read, write]
 ---
 
 # Vault Skill — Your Second Brain

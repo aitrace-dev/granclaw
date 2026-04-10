@@ -12,7 +12,17 @@ import path from 'path';
 import fs from 'fs';
 import Anthropic from '@anthropic-ai/sdk';
 import { REPO_ROOT, getAgent } from './config.js';
-import { claudeBin, spawnEnv } from './agent/runner.js';
+// Claude CLI binary + spawn environment (inlined from former runner.ts).
+// Used only for the Haiku CLI fallback path when no Anthropic API key is set.
+const claudeBin: string = process.env.CLAUDE_BIN ?? 'claude';
+const spawnEnv: NodeJS.ProcessEnv = {
+  ...process.env,
+  PATH: [
+    path.join(process.env.HOME ?? '', '.local', 'bin'),
+    path.join(process.env.HOME ?? '', '.nvm', 'versions', 'node', process.version, 'bin'),
+    process.env.PATH ?? '',
+  ].filter(Boolean).join(':'),
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

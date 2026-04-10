@@ -2,7 +2,7 @@
 name: workflows
 description: Create and manage automated workflows with code, LLM, and agent steps via the orchestrator REST API. Use when the user asks to automate a multi-step process.
 user-invocable: false
-allowed-tools: Bash(curl *)
+allowed-tools: [bash]
 ---
 
 # Workflow Manager Skill

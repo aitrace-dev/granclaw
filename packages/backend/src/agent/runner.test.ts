@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { resolveTemplatesDir } from './runner.js';
+import { resolveTemplatesDir } from './runner-pi.js';
 
 describe('resolveTemplatesDir', () => {
   const ORIGINAL_ENV = { ...process.env };
@@ -50,7 +50,7 @@ describe('resolveTemplatesDir', () => {
     process.env.GRANCLAW_HOME = tmp;
     const { GRANCLAW_HOME: originalHome } = await import('../config.js');
     // Cache-bust runner to get a fresh module instance; config.js is still cached.
-    const freshRunner = await import('./runner.js?runnerfallback');
+    const freshRunner = await import('./runner-pi.js?runnerfallback');
     // The fallback must equal the load-time snapshot, not the newly set env.
     expect(freshRunner.resolveTemplatesDir()).toBe(path.join(originalHome, 'packages/cli/templates'));
   });

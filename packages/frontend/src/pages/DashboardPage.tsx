@@ -1,22 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { fetchAgents, createAgent, deleteAgent, type Agent } from '../lib/api.ts';
-
-// Source: https://platform.claude.com/docs/en/docs/about-claude/models/overview
-// Grouped current → legacy. Pricing shown as input/output per 1M tokens so
-// operators can see the cost tier at a glance. Updated 2026-04-09.
-const MODELS = [
-  // Current (4.6 / 4.5 family)
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 — $5 / $25 per Mtok · most capable' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 — $3 / $15 per Mtok · recommended' },
-  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 — $1 / $5 per Mtok · fastest' },
-  // Legacy (still supported)
-  { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5 — $3 / $15 per Mtok · legacy' },
-  { value: 'claude-opus-4-5', label: 'Claude Opus 4.5 — $5 / $25 per Mtok · legacy' },
-  { value: 'claude-opus-4-1', label: 'Claude Opus 4.1 — $15 / $75 per Mtok · legacy' },
-  { value: 'claude-sonnet-4-0', label: 'Claude Sonnet 4 — $3 / $15 per Mtok · legacy' },
-  { value: 'claude-opus-4-0', label: 'Claude Opus 4 — $15 / $75 per Mtok · legacy' },
-];
+import { useNavigate, Link } from 'react-router-dom';
+import {
+  fetchAgents, createAgent, deleteAgent, fetchProviderSettings,
+  type Agent, type ProviderSettings,
+} from '../lib/api.ts';
+import { getModelsForProvider } from '../lib/models.ts';
 
 function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
   const navigate = useNavigate();
@@ -63,21 +51,33 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
 export function DashboardPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [providerSettings, setProviderSettings] = useState<ProviderSettings | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState('');
   const [newName, setNewName] = useState('');
-  const [newModel, setNewModel] = useState('claude-sonnet-4-6');
+  const [newModel, setNewModel] = useState('');
   const [newWorkspace, setNewWorkspace] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadAgents = () => {
-    fetchAgents().then(setAgents).catch(console.error).finally(() => setLoading(false));
+  const loadAll = () => {
+    Promise.all([fetchAgents(), fetchProviderSettings()])
+      .then(([agentList, ps]) => {
+        setAgents(agentList);
+        setProviderSettings(ps);
+        const models = ps.provider ? getModelsForProvider(ps.provider) : [];
+        if (models.length > 0) setNewModel(models[0].value);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadAgents(); }, []);
+  useEffect(() => { loadAll(); }, []);
 
   const navigate = useNavigate();
+  const providerModels = providerSettings?.provider
+    ? getModelsForProvider(providerSettings.provider)
+    : [];
 
   async function handleCreate() {
     if (!newId.trim() || !newName.trim()) return;
@@ -96,15 +96,45 @@ export function DashboardPage() {
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Delete agent "${name}" (${id})?\n\nThis will stop the agent and permanently delete its workspace, including all files, vault data, and conversation history.\n\nThis cannot be undone.`)) return;
     await deleteAgent(id);
-    loadAgents();
+    loadAll();
   }
 
   const inputCls = 'rounded bg-[#33343b] px-3 py-2 text-[12px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow';
 
   if (loading) return <div className="text-on-surface-variant/40 font-mono text-xs p-8">loading agents…</div>;
 
+  // Full-screen CTA only for truly fresh installs: no provider AND no agents
+  if (!loading && providerSettings && !providerSettings.configured && agents.length === 0) {
+    return (
+      <div className="max-w-3xl mx-auto py-8 px-4">
+        <div className="text-center py-24">
+          <p className="font-display text-2xl font-semibold text-on-surface mb-3">
+            Get started with GranClaw
+          </p>
+          <p className="font-mono text-[12px] text-on-surface-variant/50 mb-8">
+            Configure a provider and API key before creating agents.
+          </p>
+          <Link
+            to="/settings"
+            className="rounded-lg bg-primary-container px-6 py-3 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90"
+          >
+            Configure provider
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
+      {/* Provider warning banner (shown when agents exist but provider not configured) */}
+      {providerSettings && !providerSettings.configured && (
+        <div className="rounded-lg bg-amber-950/20 border border-amber-600/20 px-4 py-3 mb-4 flex items-center justify-between">
+          <p className="font-mono text-[11px] text-amber-400/70">No provider configured — agents cannot run until you set one up.</p>
+          <Link to="/settings" className="font-mono text-[11px] text-primary/70 hover:text-primary">Configure →</Link>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -113,7 +143,8 @@ export function DashboardPage() {
         </div>
         <button
           onClick={() => setShowCreate(s => !s)}
-          className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90"
+          disabled={!providerSettings?.configured}
+          className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {showCreate ? 'Cancel' : '+ New Agent'}
         </button>
@@ -141,7 +172,7 @@ export function DashboardPage() {
               value={newModel}
               onChange={e => setNewModel(e.target.value)}
             >
-              {MODELS.map(m => (
+              {providerModels.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
@@ -155,7 +186,7 @@ export function DashboardPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleCreate}
-              disabled={creating || !newId.trim() || !newName.trim()}
+              disabled={creating || !newId.trim() || !newName.trim() || !newModel}
               className="rounded bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
             >
               {creating ? 'Creating…' : 'Create'}

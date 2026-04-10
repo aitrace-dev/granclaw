@@ -25,6 +25,9 @@ packages/agent/data/
 
 # Vault — local project wiki, not shipped
 vault/
+# Allow the test-agent seed vault (committed as fixture data)
+!test-agents/**/vault/
+!test-agents/**/vault/**
 
 # Superpowers planning docs — internal dev artifacts, contain absolute
 # paths and agent-specific context, never commit
@@ -46,3 +49,9 @@ img_*.png
 packages/cli/.last-tarball
 granclaw-*.tgz
 packages/cli/granclaw-*.tgz
+
+# Research — cloned third-party repos for investigation, not shipped
+.research/
+
+# Test workspaces — ephemeral, created and deleted by e2e test runs
+.test/

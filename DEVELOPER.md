@@ -199,9 +199,9 @@ git push --follow-tags
 ```
 .
 ├── packages/
-│   ├── backend/             ← @agent-brother/backend (private, never published)
+│   ├── backend/             ← @granclaw/backend (private, never published)
 │   │   └── src/             ← Express + WebSocket server, SQLite DBs, Claude spawn
-│   ├── frontend/            ← @agent-brother/frontend (private, never published)
+│   ├── frontend/            ← @granclaw/frontend (private, never published)
 │   │   └── src/             ← React + Vite dashboard
 │   └── cli/                 ← granclaw (THE published package)
 │       ├── bin/granclaw.js  ← thin shim
@@ -252,7 +252,7 @@ The backend's path resolution is driven by three env vars. In dev mode, the root
 - **Port 5000 conflicts on macOS** — AirPlay Receiver squats it. Don't use it; GranClaw defaults to 8787.
 - **Port 8787 already in use** — usually a previous `granclaw start` that didn't clean up. `lsof -i :8787` to find the PID.
 - **`npm run dev` reads `~/.granclaw/` instead of the repo root** — the dev script should export `GRANCLAW_HOME="$PWD"` automatically. If you see this, the root `package.json` dev script was modified or you're running `npm run dev -w packages/backend` directly without setting the env var.
-- **`@agent-brother/backend` E404 when installing the tarball** — see `vault/findings/2026-04-09-backend-runtime-deps-must-hoist.md`. Symptom that backend runtime deps aren't hoisted into `packages/cli/package.json`.
+- **`@granclaw/backend` E404 when installing the tarball** — see `vault/findings/2026-04-09-backend-runtime-deps-must-hoist.md`. Symptom that backend runtime deps aren't hoisted into `packages/cli/package.json`.
 - **Nested `npm pack` silently fails inside `prepublishOnly`** — fixed by using `npm run gate` standalone; see `vault/findings/2026-04-09-nested-npm-pack-in-prepublishonly.md`.
 - **Templates not found** — check `GRANCLAW_TEMPLATES_DIR`. In dev it should be `$PWD/packages/cli/templates`. If you see a fallback to `<REPO_ROOT>/packages/cli/templates` and `REPO_ROOT` is somewhere weird, the dev script env vars didn't export properly.
 

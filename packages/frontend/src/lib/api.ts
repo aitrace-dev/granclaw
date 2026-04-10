@@ -621,3 +621,60 @@ export async function fetchLogs(params?: {
   if (!res.ok) throw new Error(`fetchLogs: ${res.status}`);
   return res.json() as Promise<LogsResponse>;
 }
+
+// ── Provider settings ─────────────────────────────────────────────────────────
+
+export interface ProviderSettings {
+  provider: string | null;
+  model: string | null;
+  configured: boolean;
+}
+
+export async function fetchProviderSettings(): Promise<ProviderSettings> {
+  const res = await fetch(`${BASE}/settings/provider`);
+  if (!res.ok) throw new Error('Failed to fetch provider settings');
+  return res.json() as Promise<ProviderSettings>;
+}
+
+export async function saveProviderSettings(provider: string, model: string, apiKey: string): Promise<void> {
+  const res = await fetch(`${BASE}/settings/provider`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, model, apiKey }),
+  });
+  if (!res.ok) throw new Error('Failed to save provider settings');
+}
+
+export async function clearProviderSettings(): Promise<void> {
+  const res = await fetch(`${BASE}/settings/provider`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to clear provider settings');
+}
+
+// ── Search settings ───────────────────────────────────────────────────────────
+
+export interface SearchSettings {
+  provider: 'brave';
+  configured: boolean;
+}
+
+export async function fetchSearchSettings(): Promise<SearchSettings> {
+  const res = await fetch(`${BASE}/settings/search`);
+  if (!res.ok) return { provider: 'brave', configured: false };
+  return res.json() as Promise<SearchSettings>;
+}
+
+export async function saveSearchSettings(_provider: string, apiKey?: string): Promise<void> {
+  const res = await fetch(`${BASE}/settings/search`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey }),
+  });
+  if (!res.ok) throw new Error(`Failed to save search settings: ${res.status}`);
+}
+
+export async function clearSearchSettings(): Promise<void> {
+  const res = await fetch(`${BASE}/settings/search`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204 && res.status !== 404) {
+    throw new Error(`Failed to clear search settings: ${res.status}`);
+  }
+}

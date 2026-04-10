@@ -2,7 +2,7 @@
 name: task-board
 description: Manage tasks in the kanban board via the orchestrator REST API. Use when breaking down work, tracking progress, or reporting status.
 user-invocable: false
-allowed-tools: Bash(curl *)
+allowed-tools: [bash]
 ---
 
 # Task Manager Skill

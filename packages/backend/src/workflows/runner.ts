@@ -19,12 +19,18 @@ import {
   updateRunStep,
   type Step,
 } from '../workflows-db.js';
-// claudeBin/spawnEnv are used by executeLlmStep (one-shot Claude CLI prompts in
-// workflow `llm` steps). These are intentionally kept on the Claude CLI path —
-// they are stateless single-shot LLM calls, not agent sessions, so the pi runner
-// and provider config are not applicable. TODO: migrate when multi-provider
-// one-shot calls are needed.
-import { claudeBin, spawnEnv } from '../agent/runner.js';
+// claudeBin/spawnEnv: used by executeLlmStep (one-shot Claude CLI prompts in
+// workflow `llm` steps). Inlined here after runner.ts was deleted.
+// TODO(task-22): migrate executeLlmStep to pi-ai complete() for multi-provider support.
+const claudeBin: string = process.env.CLAUDE_BIN ?? 'claude';
+const spawnEnv: NodeJS.ProcessEnv = {
+  ...process.env,
+  PATH: [
+    path.join(process.env.HOME ?? '', '.local', 'bin'),
+    path.join(process.env.HOME ?? '', '.nvm', 'versions', 'node', process.version, 'bin'),
+    process.env.PATH ?? '',
+  ].filter(Boolean).join(':'),
+};
 import { runAgent } from '../agent/runner-pi.js';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';

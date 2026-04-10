@@ -22,7 +22,26 @@ import { logAction } from '../logs-db.js';
 import { getProvider, getProviderApiKey } from '../providers-config.js';
 import { createSchedule, listSchedules } from '../schedules-db.js';
 import { parseExpression } from 'cron-parser';
-import { resolveTemplatesDir } from './runner.js';
+
+/**
+ * Resolve the templates directory.
+ *
+ * Priority:
+ *   1. GRANCLAW_TEMPLATES_DIR env var — set by the CLI entrypoint to the
+ *      templates dir bundled inside the published package.
+ *   2. <GRANCLAW_HOME>/packages/cli/templates — dev-mode fallback when the
+ *      root dev script does not set the env var.
+ *
+ * Note: the env var is read on every call (not captured at module load)
+ * so the CLI entrypoint can set it just before requiring the backend.
+ * The fallback path closes over REPO_ROOT, which is a load-time snapshot
+ * of GRANCLAW_HOME — once the process has started, the fallback is stable.
+ */
+export function resolveTemplatesDir(): string {
+  const envDir = process.env.GRANCLAW_TEMPLATES_DIR?.trim();
+  if (envDir) return path.resolve(envDir);
+  return path.resolve(REPO_ROOT, 'packages/cli/templates');
+}
 
 // ── bootstrapWorkspace ───────────────────────────────────────────────────────
 // Pi-specific workspace bootstrap: uses AGENT.md and .agent/skills/ instead of
@@ -104,7 +123,7 @@ export function bootstrapWorkspace(workspaceDir: string): void {
 // tsx resolves them correctly at runtime. Type information is inferred from
 // the d.ts files we inspected during development.
 // @ts-ignore
-import { createAgentSession, SessionManager } from '@mariozechner/pi-coding-agent';
+import { createAgentSession, SessionManager, DefaultResourceLoader } from '@mariozechner/pi-coding-agent';
 // @ts-ignore
 import { getModel, type Model, type Api } from '@mariozechner/pi-ai';
 // @ts-ignore
@@ -238,6 +257,24 @@ export async function runAgent(
 
     const sessionManager = SessionManager.continueRecent(workspaceDir, sessionsDir);
 
+    // ── Load SYSTEM.md as appended system prompt ────────────────────────
+    // The old Claude runner used --append-system-prompt-file to inject
+    // SYSTEM.md (formerly DO_NOT_DELETE.md). Pi doesn't have that flag, so
+    // we pass it via DefaultResourceLoader's appendSystemPrompt option.
+    // Missing gracefully: the file may not exist yet (renamed from
+    // DO_NOT_DELETE.md in a separate task).
+    let appendSystemPrompt: string | undefined;
+    const systemMdPath = path.join(resolveTemplatesDir(), 'SYSTEM.md');
+    if (fs.existsSync(systemMdPath)) {
+      appendSystemPrompt = fs.readFileSync(systemMdPath, 'utf8');
+    }
+
+    // Build resource loader with optional system prompt append
+    const resourceLoader = new (DefaultResourceLoader as new (opts: Record<string, unknown>) => unknown)({
+      cwd: workspaceDir,
+      ...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),
+    });
+
     // ── Create agent session ────────────────────────────────────────────
     // Note: agentDir omitted — pi resolves it from cwd and ~/.pi/agent by default.
     // The plan specified it as workspaceDir but the actual pi API doesn't require it.
@@ -245,6 +282,7 @@ export async function runAgent(
       cwd: workspaceDir,
       model,
       sessionManager,
+      resourceLoader,
     }) as { session: any };
 
     // Register for abort

@@ -33,13 +33,11 @@ test.describe('Agent Workflow Creation', () => {
     await page.goto(`/agents/${AGENT_ID}/chat`);
     await expect(wsConnected(page)).toBeVisible({ timeout: 10_000 });
 
-    // Give the agent an explicit bash command with a hardcoded URL
+    // Natural instruction — the agent uses its workflow SKILL.md to figure out
+    // how to call the REST API and create the workflow.
     const input = page.getByPlaceholder(/message/i);
     await input.fill(
-      `Run this bash command to create a workflow: ` +
-      `curl -sf -X POST -H 'Content-Type: application/json' ` +
-      `-d '{"name":"${WORKFLOW_NAME}","description":"Created by e2e test"}' ` +
-      `${API}/agents/${AGENT_ID}/workflows`
+      `Create a workflow called "${WORKFLOW_NAME}" with description "Created by e2e test".`
     );
     await input.press('Enter');
 

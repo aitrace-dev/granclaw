@@ -19,20 +19,10 @@ import {
   updateRunStep,
   type Step,
 } from '../workflows-db.js';
-// claudeBin/spawnEnv: used by executeLlmStep (one-shot Claude CLI prompts in
-// workflow `llm` steps). Inlined here after runner.ts was deleted.
-// TODO(task-22): migrate executeLlmStep to pi-ai complete() for multi-provider support.
-const claudeBin: string = process.env.CLAUDE_BIN ?? 'claude';
-const spawnEnv: NodeJS.ProcessEnv = {
-  ...process.env,
-  PATH: [
-    path.join(process.env.HOME ?? '', '.local', 'bin'),
-    path.join(process.env.HOME ?? '', '.nvm', 'versions', 'node', process.version, 'bin'),
-    process.env.PATH ?? '',
-  ].filter(Boolean).join(':'),
-};
+// @ts-ignore — ESM-only package, tsx handles interop at runtime
+import { getModel, complete } from '@mariozechner/pi-ai';
+import { getProvider, getProviderApiKey } from '../providers-config.js';
 import { runAgent } from '../agent/runner-pi.js';
-import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { saveMessage } from '../messages-db.js';
 
@@ -87,67 +77,62 @@ async function executeCodeStep(
   }
 }
 
+function providerEnvKey(provider: string): string {
+  const keys: Record<string, string> = {
+    google: 'GEMINI_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    groq: 'GROQ_API_KEY',
+    xai: 'XAI_API_KEY',
+    mistral: 'MISTRAL_API_KEY',
+    cerebras: 'CEREBRAS_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+  };
+  return keys[provider] ?? `${provider.toUpperCase()}_API_KEY`;
+}
+
 async function executeLlmStep(
   config: Record<string, unknown>,
   prevOutput: unknown,
   allResults: StepResult[],
   workspaceDir: string,
-  agentModel: string
+  agentModel: string | undefined,
 ): Promise<unknown> {
-  const rawPrompt = config.prompt as string;
-  const model = (config.model as string) ?? agentModel;
-  const prompt = resolveTemplates(rawPrompt, prevOutput, allResults);
+  const providerCfg = getProvider();
+  if (!providerCfg) throw new Error('No provider configured. Go to Settings to add a provider.');
 
-  // Spawn claude CLI and collect full text response
-  return new Promise<unknown>((resolve, reject) => {
-    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', model];
-    const proc = spawn(claudeBin, args, { cwd: workspaceDir, env: spawnEnv, stdio: ['pipe', 'pipe', 'pipe'] });
-    proc.stdin?.end();
+  const apiKey = getProviderApiKey();
+  if (!apiKey) throw new Error('Provider API key missing. Go to Settings to reconfigure.');
 
-    let buffer = '';
-    let fullText = '';
+  const modelId = agentModel?.trim() || providerCfg.model;
+  const model = (getModel as (p: string, m: string) => unknown)(providerCfg.provider, modelId);
+  if (!model) throw new Error(`Model "${modelId}" not found for provider "${providerCfg.provider}".`);
 
-    proc.stdout.on('data', (raw: Buffer) => {
-      buffer += raw.toString();
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const event = JSON.parse(trimmed);
-          if (event.type === 'assistant') {
-            const msg = event.message as { content?: Array<{ type: string; text?: string }> };
-            if (msg?.content) {
-              for (const block of msg.content) {
-                if (block.type === 'text' && block.text) fullText += block.text;
-              }
-            }
-          }
-        } catch { /* skip non-JSON lines */ }
-      }
+  const prompt = resolveTemplates(config.prompt as string, prevOutput, allResults);
+  const envKey = providerEnvKey(providerCfg.provider);
+  const prevValue = process.env[envKey];
+  process.env[envKey] = apiKey;
+  try {
+    const response = await (complete as Function)(model, {
+      messages: [{ role: 'user', content: prompt }],
     });
-
-    proc.stderr.on('data', (raw: Buffer) => {
-      const msg = raw.toString().trim();
-      if (msg) console.error(`[workflow-runner] llm stderr:`, msg);
-    });
-
-    proc.on('close', (code) => {
-      if (code !== 0 && code !== null) {
-        reject(new Error(`Claude CLI exited with code ${code}`));
-        return;
+    // Extract text from pi-ai response (same shape as runner-pi.ts events)
+    if (typeof response === 'string') return response;
+    if (response && typeof response === 'object') {
+      // Try common text extraction paths
+      const r = response as Record<string, unknown>;
+      if (typeof r.text === 'string') return r.text;
+      if (Array.isArray(r.content)) {
+        const textBlock = (r.content as Array<Record<string, unknown>>).find(b => b.type === 'text');
+        if (textBlock && typeof textBlock.text === 'string') return textBlock.text;
       }
-      // Try to parse the full text as JSON (for structured output)
-      const trimmedText = fullText.trim();
-      try {
-        resolve(JSON.parse(trimmedText));
-      } catch {
-        resolve(trimmedText);
-      }
-    });
-  });
+      if (typeof r.message === 'string') return r.message;
+    }
+    return String(response);
+  } finally {
+    if (prevValue === undefined) delete process.env[envKey];
+    else process.env[envKey] = prevValue;
+  }
 }
 
 async function executeAgentStep(

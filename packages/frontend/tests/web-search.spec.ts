@@ -19,6 +19,12 @@ const wsConnected = (page: import('@playwright/test').Page) =>
 
 test.describe('Web Search', () => {
   test.beforeAll(async () => {
+    const searchRes = await fetch(`${API}/settings/search`);
+    const { configured } = await searchRes.json() as { configured: boolean };
+    if (!configured) {
+      test.skip(true, 'Brave Search API key not configured — skipping web search tests');
+      return;
+    }
     await createSeededAgent(AGENT_ID, SEED_DIR);
   });
 
@@ -27,11 +33,6 @@ test.describe('Web Search', () => {
   });
 
   test('agent uses web_search tool to answer a live search query', async ({ page }) => {
-    // Skip if Brave Search API key is not configured
-    const searchRes = await fetch(`${API}/settings/search`);
-    const searchSettings = await searchRes.json() as { configured: boolean };
-    test.skip(!searchSettings.configured, 'Brave Search API key not configured — skipping web search test');
-
     // Allow up to 3 minutes: agent must call Brave API and compose a reply
     test.setTimeout(180_000);
 
@@ -57,7 +58,7 @@ test.describe('Web Search', () => {
     // Verify web_search tool was actually called (not just answered from memory)
     // runner-pi.ts logs: logAction(agent.id, 'tool_call', { tool: event.toolName, input: event.args })
     // So input JSON is: {"tool":"web_search","input":{"query":"..."}}
-    const logsRes = await fetch(`${API}/logs?agentId=${AGENT_ID}&type=tool_call&limit=50`);
+    const logsRes = await fetch(`${API}/logs?agentId=${AGENT_ID}&type=tool_call&search=web_search&limit=50`);
     const logs = await logsRes.json() as {
       items: Array<{ type: string; input: string | null; output: string | null }>;
     };

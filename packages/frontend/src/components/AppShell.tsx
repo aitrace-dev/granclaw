@@ -1,4 +1,4 @@
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 
 export function AppShell() {
   const location = useLocation();
@@ -18,10 +18,18 @@ export function AppShell() {
             GranClaw
           </span>
         </button>
-        <span className="flex items-center gap-1.5 rounded-full bg-secondary-container/20 px-3 py-1 text-xs font-mono text-secondary">
-          <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
-          system online
-        </span>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/settings"
+            className="font-mono text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant transition-colors"
+          >
+            Settings
+          </Link>
+          <span className="flex items-center gap-1.5 rounded-full bg-secondary-container/20 px-3 py-1 text-xs font-mono text-secondary">
+            <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
+            system online
+          </span>
+        </div>
       </header>
 
       {/* Page content — full height, no padding for chat (it manages its own) */}

@@ -38,7 +38,9 @@ export function getProviderApiKey(): string | null {
 export function saveProvider(provider: string, model: string, apiKey: string): void {
   const dir = path.dirname(CONFIG_PATH);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify({ active: { provider, model, apiKey } }, null, 2));
+  const tmp = CONFIG_PATH + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify({ active: { provider, model, apiKey } }, null, 2));
+  fs.renameSync(tmp, CONFIG_PATH);
 }
 
 export function clearProvider(): void {

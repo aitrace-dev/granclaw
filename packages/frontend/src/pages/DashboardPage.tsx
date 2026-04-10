@@ -4,7 +4,7 @@ import {
   fetchAgents, createAgent, deleteAgent, fetchProviderSettings,
   type Agent, type ProviderSettings,
 } from '../lib/api.ts';
-import { getModelsForProvider } from '../lib/models.ts';
+import { getModelsForProvider, getDefaultModel } from '../lib/models.ts';
 
 function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
   const navigate = useNavigate();
@@ -55,6 +55,7 @@ export function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState('');
   const [newName, setNewName] = useState('');
+  const [newProvider, setNewProvider] = useState('');
   const [newModel, setNewModel] = useState('');
   const [newWorkspace, setNewWorkspace] = useState('');
   const [creating, setCreating] = useState(false);
@@ -65,8 +66,11 @@ export function DashboardPage() {
       .then(([agentList, ps]) => {
         setAgents(agentList);
         setProviderSettings(ps);
-        const models = ps.provider ? getModelsForProvider(ps.provider) : [];
-        if (models.length > 0) setNewModel(models[0].value);
+        const firstProvider = ps.providers?.[0];
+        if (firstProvider) {
+          setNewProvider(firstProvider.provider);
+          setNewModel(firstProvider.model);
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -75,9 +79,13 @@ export function DashboardPage() {
   useEffect(() => { loadAll(); }, []);
 
   const navigate = useNavigate();
-  const providerModels = providerSettings?.provider
-    ? getModelsForProvider(providerSettings.provider)
-    : [];
+  const configuredProviders = providerSettings?.providers ?? [];
+  const providerModels = newProvider ? getModelsForProvider(newProvider) : [];
+
+  function handleProviderChange(p: string) {
+    setNewProvider(p);
+    setNewModel(getDefaultModel(p));
+  }
 
   async function handleCreate() {
     if (!newId.trim() || !newName.trim()) return;
@@ -85,7 +93,7 @@ export function DashboardPage() {
     setError(null);
     try {
       const id = newId.trim();
-      await createAgent(id, newName.trim(), newModel, newWorkspace.trim() || undefined);
+      await createAgent(id, newName.trim(), newModel, newProvider || undefined, newWorkspace.trim() || undefined);
       navigate(`/agents/${id}/chat`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create');
@@ -154,7 +162,7 @@ export function DashboardPage() {
       {showCreate && (
         <div className="rounded-lg bg-[#1e1f26] p-4 mb-4 space-y-3">
           <p className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium">Create new agent</p>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <input
               className={inputCls}
               placeholder="agent-id (lowercase, no spaces)"
@@ -167,6 +175,17 @@ export function DashboardPage() {
               value={newName}
               onChange={e => setNewName(e.target.value)}
             />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              className={`${inputCls} appearance-none`}
+              value={newProvider}
+              onChange={e => handleProviderChange(e.target.value)}
+            >
+              {configuredProviders.map(p => (
+                <option key={p.provider} value={p.provider}>{p.provider}</option>
+              ))}
+            </select>
             <select
               className={`${inputCls} appearance-none`}
               value={newModel}

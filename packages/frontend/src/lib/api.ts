@@ -40,11 +40,11 @@ export async function fetchAgents(): Promise<Agent[]> {
   return res.json() as Promise<Agent[]>;
 }
 
-export async function createAgent(id: string, name: string, model?: string, workspaceDir?: string): Promise<void> {
+export async function createAgent(id: string, name: string, model?: string, provider?: string, workspaceDir?: string): Promise<void> {
   const res = await fetch(`${BASE}/agents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, name, model, ...(workspaceDir ? { workspaceDir } : {}) }),
+    body: JSON.stringify({ id, name, model, provider, ...(workspaceDir ? { workspaceDir } : {}) }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
@@ -73,7 +73,7 @@ export interface ChatMessage {
 }
 
 export async function fetchMessages(agentId: string, channelId = 'ui'): Promise<ChatMessage[]> {
-  const res = await fetch(`${BASE}/agents/${agentId}/messages?channelId=${channelId}`);
+  const res = await fetch(`${BASE}/agents/${agentId}/messages?channelId=${channelId}&sortBy=asc&limit=200`);
   if (!res.ok) throw new Error(`fetchMessages: ${res.status}`);
   return res.json() as Promise<ChatMessage[]>;
 }
@@ -624,7 +624,14 @@ export async function fetchLogs(params?: {
 
 // ── Provider settings ─────────────────────────────────────────────────────────
 
+export interface ProviderEntry {
+  provider: string;
+  model: string;
+}
+
 export interface ProviderSettings {
+  providers: ProviderEntry[];
+  /** First configured provider (legacy compat) */
   provider: string | null;
   model: string | null;
   configured: boolean;
@@ -643,6 +650,11 @@ export async function saveProviderSettings(provider: string, model: string, apiK
     body: JSON.stringify({ provider, model, apiKey }),
   });
   if (!res.ok) throw new Error('Failed to save provider settings');
+}
+
+export async function removeProviderSettings(provider: string): Promise<void> {
+  const res = await fetch(`${BASE}/settings/providers/${encodeURIComponent(provider)}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to remove provider');
 }
 
 export async function clearProviderSettings(): Promise<void> {

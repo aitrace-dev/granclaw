@@ -3,61 +3,48 @@ import { useEffect, useState } from 'react';
 import {
   fetchProviderSettings,
   saveProviderSettings,
-  clearProviderSettings,
+  removeProviderSettings,
   fetchSearchSettings,
   saveSearchSettings,
   clearSearchSettings,
+  type ProviderEntry,
 } from '../lib/api.ts';
 import { PROVIDERS, getModelsForProvider, getDefaultModel } from '../lib/models.ts';
 
-export function SettingsPage() {
-  const [loading, setLoading] = useState(true);
-  const [configured, setConfigured] = useState(false);
-  const [provider, setProvider] = useState('google');
-  const [model, setModel] = useState(getDefaultModel('google'));
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const inputCls = 'rounded bg-[#33343b] px-3 py-2 text-[12px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow w-full';
+
+const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
+  PROVIDERS.map(p => [p.value, p.label])
+);
+
+// ── ConfiguredProviderRow ──────────────────────────────────────────────────────
+
+function ConfiguredProviderRow({
+  entry,
+  onRemove,
+  onReplaceKey,
+}: {
+  entry: ProviderEntry;
+  onRemove: () => void;
+  onReplaceKey: (provider: string, model: string, apiKey: string) => Promise<void>;
+}) {
+  const [replacing, setReplacing] = useState(false);
+  const [model, setModel] = useState(entry.model);
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [replacingKey, setReplacingKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [braveApiKey, setBraveApiKey] = useState('');
-  const [searchSaving, setSearchSaving] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchSuccess, setSearchSuccess] = useState(false);
-  const [searchConfigured, setSearchConfigured] = useState(false);
-
-  useEffect(() => {
-    fetchProviderSettings()
-      .then(s => {
-        setConfigured(s.configured);
-        if (s.provider) setProvider(s.provider);
-        if (s.model) setModel(s.model);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-
-    fetchSearchSettings().then(s => {
-      setSearchConfigured(s.configured);
-    }).catch(console.error);
-  }, []);
-
-  function handleProviderChange(p: string) {
-    setProvider(p);
-    setModel(getDefaultModel(p));
-  }
+  const [success, setSuccess] = useState(false);
 
   async function handleSave() {
     if (!apiKey.trim()) { setError('API key is required'); return; }
-    setSaving(true);
-    setError(null);
-    setSaveSuccess(false);
+    setSaving(true); setError(null); setSuccess(false);
     try {
-      await saveProviderSettings(provider, model, apiKey.trim());
-      setConfigured(true);
-      setSaveSuccess(true);
+      await onReplaceKey(entry.provider, model, apiKey.trim());
+      setSuccess(true);
       setApiKey('');
-      setReplacingKey(false);
+      setReplacing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -65,28 +52,177 @@ export function SettingsPage() {
     }
   }
 
-  async function handleRemove() {
-    if (!confirm('Remove provider configuration? Agents will stop responding until you reconfigure.')) return;
-    try {
-      await clearProviderSettings();
-      setConfigured(false);
-      setSaveSuccess(false);
-      setReplacingKey(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove configuration');
+  return (
+    <div className="rounded-lg bg-[#1e1f26] p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="font-mono text-[13px] text-on-surface font-semibold">
+            {PROVIDER_LABELS[entry.provider] ?? entry.provider}
+          </span>
+          <span className="font-mono text-[10px] text-on-surface-variant/40 ml-2">
+            {entry.model}
+          </span>
+          <span className="ml-2 text-green-400 text-[10px] font-mono">✓</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {!replacing && (
+            <button
+              onClick={() => { setReplacing(true); setSuccess(false); }}
+              className="rounded px-2 py-1 text-[11px] font-mono text-on-surface-variant/50 hover:text-on-surface bg-[#33343b] transition-colors"
+            >
+              Replace key
+            </button>
+          )}
+          <button
+            onClick={onRemove}
+            className="rounded px-2 py-1 text-[11px] font-mono text-red-400/60 hover:text-red-400 hover:bg-red-950/20 transition-colors"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      {replacing && (
+        <div className="space-y-2 pt-1 border-t border-[#33343b]">
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1">
+              Model
+            </label>
+            <select
+              className={`${inputCls} appearance-none`}
+              value={model}
+              onChange={e => setModel(e.target.value)}
+            >
+              {getModelsForProvider(entry.provider).map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1">
+              New API Key
+            </label>
+            <input
+              type="password"
+              className={inputCls}
+              placeholder="Paste new API key"
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); setError(null); }}
+              autoComplete="off"
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded bg-primary-container px-3 py-1.5 text-[12px] font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              onClick={() => { setReplacing(false); setApiKey(''); setError(null); }}
+              className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant/50 hover:text-on-surface transition-colors"
+            >
+              Cancel
+            </button>
+            {success && <span className="font-mono text-[11px] text-green-400">Saved</span>}
+            {error && <span className="font-mono text-[10px] text-red-400">{error}</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SettingsPage ───────────────────────────────────────────────────────────────
+
+export function SettingsPage() {
+  const [loading, setLoading] = useState(true);
+  const [configuredProviders, setConfiguredProviders] = useState<ProviderEntry[]>([]);
+
+  // Add-provider form
+  const [addProvider, setAddProvider] = useState('');
+  const [addModel, setAddModel] = useState('');
+  const [addApiKey, setAddApiKey] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addSuccess, setAddSuccess] = useState(false);
+
+  // Brave Search
+  const [braveApiKey, setBraveApiKey] = useState('');
+  const [searchSaving, setSearchSaving] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchSuccess, setSearchSuccess] = useState(false);
+  const [searchConfigured, setSearchConfigured] = useState(false);
+  const [replacingSearch, setReplacingSearch] = useState(false);
+
+  useEffect(() => {
+    Promise.all([fetchProviderSettings(), fetchSearchSettings()])
+      .then(([ps, ss]) => {
+        setConfiguredProviders(ps.providers ?? []);
+        setSearchConfigured(ss.configured);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Providers not yet configured — those are available to add
+  const configuredIds = new Set(configuredProviders.map(p => p.provider));
+  const availableToAdd = PROVIDERS.filter(p => !configuredIds.has(p.value));
+
+  // Reset add-form provider/model when available list changes
+  useEffect(() => {
+    if (availableToAdd.length > 0 && !availableToAdd.find(p => p.value === addProvider)) {
+      const first = availableToAdd[0].value;
+      setAddProvider(first);
+      setAddModel(getDefaultModel(first));
     }
+  }, [configuredProviders.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleAddProviderChange(p: string) {
+    setAddProvider(p);
+    setAddModel(getDefaultModel(p));
+  }
+
+  async function handleAdd() {
+    if (!addProvider || !addModel || !addApiKey.trim()) { setAddError('All fields required'); return; }
+    setAdding(true); setAddError(null); setAddSuccess(false);
+    try {
+      await saveProviderSettings(addProvider, addModel, addApiKey.trim());
+      setConfiguredProviders(prev => {
+        const without = prev.filter(p => p.provider !== addProvider);
+        return [...without, { provider: addProvider, model: addModel }];
+      });
+      setAddSuccess(true);
+      setAddApiKey('');
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleReplaceKey(provider: string, model: string, apiKey: string) {
+    await saveProviderSettings(provider, model, apiKey);
+    setConfiguredProviders(prev => prev.map(p => p.provider === provider ? { provider, model } : p));
+  }
+
+  async function handleRemove(provider: string) {
+    if (!confirm(`Remove ${PROVIDER_LABELS[provider] ?? provider}? Agents using this provider will stop responding.`)) return;
+    await removeProviderSettings(provider);
+    setConfiguredProviders(prev => prev.filter(p => p.provider !== provider));
   }
 
   async function handleSearchSave() {
     if (!braveApiKey.trim()) { setSearchError('API key is required'); return; }
-    setSearchSaving(true);
-    setSearchError(null);
-    setSearchSuccess(false);
+    setSearchSaving(true); setSearchError(null); setSearchSuccess(false);
     try {
       await saveSearchSettings('brave', braveApiKey.trim());
       setSearchSuccess(true);
       setSearchConfigured(true);
       setBraveApiKey('');
+      setReplacingSearch(false);
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -95,13 +231,13 @@ export function SettingsPage() {
   }
 
   async function handleSearchReset() {
-    setSearchSaving(true);
-    setSearchError(null);
+    setSearchSaving(true); setSearchError(null);
     try {
       await clearSearchSettings();
       setSearchConfigured(false);
       setBraveApiKey('');
       setSearchSuccess(false);
+      setReplacingSearch(false);
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Failed to reset');
     } finally {
@@ -109,109 +245,102 @@ export function SettingsPage() {
     }
   }
 
-  const inputCls = 'rounded bg-[#33343b] px-3 py-2 text-[12px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow w-full';
-
   if (loading) return <div className="text-on-surface-variant/40 font-mono text-xs p-8">loading…</div>;
 
   return (
     <div className="max-w-lg mx-auto py-8 px-4">
+
+      {/* ── Provider Settings ── */}
       <div className="mb-6">
         <h1 className="font-display text-2xl font-semibold text-on-surface">Provider Settings</h1>
         <p className="font-mono text-[11px] text-on-surface-variant/40 mt-1">
-          Configure the AI provider and API key used by all agents.{' '}
-          {configured
-            ? <span className="text-green-400">Configured ✓</span>
-            : <span className="text-amber-400">Not configured — agents will not respond.</span>}
+          Configure AI providers. Each agent can use a different provider.
         </p>
       </div>
 
-      <div className="rounded-lg bg-[#1e1f26] p-5 space-y-4">
-        <div>
-          <label htmlFor="provider-select" className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
-            Provider
-          </label>
-          <select
-            id="provider-select"
-            className={`${inputCls} appearance-none`}
-            value={provider}
-            onChange={e => handleProviderChange(e.target.value)}
-          >
-            {PROVIDERS.map(p => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
+      {/* Configured providers list */}
+      {configuredProviders.length === 0 ? (
+        <p className="font-mono text-[11px] text-amber-400/80 mb-4">
+          No providers configured — agents will not respond until you add one.
+        </p>
+      ) : (
+        <div className="space-y-2 mb-6">
+          {configuredProviders.map(entry => (
+            <ConfiguredProviderRow
+              key={entry.provider}
+              entry={entry}
+              onRemove={() => handleRemove(entry.provider)}
+              onReplaceKey={handleReplaceKey}
+            />
+          ))}
         </div>
+      )}
 
-        <div>
-          <label htmlFor="model-select" className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
-            Model
-          </label>
-          <select
-            id="model-select"
-            className={`${inputCls} appearance-none`}
-            value={model}
-            onChange={e => setModel(e.target.value)}
-          >
-            {getModelsForProvider(provider).map(m => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </div>
+      {/* Add provider form */}
+      {availableToAdd.length > 0 && (
+        <div className="rounded-lg bg-[#1e1f26] p-5 space-y-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium">
+            Add provider
+          </p>
 
-        <div>
-          <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
-            API Key
-          </label>
-          {configured && !replacingKey ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="password"
-                className={inputCls}
-                value="••••••••••••••••••••"
-                readOnly
-              />
-              <button
-                type="button"
-                onClick={() => { setReplacingKey(true); setSaveSuccess(false); }}
-                className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant/50 hover:text-on-surface bg-[#33343b] transition-colors"
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+                Provider
+              </label>
+              <select
+                className={`${inputCls} appearance-none`}
+                value={addProvider}
+                onChange={e => handleAddProviderChange(e.target.value)}
               >
-                Replace
-              </button>
+                {availableToAdd.map(p => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
             </div>
-          ) : (
+            <div>
+              <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+                Model
+              </label>
+              <select
+                className={`${inputCls} appearance-none`}
+                value={addModel}
+                onChange={e => setAddModel(e.target.value)}
+              >
+                {getModelsForProvider(addProvider).map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+              API Key
+            </label>
             <input
-              id="api-key-input"
               type="password"
               className={inputCls}
-              placeholder="Paste your API key here"
-              value={apiKey}
-              onChange={e => { setApiKey(e.target.value); setError(null); }}
+              placeholder="Paste your API key"
+              value={addApiKey}
+              onChange={e => { setAddApiKey(e.target.value); setAddError(null); setAddSuccess(false); }}
               autoComplete="off"
-              autoFocus={replacingKey}
             />
-          )}
-        </div>
+          </div>
 
-        <div className="flex items-center gap-3 pt-1">
-          <button
-            onClick={handleSave}
-            disabled={saving || (configured && !replacingKey)}
-            className="rounded bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {configured && (
+          <div className="flex items-center gap-3">
             <button
-              onClick={handleRemove}
-              className="rounded px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-950/20 transition-colors"
+              onClick={handleAdd}
+              disabled={adding || !addApiKey.trim()}
+              className="rounded bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
             >
-              Remove
+              {adding ? 'Adding…' : 'Add'}
             </button>
-          )}
-          {saveSuccess && <span className="font-mono text-[11px] text-green-400">Saved</span>}
-          {error && <span className="font-mono text-[10px] text-red-400">{error}</span>}
+            {addSuccess && <span className="font-mono text-[11px] text-green-400">Added ✓</span>}
+            {addError && <span className="font-mono text-[10px] text-red-400">{addError}</span>}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Web Search ── */}
       <div className="mt-8 pt-8 border-t border-[#33343b]">
@@ -225,26 +354,56 @@ export function SettingsPage() {
 
         <div className="space-y-4">
           <div>
-            <label htmlFor="brave-api-key-input" className="block font-mono text-[11px] text-on-surface-variant/50 mb-1">Brave Search API key</label>
-            <input
-              id="brave-api-key-input"
-              type="password"
-              className={inputCls + ' w-full'}
-              placeholder={searchConfigured ? 'Enter new key to replace existing' : 'Enter Brave Search API key'}
-              value={braveApiKey}
-              onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
-              autoComplete="off"
-            />
+            <label className="block font-mono text-[11px] text-on-surface-variant/50 mb-1">
+              Brave Search API key
+            </label>
+            {searchConfigured && !replacingSearch ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="password"
+                  className={inputCls}
+                  value="••••••••••••••••••••"
+                  readOnly
+                />
+                <button
+                  type="button"
+                  onClick={() => { setReplacingSearch(true); setSearchSuccess(false); }}
+                  className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant/50 hover:text-on-surface bg-[#33343b] transition-colors"
+                >
+                  Replace
+                </button>
+              </div>
+            ) : (
+              <input
+                type="password"
+                className={inputCls}
+                placeholder="Enter Brave Search API key"
+                value={braveApiKey}
+                onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
+                autoComplete="off"
+                autoFocus={replacingSearch}
+              />
+            )}
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleSearchSave}
-              disabled={searchSaving || !braveApiKey.trim()}
-              className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {searchSaving ? 'Saving…' : 'Save'}
-            </button>
+            {(!searchConfigured || replacingSearch) && (
+              <button
+                onClick={handleSearchSave}
+                disabled={searchSaving || !braveApiKey.trim()}
+                className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {searchSaving ? 'Saving…' : 'Save'}
+              </button>
+            )}
+            {replacingSearch && (
+              <button
+                onClick={() => { setReplacingSearch(false); setBraveApiKey(''); setSearchError(null); }}
+                className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant/50 hover:text-on-surface transition-colors"
+              >
+                Cancel
+              </button>
+            )}
             {searchConfigured && (
               <button
                 onClick={handleSearchReset}

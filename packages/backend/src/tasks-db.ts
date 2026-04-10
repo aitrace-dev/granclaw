@@ -2,14 +2,13 @@
  * tasks-db.ts
  *
  * Per-agent SQLite store for kanban tasks.
- * DB file: <workspace>/tasks.sqlite (created lazily on first access).
+ * Backed by <workspaceDir>/agent.sqlite (shared via workspace-pool).
  */
 
-import Database from 'better-sqlite3';
 import path from 'path';
-import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { REPO_ROOT, getAgent } from './config.js';
+import { getWorkspaceDb, closeWorkspaceDb } from './workspace-pool.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -35,53 +34,12 @@ export interface Comment {
   createdAt: number;
 }
 
-// ── Database pool ──────────────────────────────────────────────────────────
+// ── Internal DB accessor ───────────────────────────────────────────────────
 
-const dbPool = new Map<string, Database.Database>();
-
-function getDb(agentId: string): Database.Database {
-  const cached = dbPool.get(agentId);
-  if (cached) return cached;
-
+function getDb(agentId: string) {
   const agent = getAgent(agentId);
   if (!agent) throw new Error(`Agent "${agentId}" not found in config`);
-
-  const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
-  if (!fs.existsSync(workspaceDir)) fs.mkdirSync(workspaceDir, { recursive: true });
-
-  const dbPath = path.join(workspaceDir, 'tasks.sqlite');
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS tasks (
-      id          TEXT PRIMARY KEY,
-      title       TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      status      TEXT NOT NULL DEFAULT 'backlog'
-                    CHECK(status IN ('backlog','in_progress','scheduled','to_review','done')),
-      source      TEXT NOT NULL DEFAULT 'agent'
-                    CHECK(source IN ('agent','human')),
-      updated_by  TEXT DEFAULT NULL
-                    CHECK(updated_by IN ('agent','human')),
-      created_at  INTEGER NOT NULL,
-      updated_at  INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS comments (
-      id         TEXT PRIMARY KEY,
-      task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      body       TEXT NOT NULL,
-      source     TEXT NOT NULL CHECK(source IN ('agent','human')),
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-    CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id, created_at);
-  `);
-
-  db.pragma('foreign_keys = ON');
-
-  dbPool.set(agentId, db);
-  return db;
+  return getWorkspaceDb(path.resolve(REPO_ROOT, agent.workspaceDir));
 }
 
 // ── Row mappers ─────────────────────────────────────────────────────────
@@ -111,7 +69,7 @@ function rowToComment(r: Record<string, unknown>): Comment {
 
 // ── Task CRUD ──────────────────────────────────────────────────────────
 
-function nextTaskId(db: Database.Database): string {
+function nextTaskId(db: ReturnType<typeof getWorkspaceDb>): string {
   const row = db.prepare(`SELECT COALESCE(MAX(CAST(SUBSTR(id, 5) AS INTEGER)), 0) + 1 AS next FROM tasks`).get() as { next: number };
   return `TSK-${String(row.next).padStart(3, '0')}`;
 }
@@ -183,9 +141,7 @@ export function createComment(agentId: string, taskId: string, body: string): Co
 // ── Cleanup ──────────────────────────────────────────────────────────
 
 export function closeTasksDb(agentId: string): void {
-  const db = dbPool.get(agentId);
-  if (db) {
-    db.close();
-    dbPool.delete(agentId);
-  }
+  const agent = getAgent(agentId);
+  if (!agent) return;
+  closeWorkspaceDb(path.resolve(REPO_ROOT, agent.workspaceDir));
 }

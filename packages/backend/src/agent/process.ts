@@ -19,10 +19,9 @@ import 'dotenv/config';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
 import path from 'path';
-import fs from 'fs';
 import { getAgent, REPO_ROOT } from '../config.js';
-import { enqueue, dequeueNext, markDone, markFailed, saveSession, cleanupStaleJobs } from '../agent-db.js';
-import { runAgent, stopAgent, syncSearchMcpConfig } from './runner-pi.js';
+import { enqueue, dequeueNext, markDone, markFailed, cleanupStaleJobs } from '../agent-db.js';
+import { runAgent, stopAgent } from './runner-pi.js';
 import { saveMessage } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 
@@ -135,15 +134,8 @@ function main() {
 
     const lane = channelType(job.channelId);
     busyChannels.add(lane);
-    const mcpConfigPath = path.join(workspaceDir, 'tools.mcp.json');
     try {
       const isTelegramJob = telegramAdapter !== null && job.channelId.startsWith('telegram:');
-
-      // Sync Brave Search MCP server into tools.mcp.json before mtime snapshot
-      syncSearchMcpConfig(workspaceDir);
-
-      // Snapshot MCP config mtime before the turn
-      const mcpMtimeBefore = fs.existsSync(mcpConfigPath) ? fs.statSync(mcpConfigPath).mtimeMs : 0;
 
       // Stream chunks directly to channel clients
       let fullResponse = '';
@@ -159,13 +151,6 @@ function main() {
         }
         if (chunk.type === 'tool_call') toolCallStrings.push(`${chunk.tool}(${JSON.stringify(chunk.input)})`);
       }, { channelId: job.channelId });
-
-      // If agent created/modified tools.mcp.json, clear session so next turn picks up new MCP tools
-      const mcpMtimeAfter = fs.existsSync(mcpConfigPath) ? fs.statSync(mcpConfigPath).mtimeMs : 0;
-      if (mcpMtimeAfter !== mcpMtimeBefore) {
-        console.log(`[agent:${agentId}] tools.mcp.json changed — clearing session for MCP reload`);
-        saveSession(workspaceDir, agentId as string, '', job.channelId);
-      }
 
       // Persist tool calls + response
       const saveTime = Date.now();

@@ -31,25 +31,25 @@ import { randomUUID } from 'crypto';
 import logsRouter from '../routes/logs.js';
 import { getManagedAgents, getManagedAgent, restartAgent, startNewAgent, stopAndRemoveAgent } from './agent-manager.js';
 import { listSecretNames, setSecret, deleteSecret } from '../secrets-vault.js';
-import { getSession, closeAgentDb, enqueue, getActiveJobs, markFailed } from '../agent-db.js';
+import { getSession, enqueue, getActiveJobs, markFailed } from '../agent-db.js';
+import { closeWorkspaceDb } from '../workspace-pool.js';
 import { saveMessage, getMessages, deleteMessages, queryMessages, Message } from '../messages-db.js';
-import { listTasks, getTask, createTask, updateTask, deleteTask, listComments, createComment, closeTasksDb } from '../tasks-db.js';
+import { listTasks, getTask, createTask, updateTask, deleteTask, listComments, createComment } from '../tasks-db.js';
 import {
   listWorkflows, getWorkflow, createWorkflow, updateWorkflow, deleteWorkflow,
   addStep, updateStep, removeStep,
   listRuns, getRun,
   getRunningRuns,
-  closeWorkflowsDb,
 } from '../workflows-db.js';
 import { executeWorkflow } from '../workflows/runner.js';
 import { bootstrapWorkspace } from '../agent/runner-pi.js';
-import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, closeSchedulesDb } from '../schedules-db.js';
+import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule } from '../schedules-db.js';
 import { startScheduler } from '../scheduler.js';
 import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
 import { listSessions, getSession as getBrowserSession, getSessionScreenshots, getScreenshotPath, generateSessionName } from '../browser-sessions.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
-import { getProvider, saveProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
+import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -83,8 +83,15 @@ export function createServer() {
   // ── Provider settings ─────────────────────────────────────────────────────────
 
   app.get('/settings/provider', (_req, res) => {
-    const p = getProvider();
-    res.json({ provider: p?.provider ?? null, model: p?.model ?? null, configured: p !== null });
+    const providers = listProviders();
+    const first = providers[0] ?? null;
+    // Include legacy `provider`/`model` fields so older clients aren't broken
+    res.json({
+      providers,
+      configured: providers.length > 0,
+      provider: first?.provider ?? null,
+      model: first?.model ?? null,
+    });
   });
 
   app.put('/settings/provider', (req, res) => {
@@ -99,6 +106,11 @@ export function createServer() {
 
   app.delete('/settings/provider', (_req, res) => {
     clearProvider();
+    res.status(204).end();
+  });
+
+  app.delete('/settings/providers/:name', (req, res) => {
+    removeProvider(req.params.name);
     res.status(204).end();
   });
 
@@ -206,7 +218,7 @@ export function createServer() {
   // ── Create / Delete agents ─────────────────────────────────────────────────
 
   app.post('/agents', (req, res) => {
-    const { id, name, model, workspaceDir } = req.body as { id?: string; name?: string; model?: string; workspaceDir?: string };
+    const { id, name, model, provider, workspaceDir } = req.body as { id?: string; name?: string; model?: string; provider?: string; workspaceDir?: string };
     if (!id || !name) { res.status(400).json({ error: 'id and name required' }); return; }
     if (getManagedAgent(id)) { res.status(409).json({ error: `Agent "${id}" already exists` }); return; }
 
@@ -214,6 +226,7 @@ export function createServer() {
       id,
       name,
       model: model ?? 'claude-sonnet-4-5',
+      ...(provider ? { provider } : {}),
       workspaceDir: workspaceDir?.trim() || `./workspaces/${id}`,
       allowedTools: ['filesystem', 'browser', 'task-manager'],
     };
@@ -245,10 +258,7 @@ export function createServer() {
     // Close all cached SQLite handles for this agent BEFORE deleting files.
     // Otherwise the orchestrator holds open handles to unlinked inodes,
     // and a recreated agent with the same id reads/writes the ghost DB.
-    closeTasksDb(req.params.id);
-    closeWorkflowsDb(req.params.id);
-    closeSchedulesDb(req.params.id);
-    closeAgentDb(workspaceDir);
+    closeWorkspaceDb(workspaceDir);
 
     // Remove from config file
     const agents = getAgents().filter(a => a.id !== req.params.id);
@@ -332,11 +342,8 @@ export function createServer() {
 
     // 2. Wipe workspace directory — every file the agent has created or stored
     //    Close DB handles first so files can be deleted cleanly on all platforms
-    closeTasksDb(req.params.id);
-    closeWorkflowsDb(req.params.id);
-    closeSchedulesDb(req.params.id);
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
-    closeAgentDb(workspaceDir);
+    closeWorkspaceDb(workspaceDir);
     if (fs.existsSync(workspaceDir)) {
       fs.rmSync(workspaceDir, { recursive: true, force: true });
     }

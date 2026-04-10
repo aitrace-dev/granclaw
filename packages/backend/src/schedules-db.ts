@@ -2,13 +2,12 @@
  * schedules-db.ts
  *
  * Per-agent SQLite store for cron schedules.
- * DB file: <workspace>/schedules.sqlite (created lazily on first access).
+ * Backed by <workspaceDir>/agent.sqlite (shared via workspace-pool).
  */
 
-import Database from 'better-sqlite3';
 import path from 'path';
-import fs from 'fs';
 import { REPO_ROOT, getAgent } from './config.js';
+import { getWorkspaceDb, closeWorkspaceDb } from './workspace-pool.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -27,42 +26,12 @@ export interface Schedule {
   createdAt: number;
 }
 
-// ── Database pool ─────────────────────────────────────────────────────────
+// ── Internal DB accessor ──────────────────────────────────────────────────
 
-const dbPool = new Map<string, Database.Database>();
-
-function getDb(agentId: string): Database.Database {
-  const cached = dbPool.get(agentId);
-  if (cached) return cached;
-
+function getDb(agentId: string) {
   const agent = getAgent(agentId);
   if (!agent) throw new Error(`Agent "${agentId}" not found in config`);
-
-  const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
-  if (!fs.existsSync(workspaceDir)) fs.mkdirSync(workspaceDir, { recursive: true });
-
-  const dbPath = path.join(workspaceDir, 'schedules.sqlite');
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS schedules (
-      id          TEXT PRIMARY KEY,
-      agent_id    TEXT NOT NULL,
-      name        TEXT NOT NULL,
-      message     TEXT NOT NULL,
-      cron        TEXT NOT NULL,
-      timezone    TEXT NOT NULL DEFAULT 'Asia/Singapore',
-      status      TEXT NOT NULL DEFAULT 'active'
-                    CHECK(status IN ('active','paused')),
-      next_run    INTEGER,
-      last_run    INTEGER,
-      created_at  INTEGER NOT NULL
-    );
-  `);
-
-  dbPool.set(agentId, db);
-  return db;
+  return getWorkspaceDb(path.resolve(REPO_ROOT, agent.workspaceDir));
 }
 
 // ── Row mapper ────────────────────────────────────────────────────────────
@@ -84,7 +53,7 @@ function rowToSchedule(r: Record<string, unknown>): Schedule {
 
 // ── ID generation ─────────────────────────────────────────────────────────
 
-function nextScheduleId(db: Database.Database): string {
+function nextScheduleId(db: ReturnType<typeof getWorkspaceDb>): string {
   const row = db.prepare(
     `SELECT COALESCE(MAX(CAST(SUBSTR(id, 5) AS INTEGER)), 0) + 1 AS next FROM schedules`
   ).get() as { next: number };
@@ -168,9 +137,7 @@ export function getDueSchedules(agentId: string): Schedule[] {
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
 export function closeSchedulesDb(agentId: string): void {
-  const db = dbPool.get(agentId);
-  if (db) {
-    db.close();
-    dbPool.delete(agentId);
-  }
+  const agent = getAgent(agentId);
+  if (!agent) return;
+  closeWorkspaceDb(path.resolve(REPO_ROOT, agent.workspaceDir));
 }

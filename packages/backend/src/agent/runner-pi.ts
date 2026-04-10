@@ -43,35 +43,6 @@ export function resolveTemplatesDir(): string {
   return path.resolve(REPO_ROOT, 'packages/cli/templates');
 }
 
-// ── syncSearchMcpConfig ──────────────────────────────────────────────────────
-// Called from process.ts before each turn (before the mtime snapshot).
-// Injects the Brave Search MCP server when an API key is configured, removes
-// it when not. Only writes the file when the content actually changes so the
-// mtime-based session-clear logic in process.ts is not triggered spuriously.
-
-export function syncSearchMcpConfig(workspaceDir: string): void {
-  const mcpPath = path.join(workspaceDir, 'tools.mcp.json');
-  let config: { mcpServers: Record<string, unknown> } = { mcpServers: {} };
-  if (fs.existsSync(mcpPath)) {
-    try { config = JSON.parse(fs.readFileSync(mcpPath, 'utf8')); } catch { /* use empty */ }
-  }
-  if (!config.mcpServers) config.mcpServers = {};
-
-  const apiKey = getSearchApiKey();
-  if (apiKey) {
-    config.mcpServers['brave-search'] = {
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-brave-search'],
-      env: { BRAVE_API_KEY: apiKey },
-    };
-  } else {
-    delete config.mcpServers['brave-search'];
-  }
-
-  const newContent = JSON.stringify(config, null, 2);
-  const oldContent = fs.existsSync(mcpPath) ? fs.readFileSync(mcpPath, 'utf8') : '';
-  if (newContent !== oldContent) fs.writeFileSync(mcpPath, newContent);
-}
 
 // ── bootstrapWorkspace ───────────────────────────────────────────────────────
 // Pi-specific workspace bootstrap: uses AGENT.md and .agent/skills/ instead of
@@ -118,6 +89,7 @@ export function bootstrapWorkspace(workspaceDir: string): void {
   const skillsTemplateDir = path.join(resolveTemplatesDir(), 'skills');
   if (fs.existsSync(skillsTemplateDir)) {
     const targetSkillsDir = path.join(workspaceDir, '.pi', 'skills');
+
     for (const skillName of fs.readdirSync(skillsTemplateDir)) {
       const srcDir = path.join(skillsTemplateDir, skillName);
       const destDir = path.join(targetSkillsDir, skillName);
@@ -131,18 +103,6 @@ export function bootstrapWorkspace(workspaceDir: string): void {
         if (file.endsWith('.sh')) fs.chmodSync(path.join(destDir, file), 0o755);
       }
       console.log(`[runner-pi] bootstrapped skill "${skillName}" to ${destDir}`);
-    }
-  }
-
-  // Pi extensions: .pi/extensions/ (project-local, loaded by pi on every session)
-  const piExtTemplateDir = path.join(resolveTemplatesDir(), 'pi-extensions');
-  if (fs.existsSync(piExtTemplateDir)) {
-    const targetExtDir = path.join(workspaceDir, '.pi', 'extensions');
-    fs.mkdirSync(targetExtDir, { recursive: true });
-    for (const file of fs.readdirSync(piExtTemplateDir)) {
-      const dest = path.join(targetExtDir, file);
-      // Always overwrite extensions so fixes are picked up on restart
-      fs.copyFileSync(path.join(piExtTemplateDir, file), dest);
     }
   }
 
@@ -245,13 +205,14 @@ export async function runAgent(
   bootstrapWorkspace(workspaceDir);
 
   // ── Provider / API key ──────────────────────────────────────────────────
-  const providerCfg = getProvider();
+  // Use agent.provider if set; otherwise fall back to the first configured provider.
+  const providerCfg = getProvider(agent.provider);
   if (!providerCfg) {
     onChunk({ type: 'error', message: 'No provider configured. Go to Settings to add a provider.' });
     return;
   }
 
-  const apiKey = getProviderApiKey();
+  const apiKey = getProviderApiKey(agent.provider);
   if (!apiKey) {
     onChunk({ type: 'error', message: 'Provider API key missing. Go to Settings to reconfigure.' });
     return;
@@ -386,6 +347,153 @@ export async function runAgent(
           } catch (err) {
             return { content: [{ type: 'text' as const, text: `recall_history error: ${err instanceof Error ? err.message : String(err)}` }] };
           }
+        },
+      });
+    });
+
+    // task-board tools: list, get, create, update, comment via REST API.
+    // Always registered — task board is always available.
+    extensionFactories.push((pi: any) => {
+      const taskBase = () => {
+        const apiUrl = process.env.GRANCLAW_API_URL ?? 'http://localhost:3001';
+        return `${apiUrl}/agents/${agent.id}/tasks`;
+      };
+      const fetchJson = async (url: string, init?: RequestInit) => {
+        const res = await fetch(url, init);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        return res.json();
+      };
+      const err = (tool: string, e: unknown) => ({
+        content: [{ type: 'text' as const, text: `${tool} error: ${e instanceof Error ? e.message : String(e)}` }],
+      });
+
+      pi.registerTool({
+        name: 'list_tasks',
+        label: 'List Tasks',
+        description: 'List tasks from the kanban board. Optionally filter by status.',
+        promptSnippet: 'List tasks',
+        promptGuidelines: ['Use to see what is in backlog, in_progress, to_review, or done.'],
+        parameters: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['backlog', 'in_progress', 'scheduled', 'to_review', 'done'], description: 'Filter by status (omit for all tasks)' },
+          },
+        },
+        async execute(_id: string, params: { status?: string }) {
+          try {
+            const url = params.status ? `${taskBase()}?status=${params.status}` : taskBase();
+            const data = await fetchJson(url);
+            return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+          } catch (e) { return err('list_tasks', e); }
+        },
+      });
+
+      pi.registerTool({
+        name: 'get_task',
+        label: 'Get Task',
+        description: 'Get a single task by ID, including its comments.',
+        promptSnippet: 'Get task details',
+        promptGuidelines: ['Use when you need the full task body or to read comments.'],
+        parameters: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'Task ID, e.g. TSK-001' },
+          },
+          required: ['taskId'],
+        },
+        async execute(_id: string, params: { taskId: string }) {
+          try {
+            const data = await fetchJson(`${taskBase()}/${params.taskId}`);
+            return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+          } catch (e) { return err('get_task', e); }
+        },
+      });
+
+      pi.registerTool({
+        name: 'create_task',
+        label: 'Create Task',
+        description: 'Create a new task on the kanban board.',
+        promptSnippet: 'Create a task',
+        promptGuidelines: [
+          'Use when breaking down work into subtasks or tracking a new action item.',
+          'Status defaults to backlog. Use markdown in description.',
+        ],
+        parameters: {
+          type: 'object',
+          properties: {
+            title:       { type: 'string', description: 'Short task title (under 80 chars)' },
+            description: { type: 'string', description: 'Full description in markdown (optional)' },
+            status:      { type: 'string', enum: ['backlog', 'in_progress', 'scheduled', 'to_review', 'done'], description: 'Initial status (default: backlog)' },
+          },
+          required: ['title'],
+        },
+        async execute(_id: string, params: { title: string; description?: string; status?: string }) {
+          try {
+            const data = await fetchJson(taskBase(), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(params),
+            });
+            return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+          } catch (e) { return err('create_task', e); }
+        },
+      });
+
+      pi.registerTool({
+        name: 'update_task',
+        label: 'Update Task',
+        description: 'Update a task\'s title, description, or status.',
+        promptSnippet: 'Update a task',
+        promptGuidelines: [
+          'Only send fields you want to change.',
+          'Move to in_progress when starting, to_review when done and awaiting human review.',
+        ],
+        parameters: {
+          type: 'object',
+          properties: {
+            taskId:      { type: 'string', description: 'Task ID, e.g. TSK-001' },
+            title:       { type: 'string', description: 'New title (optional)' },
+            description: { type: 'string', description: 'New description in markdown (optional)' },
+            status:      { type: 'string', enum: ['backlog', 'in_progress', 'scheduled', 'to_review', 'done'], description: 'New status (optional)' },
+          },
+          required: ['taskId'],
+        },
+        async execute(_id: string, params: { taskId: string; title?: string; description?: string; status?: string }) {
+          try {
+            const { taskId, ...body } = params;
+            const data = await fetchJson(`${taskBase()}/${taskId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+          } catch (e) { return err('update_task', e); }
+        },
+      });
+
+      pi.registerTool({
+        name: 'add_task_comment',
+        label: 'Add Task Comment',
+        description: 'Add a comment to a task.',
+        promptSnippet: 'Comment on a task',
+        promptGuidelines: ['Use to log progress, blockers, or notes the human should see.'],
+        parameters: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'Task ID, e.g. TSK-001' },
+            body:   { type: 'string', description: 'Comment body in markdown' },
+          },
+          required: ['taskId', 'body'],
+        },
+        async execute(_id: string, params: { taskId: string; body: string }) {
+          try {
+            const data = await fetchJson(`${taskBase()}/${params.taskId}/comments`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ body: params.body }),
+            });
+            return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+          } catch (e) { return err('add_task_comment', e); }
         },
       });
     });

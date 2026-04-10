@@ -274,12 +274,9 @@ export function createServer() {
     const { id } = req.params;
     const q = req.query;
 
-    // Legacy simple path: no advanced params → use fast getMessages
-    const hasAdvancedParams = q.contains || q.from || q.to || q.role || q.sortBy || q.count || q.format;
-    if (!hasAdvancedParams) {
-      const channelId = (q.channelId as string) ?? 'ui';
-      const limit = Math.min(Number(q.limit ?? 200), 500);
-      res.json(getMessages(id, channelId, limit));
+    // Require at least one query param — bare requests with no filter are not allowed
+    if (Object.keys(q).length === 0) {
+      res.status(400).json({ error: 'At least one query param required (limit, role, contains, from, to, sortBy, count, format, channelId)' });
       return;
     }
 
@@ -360,11 +357,11 @@ export function createServer() {
 
   app.post('/agents/:id/messages', (req, res) => {
     const { id } = req.params;
-    const { role, content, channelId = 'ui' } = req.body as {
-      role: 'user' | 'assistant'; content: string; channelId?: string;
+    const { role, content, channelId = 'ui', createdAt } = req.body as {
+      role: 'user' | 'assistant'; content: string; channelId?: string; createdAt?: number;
     };
     if (!role || !content) { res.status(400).json({ error: 'role and content required' }); return; }
-    const msg = saveMessage({ id: randomUUID(), agentId: id, channelId, role, content });
+    const msg = saveMessage({ id: randomUUID(), agentId: id, channelId, role, content, createdAt });
     res.status(201).json(msg);
   });
 

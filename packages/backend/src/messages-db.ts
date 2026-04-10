@@ -118,7 +118,7 @@ export function queryMessages(
   agentId: string,
   query: MessageQuery = {},
 ): Message[] | { count: number } {
-  const { channelId, contains, from, to, role, sortBy = 'asc', limit = 50, count = false } = query;
+  const { channelId, contains, from, to, role, sortBy = 'desc', limit = 50, count = false } = query;
 
   const clauses: string[] = ['agent_id = ?'];
   const params: unknown[] = [agentId];

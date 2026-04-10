@@ -649,3 +649,32 @@ export async function clearProviderSettings(): Promise<void> {
   const res = await fetch(`${BASE}/settings/provider`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to clear provider settings');
 }
+
+// ── Search settings ───────────────────────────────────────────────────────────
+
+export interface SearchSettings {
+  provider: 'duckduckgo' | 'brave';
+  configured: boolean; // true if provider is 'brave' and apiKey is saved
+}
+
+export async function fetchSearchSettings(): Promise<SearchSettings> {
+  const res = await fetch(`${BASE}/settings/search`);
+  if (!res.ok) return { provider: 'duckduckgo', configured: false };
+  return res.json() as Promise<SearchSettings>;
+}
+
+export async function saveSearchSettings(provider: 'duckduckgo' | 'brave', apiKey?: string): Promise<void> {
+  const res = await fetch(`${BASE}/settings/search`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, apiKey }),
+  });
+  if (!res.ok) throw new Error(`Failed to save search settings: ${res.status}`);
+}
+
+export async function clearSearchSettings(): Promise<void> {
+  const res = await fetch(`${BASE}/settings/search`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204 && res.status !== 404) {
+    throw new Error(`Failed to clear search settings: ${res.status}`);
+  }
+}

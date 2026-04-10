@@ -15,6 +15,10 @@
  *   GET  /settings/provider         — read active provider (no apiKey)
  *   PUT  /settings/provider         — save provider + apiKey
  *   DELETE /settings/provider       — clear provider config
+ *   GET  /settings/search           — read active search provider
+ *   PUT  /settings/search           — save search provider + apiKey
+ *   DELETE /settings/search         — clear search config (reset to duckduckgo)
+ *   GET  /search                    — proxy search query to configured provider
  */
 
 import express from 'express';
@@ -45,7 +49,7 @@ import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
 import { listSessions, getSession as getBrowserSession, getSessionScreenshots, getScreenshotPath, generateSessionName } from '../browser-sessions.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
-import { getProvider, saveProvider, clearProvider } from '../providers-config.js';
+import { getProvider, saveProvider, clearProvider, getSearch, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -96,6 +100,91 @@ export function createServer() {
   app.delete('/settings/provider', (_req, res) => {
     clearProvider();
     res.status(204).end();
+  });
+
+  // ── Search settings ───────────────────────────────────────────────────────────
+  app.get('/settings/search', (_req, res) => {
+    const cfg = getSearch();
+    res.json({
+      provider: cfg.provider,
+      configured: cfg.provider === 'brave' && !!getSearchApiKey(),
+    });
+  });
+
+  app.put('/settings/search', (req, res) => {
+    const { provider, apiKey } = req.body as { provider?: string; apiKey?: string };
+    if (!provider || !['duckduckgo', 'brave'].includes(provider)) {
+      res.status(400).json({ error: 'provider must be "duckduckgo" or "brave"' });
+      return;
+    }
+    if (provider === 'brave' && !apiKey) {
+      res.status(400).json({ error: 'apiKey required for brave provider' });
+      return;
+    }
+    saveSearch(provider as 'duckduckgo' | 'brave', apiKey);
+    res.sendStatus(200);
+  });
+
+  app.delete('/settings/search', (_req, res) => {
+    clearSearch();
+    res.sendStatus(204);
+  });
+
+  // ── Search proxy ──────────────────────────────────────────────────────────────
+  app.get('/search', async (req, res) => {
+    const q = (req.query.q as string | undefined)?.trim();
+    if (!q) { res.status(400).json({ error: 'q parameter required' }); return; }
+
+    const cfg = getSearch();
+    try {
+      if (cfg.provider === 'brave') {
+        const apiKey = getSearchApiKey();
+        if (!apiKey) { res.status(503).json({ error: 'Brave API key not configured' }); return; }
+        const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=10`;
+        const upstream = await fetch(url, {
+          headers: { 'X-Subscription-Token': apiKey, 'Accept': 'application/json' },
+        });
+        if (!upstream.ok) {
+          res.status(upstream.status).json({ error: `Brave API error: ${upstream.status}` });
+          return;
+        }
+        const data = await upstream.json() as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
+        const results = (data.web?.results ?? []).map(r => ({
+          title: r.title,
+          url: r.url,
+          description: r.description,
+        }));
+        res.json({ provider: 'brave', results });
+      } else {
+        // DuckDuckGo instant answer API (no key required)
+        const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_redirect=1&no_html=1&skip_disambig=1`;
+        const upstream = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!upstream.ok) {
+          res.status(upstream.status).json({ error: `DuckDuckGo API error: ${upstream.status}` });
+          return;
+        }
+        const data = await upstream.json() as {
+          AbstractText?: string;
+          AbstractURL?: string;
+          AbstractSource?: string;
+          RelatedTopics?: Array<{ Text?: string; FirstURL?: string }>;
+        };
+        // Build results from abstract + related topics
+        const results: Array<{ title: string; url: string; description: string }> = [];
+        if (data.AbstractText && data.AbstractURL) {
+          results.push({ title: data.AbstractSource ?? q, url: data.AbstractURL, description: data.AbstractText });
+        }
+        for (const topic of (data.RelatedTopics ?? []).slice(0, 9)) {
+          if (topic.Text && topic.FirstURL) {
+            results.push({ title: topic.Text.split(' - ')[0] ?? topic.Text, url: topic.FirstURL, description: topic.Text });
+          }
+        }
+        res.json({ provider: 'duckduckgo', results });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: `Search failed: ${msg}` });
+    }
   });
 
   // ── Agents ─────────────────────────────────────────────────────────────────

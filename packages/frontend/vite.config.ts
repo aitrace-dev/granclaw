@@ -27,6 +27,7 @@ export default defineConfig({
       '^/agents/[^/]+/reset': 'http://localhost:3001',
       '^/logs': 'http://localhost:3001',
       '^/settings': 'http://localhost:3001',
+      '^/search': 'http://localhost:3001',
       '^/health$': 'http://localhost:3001',
       // WebSocket proxy: browser → vite → backend → internal agent process.
       // ws:true tells vite to forward the Upgrade handshake.

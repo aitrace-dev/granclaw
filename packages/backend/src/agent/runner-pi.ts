@@ -20,8 +20,84 @@ import { AgentConfig, REPO_ROOT } from '../config.js';
 import { saveSession } from '../agent-db.js';
 import { logAction } from '../logs-db.js';
 import { getProvider, getProviderApiKey } from '../providers-config.js';
-import { bootstrapWorkspace } from './runner.js';
-export { bootstrapWorkspace };
+import { createSchedule, listSchedules } from '../schedules-db.js';
+import { parseExpression } from 'cron-parser';
+import { resolveTemplatesDir } from './runner.js';
+
+// ── bootstrapWorkspace ───────────────────────────────────────────────────────
+// Pi-specific workspace bootstrap: uses AGENT.md and .agent/skills/ instead of
+// the Claude-specific CLAUDE.md and .claude/skills/ paths.
+
+export function bootstrapWorkspace(workspaceDir: string): void {
+  fs.mkdirSync(workspaceDir, { recursive: true });
+
+  // AGENT.md — prefer AGENT.md, fall back to CLAUDE.md for existing workspaces
+  const agentMd = path.join(workspaceDir, 'AGENT.md');
+  const claudeMd = path.join(workspaceDir, 'CLAUDE.md');
+  if (!fs.existsSync(agentMd) && !fs.existsSync(claudeMd)) {
+    const template = path.join(resolveTemplatesDir(), 'AGENT.onboarding.md');
+    if (fs.existsSync(template)) {
+      fs.copyFileSync(template, agentMd);
+      console.log(`[runner-pi] copied AGENT.onboarding.md to ${workspaceDir}`);
+    }
+  }
+
+  // .mcp.json — prevent inheriting host MCP servers
+  const mcpJson = path.join(workspaceDir, '.mcp.json');
+  if (!fs.existsSync(mcpJson)) {
+    fs.writeFileSync(mcpJson, JSON.stringify({ mcpServers: {} }, null, 2));
+  }
+
+  // Vault directory structure (second brain)
+  const vaultDir = path.join(workspaceDir, 'vault');
+  if (!fs.existsSync(vaultDir)) {
+    for (const sub of ['journal', 'sessions', 'actions', 'topics', 'knowledge']) {
+      fs.mkdirSync(path.join(vaultDir, sub), { recursive: true });
+    }
+  }
+
+  // Skills: .agent/skills/ (pi standard path)
+  const skillsTemplateDir = path.join(resolveTemplatesDir(), 'skills');
+  if (fs.existsSync(skillsTemplateDir)) {
+    const targetSkillsDir = path.join(workspaceDir, '.agent', 'skills');
+    for (const skillName of fs.readdirSync(skillsTemplateDir)) {
+      const srcDir = path.join(skillsTemplateDir, skillName);
+      const destDir = path.join(targetSkillsDir, skillName);
+      if (!fs.statSync(srcDir).isDirectory()) continue;
+      if (fs.existsSync(destDir)) continue;
+      fs.mkdirSync(destDir, { recursive: true });
+      for (const file of fs.readdirSync(srcDir)) {
+        fs.copyFileSync(path.join(srcDir, file), path.join(destDir, file));
+      }
+      for (const file of fs.readdirSync(destDir)) {
+        if (file.endsWith('.sh')) fs.chmodSync(path.join(destDir, file), 0o755);
+      }
+      console.log(`[runner-pi] bootstrapped skill "${skillName}" to ${destDir}`);
+    }
+  }
+
+  // Sessions directory for pi JSONL session files
+  fs.mkdirSync(path.join(workspaceDir, 'sessions'), { recursive: true });
+  fs.mkdirSync(path.join(workspaceDir, '.pi-sessions'), { recursive: true });
+
+  // Default vault housekeeping schedule
+  const agentId = path.basename(workspaceDir);
+  try {
+    const existing = listSchedules(agentId);
+    if (!existing.some(s => s.name === 'Vault housekeeping')) {
+      const cron = '30 23 * * *';
+      const nextRun = parseExpression(cron, { tz: 'Asia/Singapore' }).next().getTime();
+      createSchedule(agentId, {
+        name: 'Vault housekeeping',
+        message: 'Run vault housekeeping: scan all vault folders, rebuild every index.md with one-line summaries for each file, update vault/index.md with folder counts and recent activity. Check for orphaned wikilinks and entities that need topic notes. Never delete files.',
+        cron,
+        timezone: 'Asia/Singapore',
+        nextRun,
+      });
+      console.log(`[runner-pi] created default vault housekeeping schedule for ${agentId}`);
+    }
+  } catch { /* schedules DB may not be ready yet */ }
+}
 
 // ── ESM imports — tsx handles interop at runtime ─────────────────────────────
 // The pi packages are ESM-only. The backend tsconfig targets CommonJS so

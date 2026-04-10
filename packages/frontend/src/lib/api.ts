@@ -631,13 +631,13 @@ export interface ProviderSettings {
 }
 
 export async function fetchProviderSettings(): Promise<ProviderSettings> {
-  const res = await fetch('/settings/provider');
+  const res = await fetch(`${BASE}/settings/provider`);
   if (!res.ok) throw new Error('Failed to fetch provider settings');
   return res.json() as Promise<ProviderSettings>;
 }
 
 export async function saveProviderSettings(provider: string, model: string, apiKey: string): Promise<void> {
-  const res = await fetch('/settings/provider', {
+  const res = await fetch(`${BASE}/settings/provider`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ provider, model, apiKey }),
@@ -646,6 +646,6 @@ export async function saveProviderSettings(provider: string, model: string, apiK
 }
 
 export async function clearProviderSettings(): Promise<void> {
-  const res = await fetch('/settings/provider', { method: 'DELETE' });
+  const res = await fetch(`${BASE}/settings/provider`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to clear provider settings');
 }

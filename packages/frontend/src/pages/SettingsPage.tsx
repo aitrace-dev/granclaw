@@ -49,8 +49,12 @@ export function SettingsPage() {
 
   async function handleRemove() {
     if (!confirm('Remove provider configuration? Agents will stop responding until you reconfigure.')) return;
-    await clearProviderSettings();
-    navigate('/');
+    try {
+      await clearProviderSettings();
+      navigate('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove configuration');
+    }
   }
 
   const inputCls = 'rounded bg-[#33343b] px-3 py-2 text-[12px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow w-full';
@@ -68,10 +72,11 @@ export function SettingsPage() {
 
       <div className="rounded-lg bg-[#1e1f26] p-5 space-y-4">
         <div>
-          <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+          <label htmlFor="provider-select" className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
             Provider
           </label>
           <select
+            id="provider-select"
             className={`${inputCls} appearance-none`}
             value={provider}
             onChange={e => handleProviderChange(e.target.value)}
@@ -83,10 +88,11 @@ export function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+          <label htmlFor="model-select" className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
             Model
           </label>
           <select
+            id="model-select"
             className={`${inputCls} appearance-none`}
             value={model}
             onChange={e => setModel(e.target.value)}
@@ -98,10 +104,11 @@ export function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+          <label htmlFor="api-key-input" className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
             API Key
           </label>
           <input
+            id="api-key-input"
             type="password"
             className={inputCls}
             placeholder="Paste your API key here — never stored in plaintext on client"

@@ -19,7 +19,8 @@ import {
   updateRunStep,
   type Step,
 } from '../workflows-db.js';
-import { claudeBin, spawnEnv, runAgent } from '../agent/runner.js';
+import { claudeBin, spawnEnv } from '../agent/runner.js';
+import { runAgent } from '../agent/runner-pi.js';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { saveMessage } from '../messages-db.js';

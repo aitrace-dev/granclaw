@@ -1,169 +1,109 @@
 ---
 name: memory
-description: Two-tier memory access — query the messages database via API for precise, searchable conversation history, and read/write the vault for organised semantic summaries. Use when you need to recall past conversations, find facts, or store knowledge for future sessions.
+description: Two-tier memory — use the recall_history tool for precise factual queries (exact quotes, keyword search, time ranges, counts), and search vault files for long-term summaries and context. Read this to know which tier to use.
 user-invocable: false
 allowed-tools: [bash, read, write, edit]
 ---
 
-# Memory Skill
+# Memory Skill — Two-Tier Recall
 
-Your memory has two tiers:
+You have two ways to access memory. Choose the right one:
 
-| Tier | Source | Best for |
-|------|--------|----------|
-| **Messages DB** | API — `$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/messages` | Exact quotes, keyword search, date-range queries, message counts |
-| **Vault** | Files in `vault/` | Organised summaries, topic notes, knowledge articles, session logs |
-
-Use the DB tier when you need precision — it is the verbatim record. Use the vault tier when you need context — it is the interpreted, organised memory.
+| Question type | Use | Why |
+|---|---|---|
+| "What did I say about X?" | `recall_history` tool | Verbatim, searchable, timestamped |
+| "How many times did we discuss Y?" | `recall_history` tool with `count=true` | DB aggregate, no hallucination |
+| "What happened between 1am and 2am?" | `recall_history` tool with `from`/`to` | Precise time-range query |
+| "What did we work on yesterday?" | Search vault files | Organised summaries, narrative |
+| "Who is Sarah? What's the status of project X?" | Search vault files | Topic notes, session logs |
 
 ---
 
-## Capability 1 — Search Messages via API
+## Tier 1 — recall_history tool
 
-### Query parameters
+You have a built-in `recall_history` tool. Call it directly — no curl, no bash needed.
+
+### Parameters
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `contains` | string | Filter messages whose content contains this substring (case-insensitive) |
-| `from` | string | ISO date or datetime — include messages at or after this time (e.g. `2026-04-10` or `2026-04-10T09:00:00Z`) |
-| `to` | string | ISO date or datetime — include messages at or before this time |
-| `role` | string | Filter by role: `user`, `assistant`, or `tool_call` |
-| `sortBy` | string | `asc` (default) or `desc` |
-| `limit` | number | Max messages to return — capped at 200, default 50 |
+| `contains` | string | Filter messages containing this substring |
+| `from` | string | ISO date/datetime — at or after (e.g. `2026-04-10` or `2026-04-10T09:00:00Z`) |
+| `to` | string | ISO date/datetime — at or before |
+| `role` | `user` \| `assistant` \| `tool_call` | Filter by who sent it |
+| `sortBy` | `asc` \| `desc` | Time order (default: asc) |
+| `limit` | number | Max rows — capped at 200, default 50 |
 | `count` | boolean | Return `{"count": N}` only — no rows |
-| `format` | string | `csv` returns pipe-delimited `timestamp|role|content` (one per line); default is JSON |
+| `format` | `json` \| `csv` | `csv` = pipe-delimited `timestamp|role|content` — use for token efficiency |
 
 ### Examples
 
-**Count how many times the user mentioned a topic today:**
-```bash
-curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/messages?count=true&role=user&contains=linkedin&from=2026-04-10"
-# → {"count": 7}
-```
+**Count messages on a topic today:**
+→ call `recall_history` with `count=true`, `contains="linkedin"`, `from="2026-04-10"`
 
-**Fetch today's user messages as CSV (token-efficient):**
-```bash
-curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/messages?role=user&from=2026-04-10&format=csv&limit=100"
-# → 1744243200000|user|What should I post about today?
-#    1744246800000|user|Can you draft a LinkedIn post about AI agents?
-```
+**What did the user say about real estate?**
+→ call `recall_history` with `role="user"`, `contains="real estate"`, `format="csv"`, `limit=20`
 
-**Find what the user said about a specific topic:**
-```bash
-curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/messages?contains=real+estate&role=user&format=csv&limit=50"
-```
+**What happened between 1am and 2am?**
+→ call `recall_history` with `from="2026-04-10T01:00:00Z"`, `to="2026-04-10T02:00:00Z"`, `format="csv"`
 
-**Retrieve a specific date range:**
-```bash
-curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/messages?from=2026-04-07&to=2026-04-09&sortBy=desc&limit=200"
-```
+**Recent history for context:**
+→ call `recall_history` with `limit=30`, `sortBy="desc"`
 
-**Full recent history for context (JSON):**
-```bash
-curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/messages?limit=50&sortBy=desc"
-```
-
-### CSV format
-
-When `format=csv`, each line is:
-```
-<timestamp_ms>|<role>|<content>
-```
-
-The content field has newlines replaced with `\n`. Parse with:
-```bash
-# Print readable lines
-curl -sf "...&format=csv" | while IFS='|' read -r ts role content; do
-  echo "[$role] $content"
-done
-```
+CSV output format: `1744243200000|user|What should I post today?`
 
 ---
 
-## Capability 2 — Search the Vault
+## Tier 2 — Vault files
 
-The vault holds organised summaries, topic notes, knowledge articles, and journal entries. It is slower but richer in context.
+The vault holds organised summaries written by the housekeeping skill. Use it when you need narrative context, not raw quotes.
 
-### Search protocol
-
-**Step 1 — Check vault index for overview:**
+**Check vault index first:**
 ```bash
 cat vault/index.md
 ```
 
-**Step 2 — Search by keyword across all vault files:**
+**Search by keyword:**
 ```bash
-grep -rl "keyword" vault/ --include="*.md" 2>/dev/null
+grep -rl "keyword" vault/ --include="*.md"
 ```
 
-**Step 3 — Read matching files:**
+**Read a specific file:**
 ```bash
-cat vault/topics/relevant-topic.md
-cat vault/knowledge/relevant-fact.md
+cat vault/topics/project-name.md
+cat vault/knowledge/some-fact.md
+cat vault/journal/2026-04-10.md
 ```
-
-**Step 4 — Check today's journal:**
-```bash
-cat vault/journal/$(date +%Y-%m-%d).md 2>/dev/null || echo "No entry today yet."
-```
-
-**Step 5 — Broad fallback:**
-```bash
-grep -r "keyword" vault/ --include="*.md" -l
-```
-
-Always state what you found (or didn't find) before proceeding.
 
 ---
 
-## Capability 3 — Store in the Vault
+## Writing to the vault
 
-Write to the vault when you learn something worth keeping across sessions.
+When you learn something worth keeping across sessions:
 
-### Knowledge note — `vault/knowledge/<slug>.md`
-
-Use for reusable facts, learned procedures, discovered constraints, API shapes, user preferences.
-
+**Knowledge note** — `vault/knowledge/<slug>.md`
 ```markdown
 # <Title>
-
-<The knowledge itself — facts, patterns, or reference material>
-
+<The fact, pattern, or reference material>
 _First noted: YYYY-MM-DD_
 ```
 
-### Topic note — `vault/topics/<slug>.md`
-
-Create when an entity (person, project, tool, concept) appears in 3+ sessions. Slug: lowercase, hyphens.
-
+**Topic note** — `vault/topics/<slug>.md` (slug: lowercase, hyphens)
 ```markdown
 # <Entity Name>
-
 <one-line description>
 
 ## YYYY-MM-DD
 <context from this session>
 ```
 
-Append a dated section each time the entity comes up again. Never overwrite history.
-
-### Journal entry — `vault/journal/YYYY-MM-DD.md`
-
-Append to today's journal when completing significant work. The housekeeping skill rebuilds these from message history automatically — but you can also append ad-hoc notes during the day.
-
-```markdown
-# YYYY-MM-DD
-
-## Notes
-- <what happened, what you learned, decisions made>
-```
+Append dated sections — never overwrite existing history.
 
 ---
 
 ## Rules
 
-- **DB first for facts** — if you need exact quotes or counts, always query the DB rather than guessing from vault summaries
-- **Vault first for context** — if you need background on a topic, search vault before querying the DB
-- **Never fabricate** — if a query returns nothing, say so; don't invent past context
-- **Keep notes terse** — one fact per knowledge note, one-line topic entries; save verbose detail for the housekeeping journal
-- **Never delete vault files** — vault is append-only; write corrections as new entries
+- **Never fabricate** — if `recall_history` returns nothing, say so
+- **count before pulling rows** — for aggregate questions use `count=true` first
+- **csv over json** when you need content — saves tokens
+- **vault is append-only** — write corrections as new entries, never delete

@@ -330,6 +330,66 @@ export async function runAgent(
     const searchApiKey = getSearchApiKey();
     const extensionFactories: ((pi: any) => void)[] = [];
 
+    // recall_history tool: queries the GranClaw messages DB via the REST API.
+    // Always registered — the messages DB is always available.
+    extensionFactories.push((pi: any) => {
+      pi.registerTool({
+        name: 'recall_history',
+        label: 'Recall History',
+        description:
+          'Search your conversation history in the messages database. ' +
+          'Use for precise, factual recall: exact quotes, keyword search, time-range queries, and message counts. ' +
+          'For long-term summaries and context, search the vault files instead.',
+        promptSnippet: 'Search conversation history',
+        promptGuidelines: [
+          'Use when asked "what did I say about X", "how many messages today", "what happened between Xam and Yam".',
+          'Use count=true for aggregate questions ("how many times did I mention X?") — returns only a number, no rows.',
+          'Use format=csv for token-efficient output when you need content (timestamp|role|content per line).',
+          'Use from/to with ISO dates (YYYY-MM-DD or full datetime) to scope by day or time range.',
+          'Use role=user to find what the user said; role=assistant to find your own replies.',
+        ],
+        parameters: {
+          type: 'object',
+          properties: {
+            contains: { type: 'string', description: 'Filter messages whose content contains this substring' },
+            from:     { type: 'string', description: 'ISO date or datetime — include messages at or after this time (e.g. 2026-04-10 or 2026-04-10T09:00:00Z)' },
+            to:       { type: 'string', description: 'ISO date or datetime — include messages at or before this time' },
+            role:     { type: 'string', enum: ['user', 'assistant', 'tool_call'], description: 'Filter by message role' },
+            sortBy:   { type: 'string', enum: ['asc', 'desc'], description: 'Sort order by time (default: asc)' },
+            limit:    { type: 'number', description: 'Max messages to return — capped at 200, default 50' },
+            count:    { type: 'boolean', description: 'Return only a count: {"count": N} — no message rows' },
+            format:   { type: 'string', enum: ['json', 'csv'], description: 'csv returns pipe-delimited timestamp|role|content (one per line) — use for token efficiency' },
+          },
+        },
+        async execute(_toolCallId: string, params: {
+          contains?: string; from?: string; to?: string;
+          role?: string; sortBy?: string; limit?: number;
+          count?: boolean; format?: string;
+        }) {
+          const apiUrl = process.env.GRANCLAW_API_URL ?? 'http://localhost:3001';
+          const url = new URL(`${apiUrl}/agents/${agent.id}/messages`);
+          if (params.contains) url.searchParams.set('contains', params.contains);
+          if (params.from)     url.searchParams.set('from',     params.from);
+          if (params.to)       url.searchParams.set('to',       params.to);
+          if (params.role)     url.searchParams.set('role',     params.role);
+          if (params.sortBy)   url.searchParams.set('sortBy',   params.sortBy);
+          if (params.limit != null) url.searchParams.set('limit', String(params.limit));
+          if (params.count)    url.searchParams.set('count',    'true');
+          if (params.format)   url.searchParams.set('format',   params.format);
+          try {
+            const res = await fetch(url.toString());
+            if (!res.ok) {
+              return { content: [{ type: 'text' as const, text: `recall_history failed: HTTP ${res.status}` }] };
+            }
+            const text = await res.text();
+            return { content: [{ type: 'text' as const, text }] };
+          } catch (err) {
+            return { content: [{ type: 'text' as const, text: `recall_history error: ${err instanceof Error ? err.message : String(err)}` }] };
+          }
+        },
+      });
+    });
+
     // web_search tool: proxies to GranClaw's /search endpoint (Brave Search).
     // Only registered when a search API key is configured.
     if (searchApiKey) {

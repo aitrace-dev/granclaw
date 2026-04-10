@@ -19,12 +19,22 @@ const wsConnected = (page: import('@playwright/test').Page) =>
 
 test.describe('Web Search', () => {
   test.beforeAll(async () => {
+    // Skip if Brave Search is not configured
     const searchRes = await fetch(`${API}/settings/search`);
     const { configured } = await searchRes.json() as { configured: boolean };
     if (!configured) {
       test.skip(true, 'Brave Search API key not configured — skipping web search tests');
       return;
     }
+
+    // Skip if the LLM provider is not configured
+    const providerRes = await fetch(`${API}/settings/provider`);
+    const providerCfg = await providerRes.json() as { provider: string | null; model: string | null; configured: boolean };
+    if (!providerCfg.configured) {
+      test.skip(true, 'LLM provider not configured — skipping web search tests');
+      return;
+    }
+
     await createSeededAgent(AGENT_ID, SEED_DIR);
   });
 
@@ -38,6 +48,9 @@ test.describe('Web Search', () => {
 
     await page.goto(CHAT_URL);
     await expect(wsConnected(page)).toBeVisible({ timeout: 10_000 });
+
+    // Record time just before sending so we can scope the logs check to this run only
+    const sentAt = Date.now();
 
     // Send the search query
     const input = page.getByPlaceholder(/message/i);
@@ -55,19 +68,20 @@ test.describe('Web Search', () => {
     await expect(reply).toBeVisible({ timeout: 5_000 });
     await expect(reply).toContainText(/malaga|málaga|real estate|inmobiliaria|agency|agencies/i);
 
-    // Verify web_search tool was actually called (not just answered from memory)
+    // Verify the web_search tool was called in THIS run (not from a stale prior run).
     // runner-pi.ts logs: logAction(agent.id, 'tool_call', { tool: event.toolName, input: event.args })
-    // So input JSON is: {"tool":"web_search","input":{"query":"..."}}
+    // Stored input JSON: {"tool":"web_search","input":{"query":"..."}}
     const logsRes = await fetch(`${API}/logs?agentId=${AGENT_ID}&type=tool_call&search=web_search&limit=50`);
     const logs = await logsRes.json() as {
-      items: Array<{ type: string; input: string | null; output: string | null }>;
+      items: Array<{ type: string; input: string | null; created_at: number }>;
     };
 
     const webSearchCall = logs.items.find(item =>
       item.type === 'tool_call' &&
-      (item.input?.includes('web_search') ?? false)
+      (item.input?.includes('web_search') ?? false) &&
+      item.created_at >= sentAt
     );
 
-    expect(webSearchCall, 'Expected web_search tool_call entry in logs').toBeTruthy();
+    expect(webSearchCall, 'Expected web_search tool_call in logs from this test run').toBeTruthy();
   });
 });

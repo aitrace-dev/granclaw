@@ -19,7 +19,7 @@ import fs from 'fs';
 import { AgentConfig, REPO_ROOT } from '../config.js';
 import { saveSession } from '../agent-db.js';
 import { logAction } from '../logs-db.js';
-import { getProvider, getProviderApiKey } from '../providers-config.js';
+import { getProvider, getProviderApiKey, getSearchApiKey } from '../providers-config.js';
 import { createSchedule, listSchedules } from '../schedules-db.js';
 import { parseExpression } from 'cron-parser';
 
@@ -43,6 +43,36 @@ export function resolveTemplatesDir(): string {
   return path.resolve(REPO_ROOT, 'packages/cli/templates');
 }
 
+// ── syncSearchMcpConfig ──────────────────────────────────────────────────────
+// Called from process.ts before each turn (before the mtime snapshot).
+// Injects the Brave Search MCP server when an API key is configured, removes
+// it when not. Only writes the file when the content actually changes so the
+// mtime-based session-clear logic in process.ts is not triggered spuriously.
+
+export function syncSearchMcpConfig(workspaceDir: string): void {
+  const mcpPath = path.join(workspaceDir, 'tools.mcp.json');
+  let config: { mcpServers: Record<string, unknown> } = { mcpServers: {} };
+  if (fs.existsSync(mcpPath)) {
+    try { config = JSON.parse(fs.readFileSync(mcpPath, 'utf8')); } catch { /* use empty */ }
+  }
+  if (!config.mcpServers) config.mcpServers = {};
+
+  const apiKey = getSearchApiKey();
+  if (apiKey) {
+    config.mcpServers['brave-search'] = {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-brave-search'],
+      env: { BRAVE_API_KEY: apiKey },
+    };
+  } else {
+    delete config.mcpServers['brave-search'];
+  }
+
+  const newContent = JSON.stringify(config, null, 2);
+  const oldContent = fs.existsSync(mcpPath) ? fs.readFileSync(mcpPath, 'utf8') : '';
+  if (newContent !== oldContent) fs.writeFileSync(mcpPath, newContent);
+}
+
 // ── bootstrapWorkspace ───────────────────────────────────────────────────────
 // Pi-specific workspace bootstrap: uses AGENT.md and .agent/skills/ instead of
 // the Claude-specific CLAUDE.md and .claude/skills/ paths.
@@ -56,8 +86,14 @@ export function bootstrapWorkspace(workspaceDir: string): void {
   if (!fs.existsSync(agentMd) && !fs.existsSync(claudeMd)) {
     const template = path.join(resolveTemplatesDir(), 'AGENT.onboarding.md');
     if (fs.existsSync(template)) {
-      fs.copyFileSync(template, agentMd);
-      console.log(`[runner-pi] copied AGENT.onboarding.md to ${workspaceDir}`);
+      // Stamp agent ID and system timezone so the agent never needs to ask
+      const agentId = path.basename(workspaceDir);
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const content = fs.readFileSync(template, 'utf8')
+        .replace(/YOUR_AGENT_ID/g, agentId)
+        .replace(/GRANCLAW_TIMEZONE/g, timezone);
+      fs.writeFileSync(agentMd, content);
+      console.log(`[runner-pi] wrote AGENT.md to ${workspaceDir} (agentId=${agentId})`);
     }
   }
 
@@ -92,6 +128,18 @@ export function bootstrapWorkspace(workspaceDir: string): void {
         if (file.endsWith('.sh')) fs.chmodSync(path.join(destDir, file), 0o755);
       }
       console.log(`[runner-pi] bootstrapped skill "${skillName}" to ${destDir}`);
+    }
+  }
+
+  // Pi extensions: .pi/extensions/ (project-local, loaded by pi on every session)
+  const piExtTemplateDir = path.join(resolveTemplatesDir(), 'pi-extensions');
+  if (fs.existsSync(piExtTemplateDir)) {
+    const targetExtDir = path.join(workspaceDir, '.pi', 'extensions');
+    fs.mkdirSync(targetExtDir, { recursive: true });
+    for (const file of fs.readdirSync(piExtTemplateDir)) {
+      const dest = path.join(targetExtDir, file);
+      // Always overwrite extensions so fixes are picked up on restart
+      fs.copyFileSync(path.join(piExtTemplateDir, file), dest);
     }
   }
 
@@ -212,7 +260,9 @@ export async function runAgent(
   // Track soul state before this turn for onboarding detection
   const soulExistedBefore = fs.existsSync(path.join(workspaceDir, 'SOUL.md'));
 
-  logAction(agent.id, 'message', { text: message });
+  // logAction writes to the shared logs.db. Non-fatal: WAL/locking issues
+  // can prevent new processes from opening it, but should never crash the agent.
+  try { logAction(agent.id, 'message', { text: message }); } catch { /* ignore */ }
 
   // Declare outside try so finally can restore the env var.
   // undefined means injection hasn't happened yet (e.g. model-not-found early return).
@@ -266,15 +316,83 @@ export async function runAgent(
       appendSystemPrompt = fs.readFileSync(systemMdPath, 'utf8');
     }
 
-    // Build resource loader with optional system prompt append
+    // ── Register GranClaw built-in extensions ──────────────────────────────
+    // We use extensionFactories (inline factories) instead of file-based loading.
+    // DefaultResourceLoader.reload() gets extensions from pi's PackageManager
+    // (settings-configured sources) — it does NOT auto-discover cwd/.pi/extensions/
+    // the way pi's interactive TUI does via discoverAndLoadExtensions(). File-based
+    // loading via additionalExtensionPaths also requires jiti to transpile TypeScript
+    // which may fail silently. Inline factories bypass all of that.
+
+    const searchApiKey = getSearchApiKey();
+    const extensionFactories: ((pi: any) => void)[] = [];
+
+    // web_search tool: proxies to GranClaw's /search endpoint (Brave Search).
+    // Only registered when a search API key is configured.
+    if (searchApiKey) {
+      extensionFactories.push((pi: any) => {
+        // Register directly in the factory (not in session_start) so the tool
+        // is in extension.tools when the session builds its initial system prompt.
+        // session_start is for UI/widget setup only — tool registration there
+        // happens after the first turn's system prompt is already composed.
+        pi.registerTool({
+          name: 'web_search',
+          label: 'Web Search',
+          description:
+            'Search the web for current information, news, facts, or documentation. ' +
+            'Use whenever the user asks to search, look something up, or when you need up-to-date information.',
+          promptSnippet: 'Search the web for current information',
+          promptGuidelines: [
+            'Use for any question about recent events, current prices, live data, or information past your training cutoff.',
+            'Prefer specific, focused queries over vague ones.',
+            'You can call this tool multiple times to refine results.',
+          ],
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'The search query' },
+            },
+            required: ['query'],
+          },
+          async execute(_toolCallId: string, params: { query: string }) {
+            const apiUrl = process.env.GRANCLAW_API_URL ?? 'http://localhost:3001';
+            const url = `${apiUrl}/search?q=${encodeURIComponent(params.query)}`;
+            try {
+              const res = await fetch(url);
+              if (!res.ok) {
+                return { content: [{ type: 'text' as const, text: `Search failed: HTTP ${res.status}` }] };
+              }
+              const data = await res.json() as { results?: { title: string; url: string; description: string }[] };
+              const results = (data.results ?? []).slice(0, 6);
+              if (results.length === 0) {
+                return { content: [{ type: 'text' as const, text: 'No results found. Try a different query.' }] };
+              }
+              const text = results
+                .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description}`)
+                .join('\n\n');
+              return {
+                content: [{ type: 'text' as const, text }],
+                details: { query: params.query, resultCount: results.length },
+              };
+            } catch (err) {
+              return { content: [{ type: 'text' as const, text: `Search error: ${err instanceof Error ? err.message : String(err)}` }] };
+            }
+          },
+        });
+      });
+    }
+
+    // Build resource loader. Must call reload() before passing to createAgentSession —
+    // when the sdk receives a pre-built resourceLoader it skips reload().
     const resourceLoader = new (DefaultResourceLoader as new (opts: Record<string, unknown>) => unknown)({
       cwd: workspaceDir,
+      extensionFactories,
       ...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),
     });
+    await (resourceLoader as any).reload();
 
     // ── Create agent session ────────────────────────────────────────────
     // Note: agentDir omitted — pi resolves it from cwd and ~/.pi/agent by default.
-    // The plan specified it as workspaceDir but the actual pi API doesn't require it.
     const { session } = await (createAgentSession as Function)({
       cwd: workspaceDir,
       model,
@@ -371,6 +489,7 @@ export async function runAgent(
       logAction(agent.id, 'system', null, {
         tokens: stats.tokens,
         cost: stats.cost,
+        model: modelId,
       }, Date.now() - startedAt);
     }
 
@@ -388,7 +507,7 @@ export async function runAgent(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     onChunk({ type: 'error', message: msg });
-    logAction(agent.id, 'error', null, { message: msg });
+    try { logAction(agent.id, 'error', null, { message: msg }); } catch { /* ignore */ }
   } finally {
     activeSessions.delete(agent.id);
     // Restore env var only if it was injected (envKey is set only after model guard)

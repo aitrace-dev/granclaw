@@ -28,11 +28,11 @@ import { bootstrapWorkspace } from './runner.js';
 // tsx resolves them correctly at runtime. Type information is inferred from
 // the d.ts files we inspected during development.
 // @ts-ignore
-import { createAgentSession, SessionManager, type AgentSession, type SessionStats, type AgentSessionEvent } from '@mariozechner/pi-coding-agent';
+import { createAgentSession, SessionManager } from '@mariozechner/pi-coding-agent';
 // @ts-ignore
-import { getModel, getEnvApiKey, type Model, type Api } from '@mariozechner/pi-ai';
+import { getModel, type Model, type Api } from '@mariozechner/pi-ai';
 // @ts-ignore
-import type { AgentEvent } from '@mariozechner/pi-agent-core';
+import type { AgentEvent } from '@mariozechner/pi-agent-core'; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 // ── StreamChunk ──────────────────────────────────────────────────────────────
 // Identical to runner.ts so callers can switch without changes.
@@ -47,7 +47,7 @@ export type StreamChunk =
 
 // ── Active session tracking ──────────────────────────────────────────────────
 
-const activeSessions = new Map<string, { session: any; abort: () => void }>();
+const activeSessions = new Map<string, { session: any }>();
 
 export function stopAgent(agentId: string): boolean {
   const entry = activeSessions.get(agentId);
@@ -81,11 +81,15 @@ function providerEnvKey(provider: string): string {
 // ── Agent name extraction ────────────────────────────────────────────────────
 
 function extractAgentName(workspaceDir: string): string | null {
-  const claudeMd = path.join(workspaceDir, 'CLAUDE.md');
-  if (!fs.existsSync(claudeMd)) return null;
-  const content = fs.readFileSync(claudeMd, 'utf8');
-  const match = content.match(/^#\s+(.+)/m);
-  return match ? match[1].trim() : null;
+  // Check AGENT.md first (pi runner), fall back to CLAUDE.md (legacy)
+  for (const filename of ['AGENT.md', 'CLAUDE.md']) {
+    const mdPath = path.join(workspaceDir, filename);
+    if (!fs.existsSync(mdPath)) continue;
+    const content = fs.readFileSync(mdPath, 'utf8');
+    const match = content.match(/^#\s+(.+)/m);
+    if (match) return match[1].trim();
+  }
+  return null;
 }
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -114,11 +118,6 @@ export async function runAgent(
     return;
   }
 
-  // Inject the API key into the env so pi-ai's credential chain picks it up.
-  const envKey = providerEnvKey(providerCfg.provider);
-  const prevValue = process.env[envKey];
-  process.env[envKey] = apiKey;
-
   const modelId = agent.model?.trim() || providerCfg.model;
   const startedAt = Date.now();
 
@@ -126,6 +125,11 @@ export async function runAgent(
   const soulExistedBefore = fs.existsSync(path.join(workspaceDir, 'SOUL.md'));
 
   logAction(agent.id, 'message', { text: message });
+
+  // Declare outside try so finally can restore the env var.
+  // undefined means injection hasn't happened yet (e.g. model-not-found early return).
+  let envKey: string | undefined;
+  let prevValue: string | undefined;
 
   try {
     // ── Resolve model ───────────────────────────────────────────────────
@@ -144,6 +148,12 @@ export async function runAgent(
       return;
     }
 
+    // Inject the API key into the env so pi-ai's credential chain picks it up.
+    // Done here (after model guard) so the finally block always restores it.
+    envKey = providerEnvKey(providerCfg.provider);
+    prevValue = process.env[envKey];
+    process.env[envKey] = apiKey;
+
     // ── Session manager ─────────────────────────────────────────────────
     // pi stores sessions as JSONL in a sessions directory. We place it
     // inside the agent workspace so it lives alongside the workspace data.
@@ -153,6 +163,8 @@ export async function runAgent(
     const sessionManager = SessionManager.continueRecent(workspaceDir, sessionsDir);
 
     // ── Create agent session ────────────────────────────────────────────
+    // Note: agentDir omitted — pi resolves it from cwd and ~/.pi/agent by default.
+    // The plan specified it as workspaceDir but the actual pi API doesn't require it.
     const { session } = await (createAgentSession as Function)({
       cwd: workspaceDir,
       model,
@@ -160,10 +172,7 @@ export async function runAgent(
     }) as { session: any };
 
     // Register for abort
-    activeSessions.set(agent.id, {
-      session,
-      abort: () => session.abort(),
-    });
+    activeSessions.set(agent.id, { session });
 
     // ── Subscribe to events ─────────────────────────────────────────────
     // pi emits AgentEvent (from pi-agent-core) and AgentSessionEvent
@@ -183,19 +192,9 @@ export async function runAgent(
           }
 
           // ── Full assistant message (fallback for non-streaming) ────
-          case 'message_end': {
-            const msg = event.message;
-            if (msg?.role === 'assistant' && Array.isArray(msg.content)) {
-              for (const block of msg.content) {
-                if (block.type === 'text' && block.text) {
-                  // Only emit if we haven't been streaming deltas
-                  // (message_update handles the streaming case).
-                  // We skip here to avoid double-emitting.
-                }
-              }
-            }
+          case 'message_end':
+            // Text was already emitted via message_update/text_delta — skip to avoid double-emit
             break;
-          }
 
           // ── Tool lifecycle ────────────────────────────────────────
           case 'tool_execution_start': {
@@ -281,8 +280,10 @@ export async function runAgent(
     logAction(agent.id, 'error', null, { message: msg });
   } finally {
     activeSessions.delete(agent.id);
-    // Restore env var
-    if (prevValue === undefined) delete process.env[envKey];
-    else process.env[envKey] = prevValue;
+    // Restore env var only if it was injected (envKey is set only after model guard)
+    if (envKey !== undefined) {
+      if (prevValue === undefined) delete process.env[envKey];
+      else process.env[envKey] = prevValue;
+    }
   }
 }

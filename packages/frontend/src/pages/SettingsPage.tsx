@@ -5,6 +5,9 @@ import {
   fetchProviderSettings,
   saveProviderSettings,
   clearProviderSettings,
+  fetchSearchSettings,
+  saveSearchSettings,
+  clearSearchSettings,
 } from '../lib/api.ts';
 import { PROVIDERS, getModelsForProvider, getDefaultModel } from '../lib/models.ts';
 
@@ -18,6 +21,12 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [searchProvider, setSearchProvider] = useState<'duckduckgo' | 'brave'>('duckduckgo');
+  const [braveApiKey, setBraveApiKey] = useState('');
+  const [searchSaving, setSearchSaving] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchSuccess, setSearchSuccess] = useState(false);
+
   useEffect(() => {
     fetchProviderSettings()
       .then(s => {
@@ -27,6 +36,11 @@ export function SettingsPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    fetchSearchSettings().then(s => {
+      setSearchProvider(s.provider);
+      // never pre-fill braveApiKey — user must re-enter
+    }).catch(console.error);
   }, []);
 
   function handleProviderChange(p: string) {
@@ -54,6 +68,36 @@ export function SettingsPage() {
       navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove configuration');
+    }
+  }
+
+  async function handleSearchSave() {
+    setSearchSaving(true);
+    setSearchError(null);
+    setSearchSuccess(false);
+    try {
+      await saveSearchSettings(searchProvider, searchProvider === 'brave' ? braveApiKey : undefined);
+      setSearchSuccess(true);
+      setBraveApiKey(''); // clear after save
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSearchSaving(false);
+    }
+  }
+
+  async function handleSearchReset() {
+    setSearchSaving(true);
+    setSearchError(null);
+    try {
+      await clearSearchSettings();
+      setSearchProvider('duckduckgo');
+      setBraveApiKey('');
+      setSearchSuccess(false);
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Failed to reset');
+    } finally {
+      setSearchSaving(false);
     }
   }
 
@@ -138,6 +182,65 @@ export function SettingsPage() {
             </button>
           )}
           {error && <span className="font-mono text-[10px] text-red-400">{error}</span>}
+        </div>
+      </div>
+
+      {/* ── Web Search ── */}
+      <div className="mt-8 pt-8 border-t border-[#33343b]">
+        <h2 className="font-display text-lg font-semibold text-on-surface mb-1">Web Search</h2>
+        <p className="font-mono text-[11px] text-on-surface-variant/40 mb-6">
+          DuckDuckGo works out of the box. Switch to Brave for higher-quality results (requires a Brave Search API key).
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="search-provider-select" className="block font-mono text-[11px] text-on-surface-variant/50 mb-1">Search provider</label>
+            <select
+              id="search-provider-select"
+              className={inputCls + ' w-full appearance-none'}
+              value={searchProvider}
+              onChange={e => { setSearchProvider(e.target.value as 'duckduckgo' | 'brave'); setSearchSuccess(false); }}
+            >
+              <option value="duckduckgo">DuckDuckGo (default, no API key needed)</option>
+              <option value="brave">Brave Search</option>
+            </select>
+          </div>
+
+          {searchProvider === 'brave' && (
+            <div>
+              <label htmlFor="brave-api-key-input" className="block font-mono text-[11px] text-on-surface-variant/50 mb-1">Brave Search API key</label>
+              <input
+                id="brave-api-key-input"
+                type="password"
+                className={inputCls + ' w-full'}
+                placeholder="Enter Brave Search API key"
+                value={braveApiKey}
+                onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
+                autoComplete="off"
+              />
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSearchSave}
+              disabled={searchSaving || (searchProvider === 'brave' && !braveApiKey.trim())}
+              className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {searchSaving ? 'Saving…' : 'Save search settings'}
+            </button>
+            {searchProvider !== 'duckduckgo' && (
+              <button
+                onClick={handleSearchReset}
+                disabled={searchSaving}
+                className="rounded px-3 py-2 text-[12px] font-mono text-on-surface-variant/50 hover:text-red-400 hover:bg-red-950/20 transition-colors disabled:opacity-40"
+              >
+                Reset to DuckDuckGo
+              </button>
+            )}
+            {searchSuccess && <span className="font-mono text-[11px] text-green-400">Saved</span>}
+            {searchError && <span className="font-mono text-[10px] text-red-400">{searchError}</span>}
+          </div>
         </div>
       </div>
     </div>

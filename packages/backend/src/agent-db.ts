@@ -30,10 +30,11 @@ function getDb(workspaceDir: string): Database.Database {
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
-      agent_id    TEXT    NOT NULL,
-      channel_id  TEXT    NOT NULL DEFAULT 'ui',
-      session_id  TEXT    NOT NULL DEFAULT '',
-      updated_at  INTEGER NOT NULL,
+      agent_id     TEXT    NOT NULL,
+      channel_id   TEXT    NOT NULL DEFAULT 'ui',
+      session_id   TEXT    NOT NULL DEFAULT '',
+      session_file TEXT,
+      updated_at   INTEGER NOT NULL,
       PRIMARY KEY (agent_id, channel_id)
     );
 
@@ -51,6 +52,12 @@ function getDb(workspaceDir: string): Database.Database {
       ON jobs (agent_id, status, created_at);
   `);
 
+  // Backward-compatible migration: add session_file column if missing
+  const existingCols = (db.pragma('table_info(sessions)') as Array<{ name: string }>).map(c => c.name);
+  if (!existingCols.includes('session_file')) {
+    db.exec(`ALTER TABLE sessions ADD COLUMN session_file TEXT`);
+  }
+
   db.pragma('foreign_keys = ON');
 
   dbPool.set(workspaceDir, db);
@@ -67,13 +74,22 @@ export function getSession(workspaceDir: string, agentId: string, channelId = 'u
   return row?.session_id || null;
 }
 
-export function saveSession(workspaceDir: string, agentId: string, sessionId: string, channelId = 'ui'): void {
+export function saveSession(
+  workspaceDir: string,
+  agentId: string,
+  sessionId: string,
+  channelId = 'ui',
+  sessionFile?: string
+): void {
   const db = getDb(workspaceDir);
   db.prepare(`
-    INSERT INTO sessions (agent_id, channel_id, session_id, updated_at)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(agent_id, channel_id) DO UPDATE SET session_id = excluded.session_id, updated_at = excluded.updated_at
-  `).run(agentId, channelId, sessionId, Date.now());
+    INSERT INTO sessions (agent_id, channel_id, session_id, session_file, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(agent_id, channel_id) DO UPDATE SET
+      session_id = excluded.session_id,
+      session_file = excluded.session_file,
+      updated_at = excluded.updated_at
+  `).run(agentId, channelId, sessionId, sessionFile ?? null, Date.now());
 }
 
 // ── Job queue ─────────────────────────────────────────────────────────────────

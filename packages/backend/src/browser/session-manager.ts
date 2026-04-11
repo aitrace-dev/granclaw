@@ -162,31 +162,27 @@ export async function startRecording(handle: BrowserSessionHandle): Promise<bool
   const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
   const recordingPath = path.join(handle.sessionDir, 'recording.webm');
 
+  // If this invocation is the one that spawns the daemon, the daemon must
+  // load the persistent profile at boot. Pass --profile here so cookies are
+  // loaded before any subsequent command runs — agent-browser ignores
+  // --profile on already-running daemons.
+  const profileDir = path.join(handle.workspaceDir, '.browser-profile');
+  const profileArgs = fs.existsSync(profileDir) ? ['--profile', profileDir] : [];
+
+  const recordArgv = ['--session', handle.agentId, ...profileArgs, 'record', 'start', recordingPath];
+  const stopArgv = ['--session', handle.agentId, 'record', 'stop'];
+
   const tryStart = async (): Promise<boolean> => {
     try {
-      await execFileAsync(
-        bin,
-        ['--session', handle.agentId, 'record', 'start', recordingPath],
-        { cwd: handle.workspaceDir, timeout: 5000 },
-      );
+      await execFileAsync(bin, recordArgv, { cwd: handle.workspaceDir, timeout: 5000 });
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('already active')) {
         // Force-stop the dangling recording and retry once
+        try { await execFileAsync(bin, stopArgv, { cwd: handle.workspaceDir, timeout: 5000 }); } catch { /* ignore */ }
         try {
-          await execFileAsync(
-            bin,
-            ['--session', handle.agentId, 'record', 'stop'],
-            { cwd: handle.workspaceDir, timeout: 5000 },
-          );
-        } catch { /* ignore */ }
-        try {
-          await execFileAsync(
-            bin,
-            ['--session', handle.agentId, 'record', 'start', recordingPath],
-            { cwd: handle.workspaceDir, timeout: 5000 },
-          );
+          await execFileAsync(bin, recordArgv, { cwd: handle.workspaceDir, timeout: 5000 });
           return true;
         } catch { return false; }
       }

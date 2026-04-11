@@ -158,7 +158,14 @@ function main() {
             telegramAdapter!.appendChunk(job.channelId, chunk.text);
           }
         }
-        if (chunk.type === 'tool_call') toolCallStrings.push(`${chunk.tool}(${JSON.stringify(chunk.input)})`);
+        if (chunk.type === 'tool_call') {
+          toolCallStrings.push(`${chunk.tool}(${JSON.stringify(chunk.input)})`);
+          if (isTelegramJob) {
+            // Live status update — appears in the user's chat as the
+            // acknowledgment message gets edited to show progress.
+            void telegramAdapter!.appendToolStep(job.channelId, chunk.tool);
+          }
+        }
       }, { channelId: job.channelId });
 
       // Persist tool calls + response

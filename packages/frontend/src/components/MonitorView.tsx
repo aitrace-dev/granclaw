@@ -11,8 +11,15 @@ function relativeTime(ms: number): string {
   return `${h}h ${m % 60}m ago`;
 }
 
-function StatusDot({ color, pulse }: { color: string; pulse?: boolean }) {
-  return <span className={`inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 ${pulse ? 'animate-pulse' : ''}`} style={{ background: color }} />;
+function StatusDot({ tone, pulse }: { tone: 'success' | 'warning' | 'primary' | 'info' | 'muted' | 'muted-dim'; pulse?: boolean }) {
+  const cls =
+    tone === 'success' ? 'bg-success' :
+    tone === 'warning' ? 'bg-warning' :
+    tone === 'primary' ? 'bg-primary' :
+    tone === 'info' ? 'bg-info' :
+    tone === 'muted' ? 'bg-outline' :
+    'bg-outline/50';
+  return <span className={`inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 ${pulse ? 'animate-pulse' : ''} ${cls}`} />;
 }
 
 function ProcessCard({ info, label, extra }: { info: ProcessInfo | null; label: string; extra?: React.ReactNode }) {
@@ -20,25 +27,25 @@ function ProcessCard({ info, label, extra }: { info: ProcessInfo | null; label: 
   return (
     <div className="rounded bg-surface-container-lowest border border-outline-variant/40 p-3 space-y-2">
       <div className="flex items-center gap-2">
-        <StatusDot color="#4ade80" pulse />
-        <span className="font-mono text-[10px] text-on-surface/70 font-medium">{label}</span>
+        <StatusDot tone="success" pulse />
+        <span className="font-label text-[10px] uppercase tracking-wider text-on-surface font-semibold">{label}</span>
         <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">PID {info.pid}</span>
       </div>
       <div className="grid grid-cols-4 gap-2">
         <div>
-          <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">CPU</p>
+          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">CPU</p>
           <p className="font-mono text-[11px] text-on-surface/80">{info.cpu}</p>
         </div>
         <div>
-          <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">MEM</p>
+          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">MEM</p>
           <p className="font-mono text-[11px] text-on-surface/80">{info.mem}</p>
         </div>
         <div>
-          <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">RSS</p>
+          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">RSS</p>
           <p className="font-mono text-[11px] text-on-surface/80">{info.rss}</p>
         </div>
         <div>
-          <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">Uptime</p>
+          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">Uptime</p>
           <p className="font-mono text-[11px] text-on-surface/80">{info.elapsed}</p>
         </div>
       </div>
@@ -71,12 +78,12 @@ export function MonitorView({ agentId }: { agentId: string }) {
   const isIdle = processing.length === 0 && workflows.length === 0 && totalClaude === 0;
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#111319' }}>
+    <div className="flex flex-col h-full bg-surface-container-lowest">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/30">
         <div className="flex items-center gap-2">
           <span className="text-[13px] opacity-60">📡</span>
-          <span className="text-[11px] uppercase tracking-[0.14em] font-medium text-on-surface-variant">
+          <span className="font-label text-[11px] uppercase tracking-[0.14em] font-semibold text-on-surface">
             Monitor
           </span>
         </div>
@@ -84,7 +91,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
           <span className={`font-mono text-[9px] ${isIdle ? 'text-on-surface-variant/60' : 'text-secondary'}`}>
             {isIdle ? 'idle' : `${totalClaude} claude session${totalClaude !== 1 ? 's' : ''}`}
           </span>
-          <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: isIdle ? '#475569' : '#4ade80' }} />
+          <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${isIdle ? 'bg-outline/50' : 'bg-success'}`} />
         </div>
       </div>
 
@@ -92,7 +99,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
 
         {/* ── Processes ── */}
         <div>
-          <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+          <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
             Processes
           </p>
           <div className="space-y-1.5">
@@ -108,21 +115,21 @@ export function MonitorView({ agentId }: { agentId: string }) {
             {data.browserProcess && (
               <div className="rounded bg-surface-container-lowest border border-outline-variant/40 p-3">
                 <div className="flex items-center gap-2">
-                  <StatusDot color="#facc15" pulse />
-                  <span className="font-mono text-[10px] text-on-surface/70 font-medium">Browser Daemon</span>
+                  <StatusDot tone="warning" pulse />
+                  <span className="font-label text-[10px] uppercase tracking-wider text-on-surface font-semibold">Browser Daemon</span>
                   <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">PID {data.browserProcess.pid}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   <div>
-                    <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">CPU</p>
+                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">CPU</p>
                     <p className="font-mono text-[11px] text-on-surface/80">{data.browserProcess.cpu}</p>
                   </div>
                   <div>
-                    <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">MEM</p>
+                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">MEM</p>
                     <p className="font-mono text-[11px] text-on-surface/80">{data.browserProcess.mem}</p>
                   </div>
                   <div>
-                    <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">RSS</p>
+                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">RSS</p>
                     <p className="font-mono text-[11px] text-on-surface/80">{data.browserProcess.rss}</p>
                   </div>
                 </div>
@@ -134,32 +141,32 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {/* ── Claude Sessions ── */}
         {totalClaude > 0 && (
           <div>
-            <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+            <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
               Active Claude Sessions — {totalClaude}
             </p>
             <div className="space-y-1.5">
               {data.claudeProcesses.map(cp => (
                 <div key={cp.pid} className="rounded bg-surface-container-lowest border border-outline-variant/40 p-3">
                   <div className="flex items-center gap-2 mb-2">
-                    <StatusDot color="#a78bfa" pulse />
+                    <StatusDot tone="primary" pulse />
                     <span className="font-mono text-[10px] text-on-surface/70">claude</span>
                     <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">PID {cp.pid}</span>
                   </div>
                   <div className="grid grid-cols-4 gap-2">
                     <div>
-                      <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">CPU</p>
+                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">CPU</p>
                       <p className="font-mono text-[11px] text-on-surface/80">{cp.cpu}</p>
                     </div>
                     <div>
-                      <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">MEM</p>
+                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">MEM</p>
                       <p className="font-mono text-[11px] text-on-surface/80">{cp.mem}</p>
                     </div>
                     <div>
-                      <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">RSS</p>
+                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">RSS</p>
                       <p className="font-mono text-[11px] text-on-surface/80">{cp.rss}</p>
                     </div>
                     <div>
-                      <p className="text-[8px] uppercase text-on-surface-variant/60 mb-0.5">Uptime</p>
+                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">Uptime</p>
                       <p className="font-mono text-[11px] text-on-surface/80">{cp.elapsed}</p>
                     </div>
                   </div>
@@ -174,18 +181,18 @@ export function MonitorView({ agentId }: { agentId: string }) {
 
         {/* ── Jobs ── */}
         <div>
-          <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+          <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
             Job Queue — {processing.length} running, {pending.length} queued
           </p>
 
           {processing.length === 0 && pending.length === 0 ? (
-            <p className="font-mono text-[10px] text-on-surface-variant/25 italic">No active jobs</p>
+            <p className="text-[10px] text-on-surface-variant italic">No active jobs</p>
           ) : (
             <div className="space-y-1.5">
               {processing.map(j => (
                 <div key={j.id} className="rounded bg-surface-container-lowest border border-outline-variant/40 p-2.5">
                   <div className="flex items-center gap-2 mb-1">
-                    <StatusDot color="#4ade80" pulse />
+                    <StatusDot tone="success" pulse />
                     <span className="font-mono text-[9px] text-secondary/70 uppercase">processing</span>
                     <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">{j.channelId}</span>
                     <button
@@ -204,7 +211,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
               {pending.map(j => (
                 <div key={j.id} className="rounded bg-surface-container-lowest p-2.5">
                   <div className="flex items-center gap-2 mb-1">
-                    <StatusDot color="#64748b" />
+                    <StatusDot tone="muted" />
                     <span className="font-mono text-[9px] text-on-surface-variant/70 uppercase">queued</span>
                     <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">{j.channelId}</span>
                     <button
@@ -226,13 +233,13 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {/* ── Running Workflows ── */}
         {workflows.length > 0 && (
           <div>
-            <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
+            <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
               Running Workflows
             </p>
             <div className="space-y-1.5">
               {workflows.map(w => (
                 <div key={w.runId} className="rounded bg-surface-container-lowest border border-outline-variant/40 p-2.5 flex items-center gap-2">
-                  <StatusDot color="#facc15" pulse />
+                  <StatusDot tone="warning" pulse />
                   <div className="flex-1 min-w-0">
                     <span className="font-mono text-[10px] text-on-surface/70">{w.workflowName}</span>
                     <span className="font-mono text-[8px] text-on-surface-variant/60 ml-2">{w.runId.slice(0, 8)}</span>

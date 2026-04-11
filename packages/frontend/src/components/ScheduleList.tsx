@@ -94,8 +94,8 @@ function RunMessages({ agentId, run, onBack }: { agentId: string; run: ScheduleR
               m.role === 'user'
                 ? 'bg-surface-container-lowest border border-outline-variant/40 text-on-surface-variant/70'
                 : m.role === 'tool_call'
-                ? 'bg-[#13141a] text-on-surface-variant/70 font-mono text-[10px]'
-                : 'bg-[#1a2235] text-on-surface/90'
+                ? 'bg-surface-container-low text-on-surface-variant/70 font-mono text-[10px]'
+                : 'bg-surface-container text-on-surface/90'
             }`}
           >
             {m.role === 'tool_call' && (
@@ -179,7 +179,7 @@ function ScheduleRuns({
         <button
           key={run.id}
           onClick={() => setSelectedRun(run)}
-          className="text-left rounded-md bg-surface-container-lowest border border-outline-variant/40 p-2.5 hover:bg-[#25262e] transition-colors"
+          className="text-left rounded-md bg-surface-container-low border border-outline-variant/40 p-2.5 hover:bg-surface-container-highest transition-colors"
         >
           <div className="text-[10px] text-on-surface/80">
             {new Date(run.startedAt).toLocaleString()}
@@ -263,7 +263,7 @@ export function ScheduleList({ agentId }: { agentId: string }) {
         <div
           key={s.id}
           onClick={() => setSelected(s)}
-          className="rounded-md bg-surface-container-lowest border border-outline-variant/40 p-3 space-y-2 cursor-pointer hover:bg-[#25262e] transition-colors"
+          className="rounded-md bg-surface-container-low border border-outline-variant/40 p-3 space-y-2 cursor-pointer hover:bg-surface-container-highest transition-colors"
         >
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 rounded-full ${s.status === 'active' ? 'bg-green-500' : 'bg-yellow-500/50'}`} />

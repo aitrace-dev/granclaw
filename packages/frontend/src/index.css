@@ -20,10 +20,10 @@
     --background:                  254 249 239;  /* #fef9ef */
     --on-background:                29  28  22;  /* #1d1c16 */
     --on-surface:                   29  28  22;  /* #1d1c16 */
-    --on-surface-variant:          121 117 135;  /* #797587 */
+    --on-surface-variant:           58  55  47;  /* #3a372f — warm dark ink, strong contrast on cream */
     --surface-bright:              254 249 239;  /* #fef9ef */
     --surface-dim:                 222 218 208;  /* #dedad0 */
-    --surface-container-lowest:    255 255 255;  /* #ffffff */
+    --surface-container-lowest:    251 246 235;  /* #fbf6eb — soft warm paper, not stark white */
     --surface-container-low:       248 243 233;  /* #f8f3e9 */
     --surface-container:           242 237 227;  /* #f2ede3 */
     --surface-container-high:      237 227 207;  /* #ede3cf */

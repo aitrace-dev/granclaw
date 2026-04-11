@@ -399,7 +399,7 @@ export function ChatPage() {
                   : m.role === 'user'
                     ? (m.text || '…')
                     : m.text
-                      ? <div className="prose prose-invert prose-sm max-w-none
+                      ? <div className="prose prose-sm dark:prose-invert max-w-none text-on-surface
                           prose-p:my-1 prose-headings:mt-3 prose-headings:mb-1
                           prose-code:bg-surface-dim prose-code:px-1 prose-code:rounded prose-code:text-xs
                           prose-pre:bg-surface-dim prose-pre:text-xs

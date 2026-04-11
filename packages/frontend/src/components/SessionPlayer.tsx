@@ -45,10 +45,7 @@ function CommandList({
   if (commands.length === 0) return null;
 
   return (
-    <div
-      className="w-56 flex-shrink-0 flex flex-col border-l border-outline-variant/30 overflow-hidden"
-      style={{ background: '#191b22' }}
-    >
+    <div className="w-56 flex-shrink-0 flex flex-col border-l border-outline-variant/30 overflow-hidden bg-surface-container">
       <div className="px-3 py-2 border-b border-outline-variant/30">
         <span className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
           Events ({commands.length})
@@ -145,7 +142,7 @@ function LiveView({ agentId, session }: { agentId: string; session: BrowserSessi
   }, [agentId, session.id]);
 
   return (
-    <div className="flex-1 flex items-center justify-center overflow-hidden relative" style={{ background: '#111319' }}>
+    <div className="flex-1 flex items-center justify-center overflow-hidden relative bg-surface-container-lowest">
       {frame ? (
         <img
           src={frame}
@@ -244,8 +241,8 @@ function ReplayView({
   return (
     <>
       <div
-        className="flex-1 flex items-center justify-center overflow-hidden relative"
-        style={{ background: '#111319', minHeight: 0 }}
+        className="flex-1 flex items-center justify-center overflow-hidden relative bg-surface-container-lowest"
+        style={{ minHeight: 0 }}
       >
         {videoSrc ? (
           <div className="relative w-full h-full flex items-center justify-center">
@@ -339,7 +336,7 @@ export function SessionPlayer({
   const isLive = session.status === 'active';
 
   return (
-    <div className="flex flex-1 flex-col h-full min-w-0 rounded-lg" style={{ background: '#111319' }}>
+    <div className="flex flex-1 flex-col h-full min-w-0 rounded-lg bg-surface-container-lowest">
 
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-outline-variant/30 flex-shrink-0">

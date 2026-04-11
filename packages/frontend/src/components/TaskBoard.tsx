@@ -72,8 +72,7 @@ function TaskCard({
       draggable
       onDragStart={() => onDragStart(task.id)}
       onClick={() => onClick(task)}
-      className="rounded-md p-3 cursor-pointer transition-colors hover:brightness-110 select-none"
-      style={{ background: '#1e1f26' }}
+      className="rounded-md p-3 cursor-pointer transition-colors hover:brightness-110 select-none bg-surface-container-high"
     >
       {/* ID + source badge */}
       <div className="flex items-center justify-between mb-1.5 gap-1">
@@ -277,8 +276,7 @@ function ColumnWrapper({
 
   return (
     <div
-      className="w-56 flex-shrink-0 flex flex-col gap-0 rounded-md overflow-hidden"
-      style={{ background: '#191b22' }}
+      className="w-56 flex-shrink-0 flex flex-col gap-0 rounded-md overflow-hidden bg-surface-container"
       onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={() => { setIsDragOver(false); void onDrop(status); }}
@@ -315,7 +313,7 @@ function ColumnWrapper({
         ))}
 
         {addingTask && (
-          <div className="rounded-md p-2.5 flex flex-col gap-2" style={{ background: '#1e1f26' }}>
+          <div className="rounded-md p-2.5 flex flex-col gap-2 bg-surface-container-high">
             <input
               autoFocus
               className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 w-full"

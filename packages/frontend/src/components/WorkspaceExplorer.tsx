@@ -77,10 +77,10 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
   const pathParts = currentPath ? currentPath.split('/') : [];
 
   return (
-    <div className="flex flex-1 flex-col rounded-md overflow-hidden min-w-0" style={{ background: '#1e1f26' }}>
+    <div className="flex flex-1 flex-col rounded-md overflow-hidden min-w-0 bg-surface-container-high">
 
       {/* ── Toolbar ──────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-4 py-2.5" style={{ background: '#191b22' }}>
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-surface-container">
         {/* Breadcrumb */}
         <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
           <button

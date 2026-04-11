@@ -287,19 +287,19 @@ export function UsageView({ agentId }: { agentId: string }) {
           <div className="rounded bg-surface-container-lowest border border-outline-variant/40 p-3 space-y-1.5">
             <div className="flex justify-between">
               <span className="font-mono text-[10px] text-on-surface-variant">Input tokens</span>
-              <span className="font-mono text-[10px] text-[#a78bfa]">{formatTokens(data.totalInputTokens)}</span>
+              <span className="font-mono text-[10px] text-primary">{formatTokens(data.totalInputTokens)}</span>
             </div>
             <div className="flex justify-between">
               <span className="font-mono text-[10px] text-on-surface-variant">Output tokens</span>
-              <span className="font-mono text-[10px] text-[#38bdf8]">{formatTokens(data.totalOutputTokens)}</span>
+              <span className="font-mono text-[10px] text-info">{formatTokens(data.totalOutputTokens)}</span>
             </div>
             <div className="flex justify-between">
               <span className="font-mono text-[10px] text-on-surface-variant">Cache read</span>
-              <span className="font-mono text-[10px] text-[#4ade80]">{formatTokens(data.totalCacheReadTokens)}</span>
+              <span className="font-mono text-[10px] text-success">{formatTokens(data.totalCacheReadTokens)}</span>
             </div>
             <div className="flex justify-between">
               <span className="font-mono text-[10px] text-on-surface-variant">Cache write</span>
-              <span className="font-mono text-[10px] text-[#facc15]">{formatTokens(data.totalCacheCreateTokens)}</span>
+              <span className="font-mono text-[10px] text-warning">{formatTokens(data.totalCacheCreateTokens)}</span>
             </div>
           </div>
         </div>
@@ -352,9 +352,9 @@ export function UsageView({ agentId }: { agentId: string }) {
                   <tr key={d.date} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
                     <td className="px-3 py-1.5 font-mono text-[10px] text-on-surface/70">{d.date}</td>
                     <td className="px-3 py-1.5 font-mono text-[10px] text-on-surface-variant text-right">{d.sessions}</td>
-                    <td className="px-3 py-1.5 font-mono text-[10px] text-[#a78bfa] text-right">{formatTokens(d.inputTokens)}</td>
-                    <td className="px-3 py-1.5 font-mono text-[10px] text-[#38bdf8] text-right">{formatTokens(d.outputTokens)}</td>
-                    <td className="px-3 py-1.5 font-mono text-[10px] text-[#4ade80] text-right">{formatTokens(d.cacheReadTokens + d.cacheCreateTokens)}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-primary text-right">{formatTokens(d.inputTokens)}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-info text-right">{formatTokens(d.outputTokens)}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-success text-right">{formatTokens(d.cacheReadTokens + d.cacheCreateTokens)}</td>
                     <td className="px-3 py-1.5 font-mono text-[10px] text-error/60 text-right">${d.estimatedCostUsd.toFixed(2)}</td>
                   </tr>
                 ))}

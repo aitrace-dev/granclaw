@@ -61,8 +61,7 @@ function SessionCard({
   return (
     <button
       onClick={onClick}
-      className="w-full text-left rounded-md transition-colors hover:brightness-110"
-      style={{ background: isActive ? '#1e1f26' : '#191b22' }}
+      className={`w-full text-left rounded-md transition-colors hover:brightness-110 ${isActive ? 'bg-surface-container-high' : 'bg-surface-container'}`}
     >
       <div className="p-3">
         {isActive && (
@@ -282,7 +281,7 @@ export function BrowserView({ agentId }: { agentId: string }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col h-full min-w-0 rounded-lg" style={{ background: '#111319' }}>
+    <div className="flex flex-1 flex-col h-full min-w-0 rounded-lg bg-surface-container-lowest">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/30">
         <div className="flex items-center gap-2">

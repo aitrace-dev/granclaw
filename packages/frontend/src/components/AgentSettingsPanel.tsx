@@ -31,8 +31,7 @@ function Section({
 
   return (
     <div
-      className="rounded-md overflow-hidden transition-colors"
-      style={{ background: open ? '#1e1f26' : '#191b22' }}
+      className={`rounded-md overflow-hidden transition-colors ${open ? 'bg-surface-container-high' : 'bg-surface-container'}`}
     >
       <button
         onClick={() => setOpen((o) => !o)}
@@ -91,8 +90,8 @@ function ViewButton({
       onClick={onClick}
       className={`w-full rounded-md flex items-center gap-3 px-4 py-3 transition-colors ${
         active
-          ? 'bg-surface-container-lowest border border-outline-variant/40 text-on-surface'
-          : 'bg-surface-container-lowest text-on-surface-variant/70 hover:text-on-surface-variant/70 hover:brightness-110'
+          ? 'bg-surface-container-high border border-outline-variant/40 text-on-surface'
+          : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
       }`}
     >
       <span className="text-[13px]">{icon}</span>
@@ -285,7 +284,7 @@ export function AgentSettingsPanel({
           )}
 
           {secretNames.length === 0 && (
-            <p className="font-mono text-[10px] text-on-surface-variant/25 italic">No secrets configured</p>
+            <p className="font-mono text-[10px] text-on-surface-variant italic">No secrets configured</p>
           )}
 
           {/* Edit mode: update an existing secret */}

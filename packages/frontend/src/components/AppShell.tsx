@@ -6,7 +6,7 @@ export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
-  const isChat = location.pathname.includes('/chat');
+  const isChat = /\/agents\/[^/]+\/(chat|view)/.test(location.pathname);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-on-surface">

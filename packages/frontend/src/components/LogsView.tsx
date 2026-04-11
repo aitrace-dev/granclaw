@@ -203,7 +203,7 @@ export function LogsView({ agentId }: { agentId: string }) {
   const sorted = logs;
 
   return (
-    <div className="flex flex-col h-full w-full min-w-0 rounded-lg overflow-hidden" style={{ background: '#0c0d12' }}>
+    <div className="flex flex-col h-full w-full min-w-0 rounded-lg overflow-hidden bg-surface-container-lowest">
 
       {/* ── Search + controls bar ── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-outline-variant/30 bg-background">
@@ -223,7 +223,7 @@ export function LogsView({ agentId }: { agentId: string }) {
             {search && (
               <button
                 onClick={() => { setSearch(''); setSearchDebounced(''); }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface-variant/60 text-xs"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface text-xs"
               >
                 x
               </button>
@@ -246,8 +246,8 @@ export function LogsView({ agentId }: { agentId: string }) {
               onClick={() => setFilter(value)}
               className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-mono transition-colors ${
                 filter === value
-                  ? 'bg-white/10 text-on-surface'
-                  : 'text-on-surface-variant/70 hover:text-on-surface-variant/70 hover:surface-container/50'
+                  ? 'bg-surface-container-high text-on-surface'
+                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50'
               }`}
             >
               {color && <span className={`w-1.5 h-1.5 rounded-full ${color}`} />}
@@ -260,15 +260,15 @@ export function LogsView({ agentId }: { agentId: string }) {
         <button
           onClick={() => setLive(l => !l)}
           className={`flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-mono transition-colors ${
-            live ? 'bg-emerald-500/15 text-success' : 'text-on-surface-variant/70 hover:text-on-surface-variant/60'
+            live ? 'bg-success/15 text-success' : 'text-on-surface-variant hover:text-on-surface'
           }`}
         >
-          <span className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
+          <span className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-success animate-pulse' : 'bg-outline/60'}`} />
           Live
         </button>
 
         {/* Count */}
-        <span className="font-mono text-[9px] text-on-surface-variant/25 tabular-nums">
+        <span className="font-mono text-[9px] text-on-surface-variant tabular-nums">
           {logs.length}/{total}
         </span>
       </div>
@@ -277,11 +277,11 @@ export function LogsView({ agentId }: { agentId: string }) {
       <div ref={containerRef} className="flex-1 overflow-y-auto scrollbar-thin font-mono text-[11px]">
         {loading && logs.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <span className="text-on-surface-variant/20 text-[10px]">loading...</span>
+            <span className="text-on-surface-variant text-[10px]">loading...</span>
           </div>
         ) : sorted.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <span className="text-on-surface-variant/20 text-[10px]">
+            <span className="text-on-surface-variant text-[10px]">
               {search ? `no results for "${search}"` : 'no log entries'}
             </span>
           </div>
@@ -295,7 +295,7 @@ export function LogsView({ agentId }: { agentId: string }) {
                 <div
                   key={entry._id}
                   onClick={() => toggle(entry._id)}
-                  className={`group px-3 py-[5px] cursor-pointer transition-colors hover:bg-white/[0.03] ${levelBg(entry.type)} ${isExpanded ? 'bg-white/[0.02]' : ''}`}
+                  className={`group px-3 py-[5px] cursor-pointer transition-colors hover:bg-surface-container/40 ${levelBg(entry.type)} ${isExpanded ? 'bg-surface-container/30' : ''}`}
                 >
                   {/* Single log line */}
                   <div className="flex items-start gap-2 leading-relaxed">
@@ -303,7 +303,7 @@ export function LogsView({ agentId }: { agentId: string }) {
                     <span className={`mt-[6px] w-[5px] h-[5px] rounded-full flex-shrink-0 ${levelDot(entry.type)}`} />
 
                     {/* Timestamp */}
-                    <span className="text-on-surface-variant/25 flex-shrink-0 w-[70px] tabular-nums">
+                    <span className="text-on-surface-variant flex-shrink-0 w-[70px] tabular-nums">
                       {formatTs(entry.createdAt)}
                     </span>
 
@@ -314,20 +314,20 @@ export function LogsView({ agentId }: { agentId: string }) {
 
                     {/* Message */}
                     <span className={`flex-1 min-w-0 ${isExpanded ? '' : 'truncate'} ${
-                      entry.type === 'error' ? 'text-error' : 'text-on-surface-variant/60'
+                      entry.type === 'error' ? 'text-error' : 'text-on-surface'
                     }`}>
                       {highlightSearch(summary, searchDebounced)}
                     </span>
 
                     {/* Duration */}
                     {entry.durationMs != null && (
-                      <span className="flex-shrink-0 text-[9px] text-on-surface-variant/20 tabular-nums">
+                      <span className="flex-shrink-0 text-[9px] text-on-surface-variant tabular-nums">
                         {entry.durationMs > 1000 ? `${(entry.durationMs / 1000).toFixed(1)}s` : `${entry.durationMs}ms`}
                       </span>
                     )}
 
                     {/* Expand indicator */}
-                    <span className="flex-shrink-0 text-[8px] text-on-surface-variant/15 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="flex-shrink-0 text-[8px] text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">
                       {isExpanded ? '−' : '+'}
                     </span>
                   </div>
@@ -337,16 +337,16 @@ export function LogsView({ agentId }: { agentId: string }) {
                     <div className="ml-[79px] mt-1.5 mb-1 space-y-1.5">
                       {!!entry.input && entry.input !== 'null' && (
                         <div>
-                          <span className="text-[8px] uppercase text-on-surface-variant/20">input</span>
-                          <pre className="text-[10px] text-on-surface-variant/70 mt-0.5 bg-black/30 rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
+                          <span className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant">input</span>
+                          <pre className="text-[10px] text-on-surface mt-0.5 bg-surface-container-high rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
                             {JSON.stringify(parse(entry.input), null, 2)}
                           </pre>
                         </div>
                       )}
                       {!!entry.output && entry.output !== 'null' && (
                         <div>
-                          <span className="text-[8px] uppercase text-on-surface-variant/20">output</span>
-                          <pre className="text-[10px] text-on-surface-variant/70 mt-0.5 bg-black/30 rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
+                          <span className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant">output</span>
+                          <pre className="text-[10px] text-on-surface mt-0.5 bg-surface-container-high rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
                             {JSON.stringify(parse(entry.output), null, 2)}
                           </pre>
                         </div>

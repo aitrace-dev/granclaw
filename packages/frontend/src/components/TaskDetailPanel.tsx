@@ -55,7 +55,7 @@ function CommentItem({ comment }: { comment: TaskComment }) {
           {relativeTime(comment.createdAt)}
         </span>
       </div>
-      <div className="text-[12px] text-on-surface/80 leading-relaxed prose prose-invert prose-sm max-w-none">
+      <div className="text-[12px] text-on-surface/80 leading-relaxed prose prose-sm dark:prose-invert max-w-none">
         <ReactMarkdown>{comment.body}</ReactMarkdown>
       </div>
     </div>
@@ -151,9 +151,8 @@ export function TaskDetailPanel({
 
       {/* Panel */}
       <div
-        className="fixed inset-y-0 right-0 w-96 z-50 flex flex-col overflow-hidden"
+        className="fixed inset-y-0 right-0 w-96 z-50 flex flex-col overflow-hidden bg-surface-container"
         style={{
-          background: '#191b22',
           boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
         }}
       >
@@ -292,7 +291,7 @@ export function TaskDetailPanel({
                   title="Click to edit"
                 >
                   {task.description ? (
-                    <div className="text-[12px] text-on-surface/70 leading-relaxed prose prose-invert prose-sm max-w-none group-hover:text-on-surface/90 transition-colors">
+                    <div className="text-[12px] text-on-surface/70 leading-relaxed prose prose-sm dark:prose-invert max-w-none group-hover:text-on-surface/90 transition-colors">
                       <ReactMarkdown>{task.description}</ReactMarkdown>
                     </div>
                   ) : (

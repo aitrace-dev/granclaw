@@ -38,6 +38,18 @@ const execFileAsync = promisify(execFile);
 
 const TAB_POLL_INTERVAL_MS = 2000;
 
+/**
+ * Viewport we override the page to before starting the screencast.
+ *
+ * agent-browser's default viewport is 1280×577 — oddly short, it crops most
+ * web pages awkwardly. We set 1280×800 via Emulation.setDeviceMetricsOverride
+ * on each attach so the live view sees a realistic desktop-laptop viewport,
+ * without changing the default device scale factor (DPR stays 1 so agent
+ * eval/snapshot behavior is unchanged).
+ */
+const LIVE_VIEW_WIDTH = 1280;
+const LIVE_VIEW_HEIGHT = 800;
+
 interface CdpPage {
   id: string;
   url: string;
@@ -211,12 +223,19 @@ function attachPageCdp(stream: Stream, page: CdpPage): void {
 
   chromeWs.on('open', () => {
     if (stream.disposed) { try { chromeWs.close(); } catch {} return; }
-    const id = ++stream.cdpMessageId;
+
     chromeWs.send(JSON.stringify({
-      id,
+      id: ++stream.cdpMessageId,
       method: 'Page.startScreencast',
-      params: { format: 'jpeg', quality: 60, maxWidth: 1280, maxHeight: 720, everyNthFrame: 1 },
+      params: {
+        format: 'jpeg',
+        quality: 60,
+        maxWidth: LIVE_VIEW_WIDTH,
+        maxHeight: LIVE_VIEW_HEIGHT,
+        everyNthFrame: 1,
+      },
     }));
+
     sendToSubscribers(stream, {
       type: 'attached',
       targetId: page.id,
@@ -325,13 +344,39 @@ function stopPollLoop(stream: Stream): void {
 }
 
 /**
- * Initial attach: discover the daemon, find the active tab, bind screencast,
- * start the poll loop.
+ * Raise the daemon's viewport to a sensible desktop default.
+ *
+ * agent-browser's default viewport is 1280×577 which crops most pages
+ * awkwardly. We'd rather send a plain CDP Emulation.setDeviceMetricsOverride
+ * but that gets silently ignored — agent-browser manages its window bounds
+ * internally and only honors its own `set viewport` CLI command. Shelling
+ * out to that works reliably.
+ *
+ * Best-effort: we don't fail the attach if this errors.
+ */
+async function raiseViewport(agentId: string, workspaceDir: string): Promise<void> {
+  try {
+    const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+    await execFileAsync(
+      bin,
+      ['--session', agentId, 'set', 'viewport', String(LIVE_VIEW_WIDTH), String(LIVE_VIEW_HEIGHT)],
+      { cwd: workspaceDir, timeout: 3000 },
+    );
+  } catch {
+    // Best effort — if agent-browser refuses, the frame just ends up smaller.
+  }
+}
+
+/**
+ * Initial attach: discover the daemon, raise the viewport, find the active
+ * tab, bind screencast, start the poll loop.
  */
 async function attachChrome(stream: Stream): Promise<string | null> {
   const browserCdp = await discoverCdpUrl(stream.agentId, stream.workspaceDir);
   if (!browserCdp) return 'agent-browser not running or CDP unavailable';
   stream.browserCdpUrl = browserCdp;
+
+  await raiseViewport(stream.agentId, stream.workspaceDir);
 
   const active = await getActiveTab(stream.agentId, stream.workspaceDir);
   const pages = await fetchCdpPages(browserCdp);

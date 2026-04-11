@@ -29,6 +29,8 @@ export default defineConfig({
       '^/agents/[^/]+/usage': backendUrl,
       '^/agents/[^/]+/skills': backendUrl,
       '^/agents/[^/]+/reset': backendUrl,
+      '^/agents/[^/]+/export': backendUrl,
+      '^/agents/import$': backendUrl,
       '^/logs': backendUrl,
       '^/settings': backendUrl,
       '^/search': backendUrl,

@@ -43,7 +43,7 @@ import {
 } from '../workflows-db.js';
 import { executeWorkflow } from '../workflows/runner.js';
 import { bootstrapWorkspace } from '../agent/runner-pi.js';
-import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule } from '../schedules-db.js';
+import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, createScheduleRun, listScheduleRuns } from '../schedules-db.js';
 import { startScheduler } from '../scheduler.js';
 import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
@@ -889,7 +889,10 @@ export function createServer() {
     if (!schedule) { res.status(404).json({ error: 'Schedule not found' }); return; }
 
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
-    enqueue(workspaceDir, req.params.id, schedule.message, 'schedule');
+
+    // Each run gets a unique channel so its messages can be retrieved independently
+    const run = createScheduleRun(req.params.id, req.params.sid);
+    enqueue(workspaceDir, req.params.id, schedule.message, run.channelId);
 
     let nextRun: number | undefined;
     try {
@@ -898,7 +901,14 @@ export function createServer() {
     } catch { /* keep existing nextRun */ }
 
     updateScheduleDb(req.params.id, req.params.sid, { lastRun: Date.now(), nextRun });
-    res.status(201).json({ ok: true });
+    res.status(201).json({ ok: true, runId: run.id, channelId: run.channelId });
+  });
+
+  app.get('/agents/:id/schedules/:sid/runs', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const limit = Math.min(Number(req.query.limit ?? 20), 50);
+    res.json(listScheduleRuns(req.params.id, req.params.sid, limit));
   });
 
   // ── Browser Auth States ───────────────────────────────────────────────

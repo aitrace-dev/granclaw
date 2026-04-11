@@ -1,5 +1,11 @@
-import { useState, useEffect } from 'react';
-import { fetchSchedules, updateScheduleApi, deleteScheduleApi, triggerScheduleApi, type Schedule } from '../lib/api.ts';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  fetchSchedules, updateScheduleApi, deleteScheduleApi, triggerScheduleApi,
+  fetchScheduleRuns, fetchScheduleRunMessages,
+  type Schedule, type ScheduleRun, type ChatMessage,
+} from '../lib/api.ts';
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function cronToHuman(cron: string): string {
   const parts = cron.split(' ');
@@ -38,9 +44,161 @@ function relativeTime(ms: number | null): string {
   return diff > 0 ? `in ${days}d` : `${days}d ago`;
 }
 
+// ── Run detail view ────────────────────────────────────────────────────────
+
+function RunMessages({ agentId, run, onBack }: { agentId: string; run: ScheduleRun; onBack: () => void }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const msgs = await fetchScheduleRunMessages(agentId, run.channelId);
+      setMessages(msgs);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [agentId, run.channelId]);
+
+  useEffect(() => {
+    void load();
+    // Poll while messages list is empty (run may still be in progress)
+    const id = setInterval(() => { void load(); }, 2000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  return (
+    <div className="p-4 flex flex-col gap-3">
+      <button
+        onClick={onBack}
+        className="text-[10px] text-on-surface-variant/50 hover:text-on-surface transition-colors self-start"
+      >
+        ← Back to runs
+      </button>
+
+      <div className="text-[9px] font-mono text-on-surface-variant/30">
+        {new Date(run.startedAt).toLocaleString()} · {run.channelId}
+      </div>
+
+      {loading && <div className="text-xs text-on-surface-variant/40">Loading...</div>}
+
+      {!loading && messages.length === 0 && (
+        <div className="text-xs text-on-surface-variant/40 animate-pulse">
+          Waiting for response...
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={`rounded-md p-2.5 text-[11px] leading-relaxed whitespace-pre-wrap ${
+              m.role === 'user'
+                ? 'bg-[#1e1f26] text-on-surface-variant/70'
+                : m.role === 'tool_call'
+                ? 'bg-[#13141a] text-on-surface-variant/40 font-mono text-[10px]'
+                : 'bg-[#1a2235] text-on-surface/90'
+            }`}
+          >
+            {m.role === 'tool_call' && (
+              <span className="text-blue-400/60 mr-1">⚙</span>
+            )}
+            {m.content}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Runs list view ─────────────────────────────────────────────────────────
+
+function ScheduleRuns({
+  agentId, schedule, onBack,
+}: { agentId: string; schedule: Schedule; onBack: () => void }) {
+  const [runs, setRuns] = useState<ScheduleRun[]>([]);
+  const [selectedRun, setSelectedRun] = useState<ScheduleRun | null>(null);
+  const [triggering, setTriggering] = useState(false);
+
+  const loadRuns = useCallback(async () => {
+    try {
+      setRuns(await fetchScheduleRuns(agentId, schedule.id));
+    } catch { /* ignore */ }
+  }, [agentId, schedule.id]);
+
+  useEffect(() => { void loadRuns(); }, [loadRuns]);
+
+  async function handleTrigger() {
+    setTriggering(true);
+    try {
+      await triggerScheduleApi(agentId, schedule.id);
+      await loadRuns();
+    } finally {
+      setTriggering(false);
+    }
+  }
+
+  if (selectedRun) {
+    return (
+      <RunMessages
+        agentId={agentId}
+        run={selectedRun}
+        onBack={() => setSelectedRun(null)}
+      />
+    );
+  }
+
+  return (
+    <div className="p-4 flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onBack}
+          className="text-[10px] text-on-surface-variant/50 hover:text-on-surface transition-colors"
+        >
+          ←
+        </button>
+        <span className="text-xs text-on-surface font-medium flex-1 truncate">{schedule.name}</span>
+        <button
+          onClick={handleTrigger}
+          disabled={triggering}
+          className="text-[9px] px-2 py-0.5 rounded bg-[#33343b] text-on-surface-variant/60 hover:text-on-surface transition-colors disabled:opacity-40"
+        >
+          {triggering ? 'Starting...' : 'Run now'}
+        </button>
+      </div>
+
+      <span className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/40 font-medium">
+        Run history
+      </span>
+
+      {runs.length === 0 && (
+        <p className="text-[10px] text-on-surface-variant/30">
+          No runs yet.
+        </p>
+      )}
+
+      {runs.map((run) => (
+        <button
+          key={run.id}
+          onClick={() => setSelectedRun(run)}
+          className="text-left rounded-md bg-[#1e1f26] p-2.5 hover:bg-[#25262e] transition-colors"
+        >
+          <div className="text-[10px] text-on-surface/80">
+            {new Date(run.startedAt).toLocaleString()}
+          </div>
+          <div className="text-[9px] font-mono text-on-surface-variant/30 mt-0.5">
+            {run.channelId}
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Main list ──────────────────────────────────────────────────────────────
+
 export function ScheduleList({ agentId }: { agentId: string }) {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Schedule | null>(null);
 
   const load = () => {
     fetchSchedules(agentId).then(setSchedules).catch(console.error).finally(() => setLoading(false));
@@ -65,9 +223,14 @@ export function ScheduleList({ agentId }: { agentId: string }) {
     load();
   }
 
-  async function handleTrigger(s: Schedule) {
-    await triggerScheduleApi(agentId, s.id);
-    load();
+  if (selected) {
+    return (
+      <ScheduleRuns
+        agentId={agentId}
+        schedule={selected}
+        onBack={() => setSelected(null)}
+      />
+    );
   }
 
   if (loading) {
@@ -96,10 +259,11 @@ export function ScheduleList({ agentId }: { agentId: string }) {
         </span>
       </div>
 
-      {schedules.map(s => (
+      {schedules.map((s) => (
         <div
           key={s.id}
-          className="rounded-md bg-[#1e1f26] p-3 space-y-2"
+          onClick={() => setSelected(s)}
+          className="rounded-md bg-[#1e1f26] p-3 space-y-2 cursor-pointer hover:bg-[#25262e] transition-colors"
         >
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 rounded-full ${s.status === 'active' ? 'bg-green-500' : 'bg-yellow-500/50'}`} />
@@ -124,18 +288,12 @@ export function ScheduleList({ agentId }: { agentId: string }) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => toggleStatus(s)}
               className="text-[9px] px-2 py-0.5 rounded bg-[#33343b] text-on-surface-variant/60 hover:text-on-surface transition-colors"
             >
               {s.status === 'active' ? 'Pause' : 'Resume'}
-            </button>
-            <button
-              onClick={() => handleTrigger(s)}
-              className="text-[9px] px-2 py-0.5 rounded bg-[#33343b] text-on-surface-variant/60 hover:text-on-surface transition-colors"
-            >
-              Run now
             </button>
             <button
               onClick={() => handleDelete(s)}

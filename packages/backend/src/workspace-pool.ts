@@ -169,6 +169,16 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
       last_run    INTEGER,
       created_at  INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS schedule_runs (
+      id          TEXT PRIMARY KEY,
+      schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+      agent_id    TEXT NOT NULL,
+      channel_id  TEXT NOT NULL,
+      started_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_schedule_runs_schedule
+      ON schedule_runs (schedule_id, started_at DESC);
   `);
 
   pool.set(workspaceDir, db);

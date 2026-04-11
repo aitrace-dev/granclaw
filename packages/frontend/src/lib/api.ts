@@ -570,9 +570,30 @@ export async function deleteScheduleApi(agentId: string, scheduleId: string): Pr
   if (!res.ok) throw new Error(`deleteSchedule: ${res.status}`);
 }
 
-export async function triggerScheduleApi(agentId: string, scheduleId: string): Promise<void> {
+export async function triggerScheduleApi(agentId: string, scheduleId: string): Promise<{ runId: string; channelId: string }> {
   const res = await fetch(`${BASE}/agents/${agentId}/schedules/${scheduleId}/trigger`, { method: 'POST' });
   if (!res.ok) throw new Error(`triggerSchedule: ${res.status}`);
+  return res.json() as Promise<{ runId: string; channelId: string }>;
+}
+
+export interface ScheduleRun {
+  id: string;
+  scheduleId: string;
+  agentId: string;
+  channelId: string;
+  startedAt: number;
+}
+
+export async function fetchScheduleRuns(agentId: string, scheduleId: string): Promise<ScheduleRun[]> {
+  const res = await fetch(`${BASE}/agents/${agentId}/schedules/${scheduleId}/runs`);
+  if (!res.ok) throw new Error(`fetchScheduleRuns: ${res.status}`);
+  return res.json() as Promise<ScheduleRun[]>;
+}
+
+export async function fetchScheduleRunMessages(agentId: string, channelId: string): Promise<ChatMessage[]> {
+  const res = await fetch(`${BASE}/agents/${agentId}/messages?channelId=${encodeURIComponent(channelId)}&sortBy=asc&limit=200`);
+  if (!res.ok) throw new Error(`fetchScheduleRunMessages: ${res.status}`);
+  return res.json() as Promise<ChatMessage[]>;
 }
 
 // ── Workflow API ──────────────────────────────────────────────────────────

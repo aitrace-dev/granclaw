@@ -6,12 +6,21 @@
  */
 
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { REPO_ROOT, getAgent } from './config.js';
 import { getWorkspaceDb, closeWorkspaceDb } from './workspace-pool.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
 export type ScheduleStatus = 'active' | 'paused';
+
+export interface ScheduleRun {
+  id: string;
+  scheduleId: string;
+  agentId: string;
+  channelId: string;
+  startedAt: number;
+}
 
 export interface Schedule {
   id: string;
@@ -132,6 +141,37 @@ export function getDueSchedules(agentId: string): Schedule[] {
   return (db.prepare(
     `SELECT * FROM schedules WHERE agent_id = ? AND status = 'active' AND next_run IS NOT NULL AND next_run <= ?`
   ).all(agentId, now) as Record<string, unknown>[]).map(rowToSchedule);
+}
+
+// ── Schedule Runs ─────────────────────────────────────────────────────────
+
+export function createScheduleRun(agentId: string, scheduleId: string): ScheduleRun {
+  const db = getDb(agentId);
+  const id = randomUUID();
+  const channelId = `sch-${id}`;
+  const startedAt = Date.now();
+  db.prepare(`
+    INSERT INTO schedule_runs (id, schedule_id, agent_id, channel_id, started_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(id, scheduleId, agentId, channelId, startedAt);
+  return { id, scheduleId, agentId, channelId, startedAt };
+}
+
+export function listScheduleRuns(agentId: string, scheduleId: string, limit = 20): ScheduleRun[] {
+  const db = getDb(agentId);
+  const rows = db.prepare(`
+    SELECT id, schedule_id, agent_id, channel_id, started_at
+    FROM schedule_runs
+    WHERE schedule_id = ? AND agent_id = ?
+    ORDER BY started_at DESC
+    LIMIT ?
+  `).all(scheduleId, agentId, limit) as {
+    id: string; schedule_id: string; agent_id: string; channel_id: string; started_at: number;
+  }[];
+  return rows.map(r => ({
+    id: r.id, scheduleId: r.schedule_id, agentId: r.agent_id,
+    channelId: r.channel_id, startedAt: r.started_at,
+  }));
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────

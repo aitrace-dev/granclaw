@@ -55,6 +55,7 @@ export function useAgentSocket(
   const streamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectDelayRef = useRef(RECONNECT_MIN_MS);
   const mountedRef = useRef(true);
+  const subscribeChannelRef = useRef<string | null>(null);
 
   // Reset stream timeout whenever we get a chunk
   const resetStreamTimeout = useCallback(() => {
@@ -98,6 +99,9 @@ export function useAgentSocket(
         if (!mountedRef.current) return;
         setConnected(true);
         reconnectDelayRef.current = RECONNECT_MIN_MS; // reset backoff
+        if (subscribeChannelRef.current) {
+          ws.send(JSON.stringify({ type: 'subscribe', channelId: subscribeChannelRef.current }));
+        }
       };
 
       ws.onmessage = (event: MessageEvent) => {
@@ -180,5 +184,12 @@ export function useAgentSocket(
     handlerRef.current = null;
   }, [clearStreamTimeout]);
 
-  return { sendMessage, stopMessage, connected };
+  const subscribeToChannel = useCallback((channelId: string) => {
+    subscribeChannelRef.current = channelId;
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'subscribe', channelId }));
+    }
+  }, []);
+
+  return { sendMessage, stopMessage, subscribeToChannel, connected };
 }

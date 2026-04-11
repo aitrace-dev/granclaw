@@ -77,11 +77,14 @@ function main() {
         const stopped = stopAgent(agentId as string);
         console.log(`[agent:${agentId}] stop requested — ${stopped ? 'killed' : 'no active process'}`);
         ws.send(JSON.stringify({ type: 'stopped', killed: stopped }));
+      } else if (msg.type === 'subscribe' && msg.channelId) {
+        // Subscribe this WS client to a channel without sending a message.
+        // Used by the frontend to receive live chunks from scheduled runs.
+        clientChannelId = msg.channelId;
+        getChannelClients(clientChannelId).add(ws);
       } else if (msg.type === 'message' && msg.text) {
         clientChannelId = msg.channelId ?? 'ui';
         getChannelClients(clientChannelId).add(ws);
-
-        try { saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: clientChannelId, role: 'user', content: msg.text }); } catch { /* non-fatal */ }
 
         enqueue(workspaceDir, agentId as string, msg.text, clientChannelId);
         ws.send(JSON.stringify({ type: 'queued' }));
@@ -137,6 +140,11 @@ function main() {
     busyChannels.add(lane);
     try {
       const isTelegramJob = telegramAdapter !== null && job.channelId.startsWith('telegram:');
+
+      // Save the prompt so it's visible in run history immediately
+      try {
+        saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: job.channelId, role: 'user', content: job.message });
+      } catch { /* non-fatal */ }
 
       // Stream chunks directly to channel clients
       let fullResponse = '';

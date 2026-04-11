@@ -31,6 +31,7 @@ import {
   finalizeSession as finalizeBrowserSession,
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
+import { stealthArgv } from '../browser/stealth.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -720,11 +721,16 @@ export async function runAgent(
             await startBrowserRecording(browserState.handle);
           }
 
-          // Build argv: --session <id> [--profile <path>] <command> <args...>
+          // Build argv: --session <id> [--profile <path>] [--extension ...] [--executable-path ...] <command> <args...>
+          // agent-browser only applies launch flags on the command that boots
+          // the daemon — under normal operation startRecording has already
+          // booted it, so these are a no-op here. They're kept as belt-and-
+          // braces in case recording ever fails to start first.
           const argv: string[] = ['--session', agent.id];
           if (fs.existsSync(profileDir)) {
             argv.push('--profile', profileDir);
           }
+          argv.push(...stealthArgv());
           argv.push(command, ...args);
 
           try {

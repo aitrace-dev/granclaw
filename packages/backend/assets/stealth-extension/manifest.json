@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "GranClaw Stealth",
+  "version": "1.0.0",
+  "description": "Removes Chrome automation fingerprints from every page before its scripts run.",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["stealth.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    }
+  ]
+}

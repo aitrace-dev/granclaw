@@ -67,6 +67,15 @@ function main() {
   }
   copyDir(backendDist, path.join(DIST, 'backend'));
 
+  // Backend ships some non-TS assets that tsc cannot see (stealth Chrome
+  // extension). Copy assets/ alongside the compiled code so the published
+  // granclaw package keeps the same relative layout stealth.ts probes for.
+  const backendAssets = path.join(REPO_ROOT, 'packages', 'backend', 'assets');
+  if (fs.existsSync(backendAssets)) {
+    console.log('[build] copying backend assets');
+    copyDir(backendAssets, path.join(DIST, 'backend', 'assets'));
+  }
+
   console.log('[build] copying frontend dist');
   const frontendDist = path.join(REPO_ROOT, 'packages', 'frontend', 'dist');
   if (!fs.existsSync(frontendDist)) {

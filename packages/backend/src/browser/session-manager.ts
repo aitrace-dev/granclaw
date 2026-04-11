@@ -25,6 +25,8 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
+import { stealthArgv } from './stealth.js';
+
 const execFileAsync = promisify(execFile);
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -166,10 +168,17 @@ export async function startRecording(handle: BrowserSessionHandle): Promise<bool
   // load the persistent profile at boot. Pass --profile here so cookies are
   // loaded before any subsequent command runs — agent-browser ignores
   // --profile on already-running daemons.
+  //
+  // stealthArgv() adds --extension (our MV3 stealth extension) and, if a
+  // real Chrome binary is installed on the host, --executable-path. These
+  // also only take effect on the boot command, so they live here alongside
+  // --profile. Order matters: all launch flags must precede the subcommand.
   const profileDir = path.join(handle.workspaceDir, '.browser-profile');
   const profileArgs = fs.existsSync(profileDir) ? ['--profile', profileDir] : [];
 
-  const recordArgv = ['--session', handle.agentId, ...profileArgs, 'record', 'start', recordingPath];
+  const launchFlags = [...profileArgs, ...stealthArgv()];
+
+  const recordArgv = ['--session', handle.agentId, ...launchFlags, 'record', 'start', recordingPath];
   const stopArgv = ['--session', handle.agentId, 'record', 'stop'];
 
   const tryStart = async (): Promise<boolean> => {

@@ -50,6 +50,7 @@ import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
 import { listSessions, getSession as getBrowserSession, getVideoPath } from '../browser-sessions.js';
 import { handleBrowserLiveUpgrade } from './browser-live.js';
+import { stealthArgv } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
 
@@ -1123,10 +1124,20 @@ export function createServer() {
 
     // Each agent gets its own dedicated agent-browser daemon via --session.
     // Paired with --profile so cookies/localStorage/IndexedDB persist at the
-    // path the frontend already displays ("profile saved" badge).
+    // path the frontend already displays ("profile saved" badge). stealthArgv()
+    // adds the MV3 stealth extension and, when available, --executable-path
+    // pointing at real Google Chrome — both only take effect on the command
+    // that boots the daemon, which this is in headed-preview flows.
     try {
-      const { execSync } = await import('child_process');
-      execSync(`agent-browser --session "${req.params.id}" --headed --profile "${profileDir}" open "${url}"`, {
+      const { execFileSync } = await import('child_process');
+      const argv = [
+        '--session', req.params.id,
+        '--headed',
+        '--profile', profileDir,
+        ...stealthArgv(),
+        'open', url,
+      ];
+      execFileSync('agent-browser', argv, {
         cwd: workspaceDir,
         timeout: 30000,
         stdio: 'pipe',

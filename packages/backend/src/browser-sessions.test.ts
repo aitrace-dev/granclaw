@@ -2,24 +2,27 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { execFileSync } from 'child_process';
+import {
+  createSession,
+  appendCommand,
+  closeSession,
+} from './browser/session-manager.js';
 
 /**
  * Integration tests for the browser session lifecycle.
  *
- * These exercise both:
- *   - meta-helper.js + browser-wrapper.sh (the agent-facing layer)
- *   - listSessions / getSession / getVideoPath / forceCloseActiveSession
- *     (the backend reconciliation layer)
+ * Covers:
+ *   - browser/session-manager.ts — the atomic session-dir + meta.json helpers
+ *     used by the inline `browser` pi tool registered in runner-pi.ts
+ *   - browser-sessions.ts — the backend read/reconcile layer used by the
+ *     /browser-sessions REST routes and the replay view
  *
- * The wrapper calls the real agent-browser binary for its guard tests (record
- * blocked) but never spawns a browser — we never issue a navigation command.
- * No network, no Chromium — tests run in < 2 seconds.
+ * No network, no Chromium — the `startRecording` / `stopRecording` helpers
+ * that actually shell out to agent-browser are tested separately in the
+ * end-to-end probes (they need a real daemon). These tests exercise only
+ * the on-disk state machine.
  */
 
-const REPO_ROOT = path.resolve(__dirname, '../../..');
-const WRAPPER = path.join(REPO_ROOT, 'packages/cli/templates/skills/agent-browser/browser-wrapper.sh');
-const META_HELPER = path.join(REPO_ROOT, 'packages/cli/templates/skills/agent-browser/meta-helper.js');
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 
 function fakeMeta(dir: string, overrides: Record<string, unknown> = {}) {
@@ -46,109 +49,79 @@ function writeWebm(dir: string, filename = 'recording.webm') {
   fs.writeFileSync(path.join(dir, filename), Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x00, 0x00]));
 }
 
-describe('meta-helper.js', () => {
+describe('browser/session-manager', () => {
   let tmp: string;
-  let sessionDir: string;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-helper-test-'));
-    sessionDir = path.join(tmp, 'sess-1234');
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'session-manager-test-'));
   });
 
   afterEach(() => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('create initializes meta.json with active status and heartbeat', () => {
-    execFileSync('node', [META_HELPER, 'create', sessionDir, '1000000']);
-    const meta = JSON.parse(fs.readFileSync(path.join(sessionDir, 'meta.json'), 'utf-8'));
+  it('createSession initializes meta.json, session dir, and .active-session', () => {
+    const handle = createSession('test-agent', tmp);
+    expect(handle.agentId).toBe('test-agent');
+    expect(handle.sessionId).toMatch(/^sess-\d+$/);
+    expect(fs.existsSync(handle.metaPath)).toBe(true);
+    const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
     expect(meta.status).toBe('active');
-    expect(meta.createdAt).toBe(1000000);
-    expect(meta.heartbeat).toBe(1000000);
     expect(meta.commands).toEqual([]);
     expect(meta.video).toBeNull();
+    expect(meta.heartbeat).toBeGreaterThan(0);
+    expect(meta.heartbeat).toBe(meta.createdAt);
+    // .active-session points at this handle
+    const active = fs.readFileSync(path.join(tmp, '.browser-sessions', '.active-session'), 'utf-8');
+    expect(active).toBe(handle.sessionId);
   });
 
-  it('append-command pushes onto commands array and updates heartbeat', () => {
-    execFileSync('node', [META_HELPER, 'create', sessionDir, '1000000']);
-    execFileSync('node', [META_HELPER, 'append-command', sessionDir, 'open https://x.com', '1001000']);
-    execFileSync('node', [META_HELPER, 'append-command', sessionDir, 'click --ref e1', '1002000']);
-    const meta = JSON.parse(fs.readFileSync(path.join(sessionDir, 'meta.json'), 'utf-8'));
-    expect(meta.commands).toHaveLength(2);
-    expect(meta.commands[0].args).toBe('open https://x.com');
-    expect(meta.commands[1].timestamp).toBe(1002000);
-    expect(meta.heartbeat).toBe(1002000);
+  it('appendCommand pushes onto commands and bumps heartbeat atomically', () => {
+    const handle = createSession('test-agent', tmp);
+    appendCommand(handle, 'open https://example.com', 1_000_000);
+    appendCommand(handle, 'click --ref e12', 1_001_000);
+    appendCommand(handle, 'fill --ref e5 Alice', 1_002_000);
+    const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
+    expect(meta.commands).toHaveLength(3);
+    expect(meta.commands[0].args).toBe('open https://example.com');
+    expect(meta.commands[2].timestamp).toBe(1_002_000);
+    expect(meta.heartbeat).toBe(1_002_000);
   });
 
-  it('append-command handles args with special JSON chars (quotes, brackets)', () => {
-    execFileSync('node', [META_HELPER, 'create', sessionDir, '1000000']);
-    const tricky = 'fill --value "{\\"key\\": [1,2]}"';
-    execFileSync('node', [META_HELPER, 'append-command', sessionDir, tricky, '1001000']);
-    const meta = JSON.parse(fs.readFileSync(path.join(sessionDir, 'meta.json'), 'utf-8'));
+  it('appendCommand preserves JSON-hostile characters verbatim', () => {
+    const handle = createSession('test-agent', tmp);
+    const tricky = 'eval document.querySelectorAll("a[href^=\\"/wiki/\\"]").length';
+    appendCommand(handle, tricky);
+    const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
     expect(meta.commands[0].args).toBe(tricky);
   });
 
-  it('close sets status and closedAt', () => {
-    execFileSync('node', [META_HELPER, 'create', sessionDir, '1000000']);
-    execFileSync('node', [META_HELPER, 'close', sessionDir, '1005000', 'stale']);
-    const meta = JSON.parse(fs.readFileSync(path.join(sessionDir, 'meta.json'), 'utf-8'));
-    expect(meta.status).toBe('stale');
-    expect(meta.closedAt).toBe(1005000);
+  it('closeSession flips status and clears .active-session', () => {
+    const handle = createSession('test-agent', tmp);
+    appendCommand(handle, 'open https://x.com');
+    closeSession(handle, 'closed');
+    const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
+    expect(meta.status).toBe('closed');
+    expect(meta.closedAt).toBeGreaterThan(0);
+    expect(fs.readFileSync(path.join(tmp, '.browser-sessions', '.active-session'), 'utf-8')).toBe('');
   });
 
-  it('set-video updates the video filename', () => {
-    execFileSync('node', [META_HELPER, 'create', sessionDir, '1000000']);
-    execFileSync('node', [META_HELPER, 'set-video', sessionDir, 'recording.webm']);
-    const meta = JSON.parse(fs.readFileSync(path.join(sessionDir, 'meta.json'), 'utf-8'));
-    expect(meta.video).toBe('recording.webm');
+  it('closeSession accepts non-closed terminal statuses (stale, crashed)', () => {
+    const handle = createSession('test-agent', tmp);
+    closeSession(handle, 'crashed');
+    const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
+    expect(meta.status).toBe('crashed');
   });
 
-  it('tolerates concurrent appends — no lost writes under serial execution', () => {
-    // The lock lives in the wrapper, not the helper, but the helper must at
-    // least produce valid JSON for every atomic call it receives.
-    execFileSync('node', [META_HELPER, 'create', sessionDir, '1000000']);
-    for (let i = 0; i < 50; i++) {
-      execFileSync('node', [META_HELPER, 'append-command', sessionDir, `cmd ${i}`, String(1000000 + i)]);
+  it('serial hammer: 100 appendCommand calls produce valid JSON with all entries', () => {
+    const handle = createSession('test-agent', tmp);
+    for (let i = 0; i < 100; i++) {
+      appendCommand(handle, `cmd-${i}`, 1_000_000 + i);
     }
-    const meta = JSON.parse(fs.readFileSync(path.join(sessionDir, 'meta.json'), 'utf-8'));
-    expect(meta.commands).toHaveLength(50);
-    expect(meta.commands[49].args).toBe('cmd 49');
-  });
-});
-
-describe('browser-wrapper.sh guards', () => {
-  let tmp: string;
-
-  beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapper-test-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
-  });
-
-  it('rejects "record start" directly from the agent', () => {
-    let code = 0;
-    let stderr = '';
-    try {
-      execFileSync(WRAPPER, ['record', 'start', 'foo.webm'], { cwd: tmp });
-    } catch (e) {
-      const err = e as { status?: number; stderr?: Buffer };
-      code = err.status ?? -1;
-      stderr = err.stderr?.toString() ?? '';
-    }
-    expect(code).toBe(2);
-    expect(stderr).toContain('managed automatically');
-  });
-
-  it('rejects "record stop" directly from the agent', () => {
-    let code = 0;
-    try {
-      execFileSync(WRAPPER, ['record', 'stop'], { cwd: tmp });
-    } catch (e) {
-      code = (e as { status?: number }).status ?? -1;
-    }
-    expect(code).toBe(2);
+    const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
+    expect(meta.commands).toHaveLength(100);
+    expect(meta.commands[99].args).toBe('cmd-99');
+    expect(meta.heartbeat).toBe(1_000_000 + 99);
   });
 });
 

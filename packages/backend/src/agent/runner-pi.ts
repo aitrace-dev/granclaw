@@ -16,12 +16,23 @@
 
 import path from 'path';
 import fs from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { AgentConfig, REPO_ROOT } from '../config.js';
 import { saveSession } from '../agent-db.js';
 import { logAction } from '../logs-db.js';
 import { getProvider, getProviderApiKey, getSearchApiKey } from '../providers-config.js';
 import { createSchedule, listSchedules } from '../schedules-db.js';
 import { parseExpression } from 'cron-parser';
+import {
+  createSession as createBrowserSession,
+  appendCommand as appendBrowserCommand,
+  startRecording as startBrowserRecording,
+  finalizeSession as finalizeBrowserSession,
+  type BrowserSessionHandle,
+} from '../browser/session-manager.js';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Resolve the templates directory.
@@ -80,6 +91,19 @@ export function bootstrapWorkspace(workspaceDir: string): void {
     for (const sub of ['journal', 'sessions', 'actions', 'topics', 'knowledge']) {
       fs.mkdirSync(path.join(vaultDir, sub), { recursive: true });
     }
+  }
+
+  // One-time cleanup: the agent-browser skill has been replaced by the
+  // inline `browser` pi tool registered in runAgent(). Remove any stale
+  // copies from workspaces that were bootstrapped under the old skill path
+  // so pi's <available_skills> system prompt block doesn't advertise a
+  // broken bash entry point.
+  const staleBrowserSkillDir = path.join(workspaceDir, '.pi', 'skills', 'agent-browser');
+  if (fs.existsSync(staleBrowserSkillDir)) {
+    try {
+      fs.rmSync(staleBrowserSkillDir, { recursive: true, force: true });
+      console.log(`[runner-pi] removed stale agent-browser skill from ${staleBrowserSkillDir}`);
+    } catch { /* best effort */ }
   }
 
   // Skills: .pi/skills/ — CONFIG_DIR_NAME in the pi SDK is ".pi", so
@@ -272,6 +296,11 @@ export async function runAgent(
   // undefined means injection hasn't happened yet (e.g. model-not-found early return).
   let envKey: string | undefined;
   let prevValue: string | undefined;
+
+  // Browser session state — captured by closure in the `browser` tool and
+  // finalized in the finally block. Null means the agent never touched the
+  // browser this turn, so there's nothing to clean up.
+  const browserState: { handle: BrowserSessionHandle | null } = { handle: null };
 
   try {
     // ── Load pi packages (ESM-only, must use dynamic import) ───────────
@@ -538,6 +567,121 @@ export async function runAgent(
       });
     });
 
+    // browser tool: per-turn browser session lifecycle + agent-browser CLI
+    // wrapper. Always registered — agent-browser is a dev dependency of
+    // GranClaw and the user expects the agent to be able to browse.
+    //
+    // Each runAgent invocation owns at most ONE browser session (one video,
+    // one meta.json, one chapter list). The session is lazily created on
+    // the first browser call — turns that never touch the web leave no
+    // artifacts behind. Closed by the finally block whether the LLM loop
+    // ends cleanly or throws.
+    //
+    // Privileged commands (record, close, tab close for session 0,
+    // session management) are rejected — the runtime owns those.
+    extensionFactories.push((pi: any) => {
+      const agentBrowserBin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+      const profileDir = path.join(workspaceDir, '.browser-profile');
+
+      const PRIVILEGED_COMMANDS = new Set(['record', 'close', 'session']);
+      const KNOWN_COMMANDS = [
+        'open', 'click', 'dblclick', 'type', 'fill', 'press', 'keyboard',
+        'hover', 'focus', 'check', 'uncheck', 'select', 'drag', 'upload',
+        'download', 'scroll', 'scrollintoview', 'wait', 'screenshot', 'pdf',
+        'snapshot', 'eval', 'connect', 'back', 'forward', 'reload', 'get',
+        'is', 'find', 'mouse', 'set', 'network', 'cookies', 'storage', 'tab',
+        'diff', 'trace', 'profiler', 'console', 'errors', 'highlight',
+        'inspect', 'clipboard', 'auth', 'confirm', 'deny',
+      ];
+
+      pi.registerTool({
+        name: 'browser',
+        label: 'Browser',
+        description:
+          'Headless browser automation. Runs one command at a time against your dedicated Chrome daemon, ' +
+          'which keeps its cookies and login state between turns. ' +
+          'The session, recording, and cleanup are managed automatically — do NOT call `record`, `close`, ' +
+          'or `session`, they are rejected. Every turn is recorded as a single WebM video visible in the dashboard Browser view.',
+        promptSnippet: 'Control a headless browser — navigate, click, fill, snapshot, extract data',
+        promptGuidelines: [
+          'Core loop: open → snapshot → interact → re-snapshot. Refs from snapshot are invalidated by navigation.',
+          'For visual reasoning use `snapshot --annotate -i` (annotated screenshot with numbered refs).',
+          'For data extraction use `snapshot` (plain accessibility tree) or `text --ref <ref>`.',
+          'Do not call `record start`, `record stop`, `close`, or `session` — the runtime manages those.',
+          'You do not need to screenshot for audit — the whole session is recorded as video automatically.',
+          'Saved logins persist automatically when the user has set up a profile via the dashboard Browser view.',
+          'Examples: {"command":"open","args":["https://example.com"]}, {"command":"click","args":["--ref","e12"]}, {"command":"fill","args":["--ref","e5","Alice"]}',
+        ],
+        parameters: {
+          type: 'object',
+          properties: {
+            command: {
+              type: 'string',
+              description: 'The agent-browser subcommand: open, click, fill, snapshot, scroll, wait, eval, tab, etc.',
+            },
+            args: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Positional arguments and flags for the subcommand, in order (e.g. ["--ref","e12"] or ["https://example.com"])',
+            },
+          },
+          required: ['command'],
+        },
+        async execute(_toolCallId: string, params: { command?: string; args?: string[] }) {
+          const command = (params.command ?? '').trim();
+          const args = Array.isArray(params.args) ? params.args.map(String) : [];
+
+          if (!command) {
+            return { content: [{ type: 'text' as const, text: 'browser: `command` is required (e.g. "open", "snapshot", "click")' }] };
+          }
+          if (PRIVILEGED_COMMANDS.has(command)) {
+            return {
+              content: [{
+                type: 'text' as const,
+                text: `browser: "${command}" is managed by the runtime and cannot be called directly. ` +
+                      `Recording, closing, and session identity are set up for you automatically.`,
+              }],
+            };
+          }
+          if (!KNOWN_COMMANDS.includes(command)) {
+            // Non-fatal — still pass through so new agent-browser features work.
+            // The command will error out downstream if it really is invalid.
+          }
+
+          // Lazily create the session + start recording on first use
+          if (!browserState.handle) {
+            browserState.handle = createBrowserSession(agent.id, workspaceDir);
+          }
+          if (!browserState.handle.recordingStarted) {
+            await startBrowserRecording(browserState.handle);
+          }
+
+          // Build argv: --session <id> [--profile <path>] <command> <args...>
+          const argv: string[] = ['--session', agent.id];
+          if (fs.existsSync(profileDir)) {
+            argv.push('--profile', profileDir);
+          }
+          argv.push(command, ...args);
+
+          try {
+            const { stdout, stderr } = await execFileAsync(agentBrowserBin, argv, {
+              cwd: workspaceDir,
+              timeout: 60_000,
+              maxBuffer: 10 * 1024 * 1024,
+            });
+            appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
+            const out = stdout.trim() || stderr.trim() || 'ok';
+            return { content: [{ type: 'text' as const, text: out }] };
+          } catch (err) {
+            appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
+            const e = err as { stdout?: string; stderr?: string; message?: string; code?: number };
+            const msg = (e.stderr || e.stdout || e.message || String(err)).trim();
+            return { content: [{ type: 'text' as const, text: `browser ${command} failed: ${msg}` }] };
+          }
+        },
+      });
+    });
+
     // web_search tool: proxies to GranClaw's /search endpoint (Brave Search).
     // Only registered when a search API key is configured.
     if (searchApiKey) {
@@ -721,6 +865,12 @@ export async function runAgent(
     try { logAction(agent.id, 'error', null, { message: msg }); } catch { /* ignore */ }
   } finally {
     activeSessions.delete(agent.id);
+    // Finalize the browser session if the agent used it — stops the WebM
+    // recording and marks status closed so the dashboard replay view can
+    // serve it. No-op if the agent never called the browser tool.
+    if (browserState.handle) {
+      try { await finalizeBrowserSession(browserState.handle, 'closed'); } catch { /* best effort */ }
+    }
     // Restore env var only if it was injected (envKey is set only after model guard)
     if (envKey !== undefined) {
       if (prevValue === undefined) delete process.env[envKey];

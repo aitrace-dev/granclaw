@@ -454,7 +454,7 @@ export function handleBrowserLiveUpgrade(
     }
 
     // Relay input events from the takeover page to Chrome via CDP
-    ws.on('message', (data: import('ws').RawData) => {
+    ws.on('message', (data) => {
       const s = streams.get(key);
       if (!s?.chromeWs || s.chromeWs.readyState !== WebSocket.OPEN) return;
 
@@ -462,36 +462,48 @@ export function handleBrowserLiveUpgrade(
       try { msg = JSON.parse(data.toString()); } catch { return; }
 
       const nextId = () => ++s.cdpMessageId;
+      const toNum = (v: unknown, fallback: number): number => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fallback;
+      };
 
       if (msg.type === 'mouse') {
+        const eventType = String(msg.eventType ?? 'mouseMoved');
+        const button = String(msg.button ?? 'none');
         s.chromeWs.send(JSON.stringify({
           id: nextId(),
           method: 'Input.dispatchMouseEvent',
           params: {
-            type: msg.eventType,
-            x: msg.x,
-            y: msg.y,
-            button: msg.button ?? 'none',
-            clickCount: msg.clickCount ?? 0,
-            modifiers: msg.modifiers ?? 0,
+            type: eventType,
+            x: toNum(msg.x, 0),
+            y: toNum(msg.y, 0),
+            button,
+            clickCount: toNum(msg.clickCount, 0),
+            modifiers: toNum(msg.modifiers, 0),
           },
         }));
       } else if (msg.type === 'key') {
+        const eventType = String(msg.eventType ?? 'rawKeyDown');
+        const key = String(msg.key ?? '');
+        const code = String(msg.code ?? '');
+        if (!key) return; // key is required
         s.chromeWs.send(JSON.stringify({
           id: nextId(),
           method: 'Input.dispatchKeyEvent',
           params: {
-            type: msg.eventType,
-            key: msg.key,
-            code: msg.code,
-            modifiers: msg.modifiers ?? 0,
+            type: eventType,
+            key,
+            code,
+            modifiers: toNum(msg.modifiers, 0),
           },
         }));
       } else if (msg.type === 'insertText') {
+        const text = String(msg.text ?? '').slice(0, 4096); // cap at 4 KB
+        if (!text) return;
         s.chromeWs.send(JSON.stringify({
           id: nextId(),
           method: 'Input.insertText',
-          params: { text: msg.text },
+          params: { text },
         }));
       } else if (msg.type === 'scroll') {
         s.chromeWs.send(JSON.stringify({
@@ -499,10 +511,10 @@ export function handleBrowserLiveUpgrade(
           method: 'Input.dispatchMouseEvent',
           params: {
             type: 'mouseWheel',
-            x: msg.x,
-            y: msg.y,
+            x: toNum(msg.x, 0),
+            y: toNum(msg.y, 0),
             deltaX: 0,
-            deltaY: msg.deltaY,
+            deltaY: toNum(msg.deltaY, 0),
           },
         }));
       }

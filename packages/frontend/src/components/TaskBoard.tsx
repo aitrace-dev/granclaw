@@ -81,8 +81,8 @@ function TaskCard({
         <span
           className={`flex-shrink-0 rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.08em] ${
             task.source === 'agent'
-              ? 'bg-secondary-container text-[#002113]'
-              : 'bg-primary-container text-on-surface'
+              ? 'bg-secondary-container text-on-primary'
+              : 'bg-primary text-on-surface'
           }`}
         >
           {task.source}
@@ -94,18 +94,18 @@ function TaskCard({
 
       {/* Description preview */}
       {preview && (
-        <p className="font-mono text-[10px] text-on-surface-variant/50 leading-snug line-clamp-2 mb-2">
+        <p className="font-mono text-[10px] text-on-surface-variant leading-snug line-clamp-2 mb-2">
           {preview}
         </p>
       )}
 
       {/* Footer: time + edited-by */}
       <div className="flex items-center justify-between gap-1 mt-1">
-        <span className="font-mono text-[9px] text-on-surface-variant/30">
+        <span className="font-mono text-[9px] text-on-surface-variant/60">
           {relativeTime(task.createdAt)}
         </span>
         {showEditedBy && (
-          <span className="font-mono text-[8px] text-amber-400/50 truncate">
+          <span className="font-mono text-[8px] text-warning/50 truncate">
             edited by {task.updatedBy}
           </span>
         )}
@@ -293,7 +293,7 @@ function ColumnWrapper({
         }}
       >
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-on-surface-variant/50">
+          <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-on-surface-variant">
             {label}
           </span>
           <span className="font-mono text-[9px] text-on-surface-variant/25 tabular-nums">
@@ -302,7 +302,7 @@ function ColumnWrapper({
         </div>
         <button
           onClick={onStartAdding}
-          className="text-[12px] text-on-surface-variant/30 hover:text-primary/70 transition-colors leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-primary/10"
+          className="text-[12px] text-on-surface-variant/60 hover:text-primary/70 transition-colors leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-primary/10"
         >
           +
         </button>
@@ -318,7 +318,7 @@ function ColumnWrapper({
           <div className="rounded-md p-2.5 flex flex-col gap-2" style={{ background: '#1e1f26' }}>
             <input
               autoFocus
-              className="rounded bg-[#33343b] px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 w-full"
+              className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 w-full"
               placeholder="Task title…"
               value={newTitle}
               onChange={(e) => onNewTitleChange(e.target.value)}
@@ -327,7 +327,7 @@ function ColumnWrapper({
               }}
             />
             <textarea
-              className="rounded bg-[#33343b] px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 w-full resize-y min-h-[48px] font-mono"
+              className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 w-full resize-y min-h-[48px] font-mono"
               placeholder="Description (markdown)…"
               value={newDesc}
               onChange={(e) => onNewDescChange(e.target.value)}
@@ -346,7 +346,7 @@ function ColumnWrapper({
               </button>
               <button
                 onClick={onCancelAdding}
-                className="rounded bg-[#33343b] px-2 py-1 text-[10px] text-on-surface-variant/40 hover:text-on-surface-variant/70 transition-colors"
+                className="rounded bg-surface-container px-2 py-1 text-[10px] text-on-surface-variant/70 hover:text-on-surface-variant/70 transition-colors"
               >
                 Cancel
               </button>

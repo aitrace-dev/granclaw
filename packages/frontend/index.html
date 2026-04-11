@@ -8,11 +8,27 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Pre-paint theme class to avoid a light/dark flash on load. Reads the
+      // persisted choice, falling back to prefers-color-scheme. Kept inline
+      // and synchronous so it runs before React mounts.
+      (function () {
+        try {
+          var stored = localStorage.getItem('granclaw-theme');
+          var isDark = stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (isDark) document.documentElement.classList.add('dark');
+        } catch (_) { /* SSR / blocked storage — ignore */ }
+      })();
+    </script>
   </head>
-  <body class="bg-surface text-on-surface">
+  <body class="bg-background text-on-surface">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -15,10 +15,10 @@ import { fetchBrowserSession, browserVideoUrl, browserLiveWsUrl } from '../lib/a
 function StatusBadge({ status }: { status: BrowserSessionStatus }) {
   const style =
     status === 'active'
-      ? 'bg-secondary-container text-[#002113]'
+      ? 'bg-secondary-container text-on-primary'
       : status === 'stale' || status === 'crashed'
-      ? 'bg-amber-500/20 text-amber-300'
-      : 'bg-[#33343b] text-on-surface-variant/60';
+      ? 'bg-amber-500/20 text-warning'
+      : 'bg-surface-container text-on-surface-variant/60';
   return (
     <span
       className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] ${style}`}
@@ -46,10 +46,10 @@ function CommandList({
 
   return (
     <div
-      className="w-56 flex-shrink-0 flex flex-col border-l border-white/5 overflow-hidden"
+      className="w-56 flex-shrink-0 flex flex-col border-l border-outline-variant/30 overflow-hidden"
       style={{ background: '#191b22' }}
     >
-      <div className="px-3 py-2 border-b border-white/5">
+      <div className="px-3 py-2 border-b border-outline-variant/30">
         <span className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
           Events ({commands.length})
         </span>
@@ -62,13 +62,13 @@ function CommandList({
               key={i}
               ref={isActive ? activeRef : undefined}
               onClick={() => onJump(i)}
-              className={`px-3 py-2 border-b border-white/3 transition-colors cursor-pointer hover:bg-[#282a30]/50 ${
+              className={`px-3 py-2 border-b  border-outline-variant/20 transition-colors cursor-pointer hover:bg-surface-container/50 ${
                 isActive ? 'bg-primary/10 border-l-2 border-l-primary' : ''
               }`}
             >
               <p
                 className={`font-mono text-[10px] leading-snug break-all ${
-                  isActive ? 'text-primary' : 'text-on-surface-variant/50'
+                  isActive ? 'text-primary' : 'text-on-surface-variant'
                 }`}
               >
                 {cmd.args}
@@ -180,7 +180,7 @@ function LiveView({ agentId, session }: { agentId: string; session: BrowserSessi
             }`}
             title={activeTab.url}
           >
-            <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/40 font-semibold flex-shrink-0">
+            <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/70 font-semibold flex-shrink-0">
               tab {activeTab.index}
             </span>
             <span className="w-1 h-1 rounded-full bg-on-surface-variant/30 flex-shrink-0" />
@@ -289,7 +289,7 @@ function ReplayView({
               recording unavailable
             </p>
             {(session.status === 'stale' || session.status === 'crashed') && (
-              <p className="font-mono text-[9px] text-amber-400/50 mt-2">
+              <p className="font-mono text-[9px] text-warning/50 mt-2">
                 session was abandoned before finalizing
               </p>
             )}
@@ -342,10 +342,10 @@ export function SessionPlayer({
     <div className="flex flex-1 flex-col h-full min-w-0 rounded-lg" style={{ background: '#111319' }}>
 
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-outline-variant/30 flex-shrink-0">
         <button
           onClick={onBack}
-          className="flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-[#282a30] text-on-surface-variant/50 hover:text-on-surface"
+          className="flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-surface-container text-on-surface-variant hover:text-on-surface"
           title="Back to sessions"
         >
           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
@@ -357,12 +357,12 @@ export function SessionPlayer({
           <p className="text-[11px] font-medium text-on-surface truncate">
             {session.name ?? 'Unnamed session'}
           </p>
-          <p className="font-mono text-[9px] text-on-surface-variant/30 truncate">{session.id}</p>
+          <p className="font-mono text-[9px] text-on-surface-variant/60 truncate">{session.id}</p>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <StatusBadge status={session.status} />
-          <span className="font-mono text-[9px] text-on-surface-variant/40 tabular-nums">
+          <span className="font-mono text-[9px] text-on-surface-variant/70 tabular-nums">
             {session.commands.length} cmd{session.commands.length === 1 ? '' : 's'}
           </span>
         </div>

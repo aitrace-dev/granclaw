@@ -14,7 +14,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const API = 'http://localhost:3001';
-const BASE_URL = 'http://localhost:5173';
+const BASE_URL = '';
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ test.describe('Settings page — configured providers list', () => {
     await goToSettings(page);
     await page.getByRole('button', { name: 'Replace key' }).click();
     await expect(page.getByPlaceholder('Paste new API key')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save' }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
   });
 
@@ -121,7 +121,7 @@ test.describe('Settings page — add provider', () => {
 
     // Select groq in the add-provider provider select
     const providerSelect = page.locator('select').first();
-    await providerSelect.selectOption({ label: /groq/i });
+    await providerSelect.selectOption('groq');
 
     // Fill API key
     await page.getByPlaceholder('Paste your API key').fill('test-groq-key');
@@ -254,8 +254,8 @@ test.describe('Dashboard — agent creation with provider picker', () => {
     await page.getByRole('button', { name: '+ New Agent' }).click();
 
     // Fill form
-    await page.locator('input').first().fill(AGENT_ID);
-    await page.locator('input').nth(1).fill('Test Provider Picker');
+    await page.getByPlaceholder('agent-id (lowercase, no spaces)').fill(AGENT_ID);
+    await page.getByPlaceholder('Display name').fill('Test Provider Picker');
 
     // Select openrouter as provider
     const providerSelect = page.locator('select').first();

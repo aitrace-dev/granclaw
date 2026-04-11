@@ -117,7 +117,7 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
             onClick={handleSave}
             disabled={!isDirty || saving}
             className="rounded px-3 py-1 text-[11px] font-medium transition-all disabled:opacity-20
-              bg-primary-container/20 text-primary hover:bg-primary-container/30"
+              bg-primary/20 text-primary hover:bg-primary/30"
           >
             {saving ? 'saving…' : 'Save'}
           </button>
@@ -127,7 +127,7 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
         {selectedFile && (
           <button
             onClick={() => { setSelectedFile(null); setFileContent(''); setOriginalContent(''); }}
-            className="rounded px-2 py-1 text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant transition-colors"
+            className="rounded px-2 py-1 text-[11px] text-on-surface-variant/70 hover:text-on-surface-variant transition-colors"
           >
             ×
           </button>
@@ -136,8 +136,8 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
 
       {/* ── Error banner ─────────────────────────────────────────── */}
       {error && (
-        <div className="px-4 py-2 bg-red-950/20">
-          <p className="font-mono text-[10px] text-red-400/70">{error}</p>
+        <div className="px-4 py-2 bg-error/10">
+          <p className="font-mono text-[10px] text-error/70">{error}</p>
         </div>
       )}
 
@@ -155,7 +155,7 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
         /* ── Directory listing ────────────────────────────────── */
         <div className="flex-1 overflow-y-auto">
           {entries.length === 0 ? (
-            <p className="font-mono text-[11px] text-on-surface-variant/30 p-4 italic">Empty directory</p>
+            <p className="font-mono text-[11px] text-on-surface-variant/60 p-4 italic">Empty directory</p>
           ) : (
             <div className="flex flex-col">
               {/* Parent directory link */}
@@ -165,10 +165,10 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
                     const parent = currentPath.split('/').slice(0, -1).join('/');
                     loadDir(parent);
                   }}
-                  className="flex items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[#282a30]/50"
+                  className="flex items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-surface-container/50"
                 >
                   <span className="text-[13px] opacity-40">↩</span>
-                  <span className="font-mono text-[11px] text-on-surface-variant/50">..</span>
+                  <span className="font-mono text-[11px] text-on-surface-variant">..</span>
                 </button>
               )}
 
@@ -176,7 +176,7 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
                 <button
                   key={entry.name}
                   onClick={() => handleEntryClick(entry)}
-                  className="group flex items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-[#282a30]/50"
+                  className="group flex items-center gap-3 px-4 py-2 text-left transition-colors hover:bg-surface-container/50"
                 >
                   <span className="text-[13px] opacity-50 group-hover:opacity-80 transition-opacity">
                     {entry.type === 'directory' ? '📁' : '📄'}

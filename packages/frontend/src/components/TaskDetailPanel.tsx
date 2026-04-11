@@ -30,15 +30,15 @@ function relativeTime(unixSeconds: number): string {
 }
 
 const inputCls =
-  'rounded bg-[#33343b] px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 transition-shadow w-full';
+  'rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 transition-shadow w-full';
 
 function SourceBadge({ source }: { source: 'agent' | 'human' }) {
   return (
     <span
       className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.08em] ${
         source === 'agent'
-          ? 'bg-secondary-container text-[#002113]'
-          : 'bg-primary-container text-on-surface'
+          ? 'bg-secondary-container text-on-primary'
+          : 'bg-primary text-on-surface'
       }`}
     >
       {source}
@@ -51,7 +51,7 @@ function CommentItem({ comment }: { comment: TaskComment }) {
     <div className="flex flex-col gap-1 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
       <div className="flex items-center gap-2">
         <SourceBadge source={comment.source} />
-        <span className="font-mono text-[9px] text-on-surface-variant/30">
+        <span className="font-mono text-[9px] text-on-surface-variant/60">
           {relativeTime(comment.createdAt)}
         </span>
       </div>
@@ -165,14 +165,14 @@ export function TaskDetailPanel({
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-mono text-[10px] text-primary/40 flex-shrink-0">{task.id}</span>
             {saving && (
-              <span className="font-mono text-[9px] text-on-surface-variant/30 animate-pulse">
+              <span className="font-mono text-[9px] text-on-surface-variant/60 animate-pulse">
                 saving…
               </span>
             )}
           </div>
           <button
             onClick={onClose}
-            className="text-on-surface-variant/40 hover:text-on-surface transition-colors text-[18px] leading-none flex-shrink-0"
+            className="text-on-surface-variant/70 hover:text-on-surface transition-colors text-[18px] leading-none flex-shrink-0"
             aria-label="Close"
           >
             ×
@@ -188,7 +188,7 @@ export function TaskDetailPanel({
               {editingTitle ? (
                 <input
                   autoFocus
-                  className={`${inputCls} text-[15px] font-semibold font-display`}
+                  className={`${inputCls} text-[15px] font-semibold font-headline`}
                   value={titleDraft}
                   onChange={(e) => setTitleDraft(e.target.value)}
                   onBlur={commitTitle}
@@ -199,7 +199,7 @@ export function TaskDetailPanel({
                 />
               ) : (
                 <h2
-                  className="font-display text-[17px] font-semibold text-on-surface tracking-[-0.01em] cursor-pointer hover:text-primary/90 transition-colors"
+                  className="font-headline text-[17px] font-semibold text-on-surface tracking-[-0.01em] cursor-pointer hover:text-primary/90 transition-colors"
                   onClick={() => setEditingTitle(true)}
                   title="Click to edit"
                 >
@@ -216,7 +216,7 @@ export function TaskDetailPanel({
               <select
                 value={task.status}
                 onChange={(e) => void commitStatus(e.target.value as TaskStatus)}
-                className="rounded bg-[#33343b] px-2.5 py-[7px] text-[11px] text-on-surface outline-none focus:ring-1 focus:ring-primary/25 cursor-pointer font-mono transition-shadow"
+                className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface outline-none focus:ring-1 focus:ring-primary/25 cursor-pointer font-mono transition-shadow"
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -229,14 +229,14 @@ export function TaskDetailPanel({
             {/* Meta badges */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/30">
+                <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/60">
                   source
                 </span>
                 <SourceBadge source={task.source} />
               </div>
               {showEditedBy && task.updatedBy && (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/30">
+                  <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/60">
                     edited by
                   </span>
                   <SourceBadge source={task.updatedBy} />
@@ -246,11 +246,11 @@ export function TaskDetailPanel({
 
             {/* Timestamps */}
             <div className="flex flex-col gap-1">
-              <p className="font-mono text-[10px] text-on-surface-variant/30">
+              <p className="font-mono text-[10px] text-on-surface-variant/60">
                 <span className="text-on-surface-variant/20">created</span>{' '}
                 {relativeTime(task.createdAt)}
               </p>
-              <p className="font-mono text-[10px] text-on-surface-variant/30">
+              <p className="font-mono text-[10px] text-on-surface-variant/60">
                 <span className="text-on-surface-variant/20">updated</span>{' '}
                 {relativeTime(task.updatedAt)}
               </p>
@@ -279,7 +279,7 @@ export function TaskDetailPanel({
                     </button>
                     <button
                       onClick={() => { setEditingDesc(false); setDescDraft(task.description); }}
-                      className="rounded bg-[#33343b] px-2 py-1.5 text-[10px] text-on-surface-variant/40 hover:text-on-surface-variant/70 transition-colors"
+                      className="rounded bg-surface-container px-2 py-1.5 text-[10px] text-on-surface-variant/70 hover:text-on-surface-variant/70 transition-colors"
                     >
                       Cancel
                     </button>
@@ -296,7 +296,7 @@ export function TaskDetailPanel({
                       <ReactMarkdown>{task.description}</ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="font-mono text-[11px] text-on-surface-variant/25 italic group-hover:text-on-surface-variant/40 transition-colors">
+                    <p className="font-mono text-[11px] text-on-surface-variant/25 italic group-hover:text-on-surface-variant/70 transition-colors">
                       No description — click to add
                     </p>
                   )}
@@ -341,13 +341,13 @@ export function TaskDetailPanel({
 
             {/* Danger zone */}
             <div className="mt-2 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-              <p className="text-[8px] uppercase tracking-[0.18em] text-red-500/30 font-semibold mb-2">
+              <p className="text-[8px] uppercase tracking-[0.18em] text-error/30 font-semibold mb-2">
                 Danger zone
               </p>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="w-full rounded bg-red-950/15 px-3 py-2 text-left font-mono text-[11px] text-red-400/60 transition-all hover:bg-red-950/30 hover:text-red-300 disabled:opacity-20"
+                className="w-full rounded bg-red-950/15 px-3 py-2 text-left font-mono text-[11px] text-error/60 transition-all hover:bg-red-950/30 hover:text-error disabled:opacity-20"
               >
                 {deleting ? 'deleting…' : '[DANGEROUS] Delete task'}
               </button>

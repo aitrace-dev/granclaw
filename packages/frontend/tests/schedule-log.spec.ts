@@ -20,6 +20,7 @@ import { test, expect } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createSeededAgent, teardownAgent } from './helpers/agent.ts';
+import { setupTestProvider, teardownTestProvider } from './helpers/provider.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,8 +33,10 @@ const API = 'http://localhost:3001';
 
 test.describe('Schedule run history', () => {
   let scheduleId: string;
+  let providerAddedByTest = false;
 
   test.beforeAll(async () => {
+    providerAddedByTest = await setupTestProvider();
     await createSeededAgent(AGENT_ID, SEED_DIR);
 
     // Create a schedule directly via API
@@ -47,13 +50,17 @@ test.describe('Schedule run history', () => {
         timezone: 'UTC',
       }),
     });
-    expect(res.ok, `Failed to create schedule: ${await res.text()}`).toBe(true);
-    const schedule = await res.json() as { id: string };
+    // Read body once — using it in an expect message AND then json() causes
+    // "Body has already been read" TypeError.
+    const body = await res.text();
+    if (!res.ok) throw new Error(`Failed to create schedule: ${body}`);
+    const schedule = JSON.parse(body) as { id: string };
     scheduleId = schedule.id;
   });
 
   test.afterAll(async () => {
     await teardownAgent(AGENT_ID);
+    await teardownTestProvider(providerAddedByTest);
   });
 
   test('clicking a schedule shows runs, Run now creates a run, clicking it shows messages', async ({ page }) => {
@@ -77,22 +84,18 @@ test.describe('Schedule run history', () => {
     // Click the run entry → opens RunMessages view
     await runEntry.click();
 
-    // While the agent is processing, the user message should appear immediately
-    // (saved at the start of processNext before the LLM call)
+    // User message is saved immediately (before the LLM call)
     await expect(page.getByText('Reply with exactly one word: ok')).toBeVisible({ timeout: 10_000 });
 
-    // "Waiting for response..." should show while agent is still running
-    // (or messages if it completed very fast)
-    const waitingText = page.getByText('Waiting for response...');
-    const hasWaiting = await waitingText.isVisible().catch(() => false);
-    if (hasWaiting) {
-      // Wait for the agent to finish — waiting text should disappear
-      await expect(waitingText).not.toBeVisible({ timeout: 90_000 });
-    }
+    // Wait for the agent reply — it appears as a second div.rounded-md in the
+    // message container. "Waiting for response..." only shows when messages.length===0
+    // so we can't rely on it here (user message is already saved). Wait directly.
+    const msgContainer = page.locator('div.space-y-2').last();
+    const secondMessage = msgContainer.locator('div.rounded-md').nth(1);
+    await expect(secondMessage).toBeVisible({ timeout: 90_000 });
 
-    // After completion, there should be at least the user message and one assistant message
-    const messages = page.locator('.rounded-md').filter({ hasText: /.+/ });
-    await expect(messages).toHaveCount(2, { timeout: 10_000 });
+    const count = await msgContainer.locator('div.rounded-md').filter({ hasText: /.+/ }).count();
+    expect(count, 'expected at least 2 messages (user + agent reply)').toBeGreaterThanOrEqual(2);
   });
 
   test('API: trigger returns runId and channelId, messages are retrievable', async () => {

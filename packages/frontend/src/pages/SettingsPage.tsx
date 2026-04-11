@@ -13,7 +13,7 @@ import { PROVIDERS, getModelsForProvider, getDefaultModel } from '../lib/models.
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const inputCls = 'rounded bg-[#33343b] px-3 py-2 text-[12px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow w-full';
+const inputCls = 'rounded bg-surface-container px-3 py-2 text-[12px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow w-full';
 
 const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
   PROVIDERS.map(p => [p.value, p.label])
@@ -53,29 +53,29 @@ function ConfiguredProviderRow({
   }
 
   return (
-    <div className="rounded-lg bg-[#1e1f26] p-4 space-y-3">
+    <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <span className="font-mono text-[13px] text-on-surface font-semibold">
             {PROVIDER_LABELS[entry.provider] ?? entry.provider}
           </span>
-          <span className="font-mono text-[10px] text-on-surface-variant/40 ml-2">
+          <span className="font-mono text-[10px] text-on-surface-variant/70 ml-2">
             {entry.model}
           </span>
-          <span className="ml-2 text-green-400 text-[10px] font-mono">✓</span>
+          <span className="ml-2 text-success text-[10px] font-mono">✓</span>
         </div>
         <div className="flex items-center gap-2">
           {!replacing && (
             <button
               onClick={() => { setReplacing(true); setSuccess(false); }}
-              className="rounded px-2 py-1 text-[11px] font-mono text-on-surface-variant/50 hover:text-on-surface bg-[#33343b] transition-colors"
+              className="rounded px-2 py-1 text-[11px] font-mono text-on-surface-variant hover:text-on-surface bg-surface-container transition-colors"
             >
               Replace key
             </button>
           )}
           <button
             onClick={onRemove}
-            className="rounded px-2 py-1 text-[11px] font-mono text-red-400/60 hover:text-red-400 hover:bg-red-950/20 transition-colors"
+            className="rounded px-2 py-1 text-[11px] font-mono text-error/60 hover:text-error hover:bg-error/10 transition-colors"
           >
             Remove
           </button>
@@ -83,9 +83,9 @@ function ConfiguredProviderRow({
       </div>
 
       {replacing && (
-        <div className="space-y-2 pt-1 border-t border-[#33343b]">
+        <div className="space-y-2 pt-1 border-t border-outline-variant/40">
           <div>
-            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1">
+            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1">
               Model
             </label>
             <select
@@ -99,7 +99,7 @@ function ConfiguredProviderRow({
             </select>
           </div>
           <div>
-            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1">
+            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1">
               New API Key
             </label>
             <input
@@ -116,18 +116,18 @@ function ConfiguredProviderRow({
             <button
               onClick={handleSave}
               disabled={saving}
-              className="rounded bg-primary-container px-3 py-1.5 text-[12px] font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
+              className="rounded bg-primary px-3 py-1.5 text-[12px] font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
             <button
               onClick={() => { setReplacing(false); setApiKey(''); setError(null); }}
-              className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant/50 hover:text-on-surface transition-colors"
+              className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
             >
               Cancel
             </button>
-            {success && <span className="font-mono text-[11px] text-green-400">Saved</span>}
-            {error && <span className="font-mono text-[10px] text-red-400">{error}</span>}
+            {success && <span className="font-mono text-[11px] text-success">Saved</span>}
+            {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
         </div>
       )}
@@ -245,22 +245,24 @@ export function SettingsPage() {
     }
   }
 
-  if (loading) return <div className="text-on-surface-variant/40 font-mono text-xs p-8">loading…</div>;
+  if (loading) return <div className="text-on-surface-variant/70 font-mono text-xs p-8">loading…</div>;
 
   return (
-    <div className="max-w-lg mx-auto py-8 px-4">
+    <div className="max-w-2xl mx-auto py-8 px-4">
 
       {/* ── Provider Settings ── */}
-      <div className="mb-6">
-        <h1 className="font-display text-2xl font-semibold text-on-surface">Provider Settings</h1>
-        <p className="font-mono text-[11px] text-on-surface-variant/40 mt-1">
+      <div className="mb-8">
+        <h1 className="font-headline text-4xl font-bold text-on-surface">
+          <span className="highlight-marker">Provider</span> Settings
+        </h1>
+        <p className="font-mono text-[11px] text-on-surface-variant mt-2">
           Configure AI providers. Each agent can use a different provider.
         </p>
       </div>
 
       {/* Configured providers list */}
       {configuredProviders.length === 0 ? (
-        <p className="font-mono text-[11px] text-amber-400/80 mb-4">
+        <p className="font-mono text-[11px] text-warning/80 mb-4">
           No providers configured — agents will not respond until you add one.
         </p>
       ) : (
@@ -278,14 +280,14 @@ export function SettingsPage() {
 
       {/* Add provider form */}
       {availableToAdd.length > 0 && (
-        <div className="rounded-lg bg-[#1e1f26] p-5 space-y-4">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium">
+        <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-5 space-y-4">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium">
             Add provider
           </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+              <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
                 Provider
               </label>
               <select
@@ -299,7 +301,7 @@ export function SettingsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+              <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
                 Model
               </label>
               <select
@@ -315,7 +317,7 @@ export function SettingsPage() {
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium mb-1.5">
+            <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
               API Key
             </label>
             <input
@@ -332,29 +334,29 @@ export function SettingsPage() {
             <button
               onClick={handleAdd}
               disabled={adding || !addApiKey.trim()}
-              className="rounded bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
+              className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
               {adding ? 'Adding…' : 'Add'}
             </button>
-            {addSuccess && <span className="font-mono text-[11px] text-green-400">Added ✓</span>}
-            {addError && <span className="font-mono text-[10px] text-red-400">{addError}</span>}
+            {addSuccess && <span className="font-mono text-[11px] text-success">Added ✓</span>}
+            {addError && <span className="font-mono text-[10px] text-error">{addError}</span>}
           </div>
         </div>
       )}
 
       {/* ── Web Search ── */}
-      <div className="mt-8 pt-8 border-t border-[#33343b]">
-        <h2 className="font-display text-lg font-semibold text-on-surface mb-1">Web Search</h2>
-        <p className="font-mono text-[11px] text-on-surface-variant/40 mb-6">
+      <div className="mt-8 pt-8 border-t border-outline-variant/40">
+        <h2 className="font-headline text-2xl font-bold text-on-surface mb-1">Web Search</h2>
+        <p className="font-mono text-[11px] text-on-surface-variant/70 mb-6">
           Brave Search gives agents real web search capability.{' '}
           {searchConfigured
-            ? <span className="text-green-400">Configured ✓</span>
-            : <span className="text-amber-400">Not configured — agents cannot search the web.</span>}
+            ? <span className="text-success">Configured ✓</span>
+            : <span className="text-warning">Not configured — agents cannot search the web.</span>}
         </p>
 
         <div className="space-y-4">
           <div>
-            <label className="block font-mono text-[11px] text-on-surface-variant/50 mb-1">
+            <label className="block font-mono text-[11px] text-on-surface-variant mb-1">
               Brave Search API key
             </label>
             {searchConfigured && !replacingSearch ? (
@@ -368,7 +370,7 @@ export function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => { setReplacingSearch(true); setSearchSuccess(false); }}
-                  className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant/50 hover:text-on-surface bg-[#33343b] transition-colors"
+                  className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant hover:text-on-surface bg-surface-container transition-colors"
                 >
                   Replace
                 </button>
@@ -391,7 +393,7 @@ export function SettingsPage() {
               <button
                 onClick={handleSearchSave}
                 disabled={searchSaving || !braveApiKey.trim()}
-                className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {searchSaving ? 'Saving…' : 'Save'}
               </button>
@@ -399,7 +401,7 @@ export function SettingsPage() {
             {replacingSearch && (
               <button
                 onClick={() => { setReplacingSearch(false); setBraveApiKey(''); setSearchError(null); }}
-                className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant/50 hover:text-on-surface transition-colors"
+                className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
               >
                 Cancel
               </button>
@@ -408,13 +410,13 @@ export function SettingsPage() {
               <button
                 onClick={handleSearchReset}
                 disabled={searchSaving}
-                className="rounded px-3 py-2 text-[12px] font-mono text-on-surface-variant/50 hover:text-red-400 hover:bg-red-950/20 transition-colors disabled:opacity-40"
+                className="rounded px-3 py-2 text-[12px] font-mono text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors disabled:opacity-40"
               >
                 Remove
               </button>
             )}
-            {searchSuccess && <span className="font-mono text-[11px] text-green-400">Saved</span>}
-            {searchError && <span className="font-mono text-[10px] text-red-400">{searchError}</span>}
+            {searchSuccess && <span className="font-mono text-[11px] text-success">Saved</span>}
+            {searchError && <span className="font-mono text-[10px] text-error">{searchError}</span>}
           </div>
         </div>
       </div>

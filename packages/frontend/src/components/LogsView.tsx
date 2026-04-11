@@ -44,10 +44,10 @@ const FILTERS: { label: string; value: Filter; color: string }[] = [
 
 function levelColor(type: string): string {
   const map: Record<string, string> = {
-    message: 'text-emerald-400',
-    tool_call: 'text-blue-400',
-    tool_result: 'text-blue-400/60',
-    error: 'text-red-400',
+    message: 'text-success',
+    tool_call: 'text-info',
+    tool_result: 'text-info/60',
+    error: 'text-error',
     system: 'text-gray-500',
   };
   return map[type] ?? 'text-gray-500';
@@ -206,15 +206,15 @@ export function LogsView({ agentId }: { agentId: string }) {
     <div className="flex flex-col h-full w-full min-w-0 rounded-lg overflow-hidden" style={{ background: '#0c0d12' }}>
 
       {/* ── Search + controls bar ── */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-[#111319]">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-outline-variant/30 bg-background">
         {/* Search */}
         <div className="flex-1 flex items-center gap-1.5">
           <div className="flex-1 relative">
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant/30" viewBox="0 0 20 20" fill="currentColor">
+            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant/60" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
             </svg>
             <input
-              className="w-full bg-[#1a1b23] rounded pl-8 pr-7 py-1.5 text-[11px] text-on-surface font-mono placeholder:text-on-surface-variant/25 outline-none focus:ring-1 focus:ring-primary/30 transition-shadow"
+              className="w-full bg-surface-container-lowest rounded pl-8 pr-7 py-1.5 text-[11px] text-on-surface font-mono placeholder:text-on-surface-variant/25 outline-none focus:ring-1 focus:ring-primary/30 transition-shadow"
               placeholder="Search logs..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -223,7 +223,7 @@ export function LogsView({ agentId }: { agentId: string }) {
             {search && (
               <button
                 onClick={() => { setSearch(''); setSearchDebounced(''); }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant/30 hover:text-on-surface-variant/60 text-xs"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-on-surface-variant/60 text-xs"
               >
                 x
               </button>
@@ -247,7 +247,7 @@ export function LogsView({ agentId }: { agentId: string }) {
               className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] font-mono transition-colors ${
                 filter === value
                   ? 'bg-white/10 text-on-surface'
-                  : 'text-on-surface-variant/40 hover:text-on-surface-variant/70 hover:bg-white/5'
+                  : 'text-on-surface-variant/70 hover:text-on-surface-variant/70 hover:surface-container/50'
               }`}
             >
               {color && <span className={`w-1.5 h-1.5 rounded-full ${color}`} />}
@@ -260,7 +260,7 @@ export function LogsView({ agentId }: { agentId: string }) {
         <button
           onClick={() => setLive(l => !l)}
           className={`flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-mono transition-colors ${
-            live ? 'bg-emerald-500/15 text-emerald-400' : 'text-on-surface-variant/40 hover:text-on-surface-variant/60'
+            live ? 'bg-emerald-500/15 text-success' : 'text-on-surface-variant/70 hover:text-on-surface-variant/60'
           }`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'}`} />
@@ -314,7 +314,7 @@ export function LogsView({ agentId }: { agentId: string }) {
 
                     {/* Message */}
                     <span className={`flex-1 min-w-0 ${isExpanded ? '' : 'truncate'} ${
-                      entry.type === 'error' ? 'text-red-300' : 'text-on-surface-variant/60'
+                      entry.type === 'error' ? 'text-error' : 'text-on-surface-variant/60'
                     }`}>
                       {highlightSearch(summary, searchDebounced)}
                     </span>
@@ -338,7 +338,7 @@ export function LogsView({ agentId }: { agentId: string }) {
                       {!!entry.input && entry.input !== 'null' && (
                         <div>
                           <span className="text-[8px] uppercase text-on-surface-variant/20">input</span>
-                          <pre className="text-[10px] text-on-surface-variant/40 mt-0.5 bg-black/30 rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
+                          <pre className="text-[10px] text-on-surface-variant/70 mt-0.5 bg-black/30 rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
                             {JSON.stringify(parse(entry.input), null, 2)}
                           </pre>
                         </div>
@@ -346,7 +346,7 @@ export function LogsView({ agentId }: { agentId: string }) {
                       {!!entry.output && entry.output !== 'null' && (
                         <div>
                           <span className="text-[8px] uppercase text-on-surface-variant/20">output</span>
-                          <pre className="text-[10px] text-on-surface-variant/40 mt-0.5 bg-black/30 rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
+                          <pre className="text-[10px] text-on-surface-variant/70 mt-0.5 bg-black/30 rounded px-2.5 py-1.5 overflow-auto max-h-48 whitespace-pre-wrap break-words">
                             {JSON.stringify(parse(entry.output), null, 2)}
                           </pre>
                         </div>

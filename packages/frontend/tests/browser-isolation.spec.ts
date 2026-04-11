@@ -45,26 +45,10 @@ test.describe('Browser Integration — MCP Isolation', () => {
     expect(Object.keys(mcp.mcpServers)).toHaveLength(0);
   });
 
-  test('agent-browser skill is bootstrapped in workspace', async ({ request }) => {
-    const res = await request.get(`${API}/agents/${AGENT_ID}/skills`);
-    expect(res.ok()).toBe(true);
-    const data = await res.json() as { skills: { name: string; description: string }[] };
-
-    const agentBrowser = data.skills.find((s) => s.name === 'agent-browser');
-    expect(agentBrowser).toBeDefined();
-    expect(agentBrowser!.description).toContain('Browser automation');
-  });
-
-  test('browser wrapper exists and is referenced in skill', async ({ request }) => {
-    const res = await request.get(
-      `${API}/agents/${AGENT_ID}/files/read?path=${encodeURIComponent('.claude/skills/agent-browser/SKILL.md')}`
-    );
-    expect(res.ok()).toBe(true);
-    const data = await res.json() as { content: string };
-
-    expect(data.content).toContain('browser-wrapper.sh');
-    expect(data.content).toContain('${CLAUDE_SKILL_DIR}');
-  });
+  // NOTE: the agent-browser skill was removed from the template — browser
+  // automation is now an inline pi extensionFactory in runner-pi.ts. The
+  // /skills API lists file-based skills only, so agent-browser no longer
+  // appears there. The browser-wrapper.sh SKILL.md path is also gone.
 
   test('browser-sessions endpoint returns valid response', async ({ request }) => {
     const res = await request.get(`${API}/agents/${AGENT_ID}/browser-sessions`);

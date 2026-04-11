@@ -25,6 +25,15 @@ import { runAgent, stopAgent } from './runner-pi.js';
 import { saveMessage } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 import { forceCloseActiveSession } from '../browser-sessions.js';
+import {
+  hasTakeover,
+  getTakeover,
+  cancelTakeoverTimer,
+  clearTakeover,
+  updateTakeoverTimer,
+  TAKEOVER_TIMEOUT_MS,
+} from '../takeover-state.js';
+import { finalizeSession } from '../browser/session-manager.js';
 
 const agentId = process.env.AGENT_ID;
 const port = Number(process.env.AGENT_PORT);
@@ -159,7 +168,16 @@ function main() {
       let fullResponse = '';
       let toolCallCount = 0;
 
-      await runAgent(agent!, job.message, (chunk) => {
+      // Inject context message if a human takeover was pending
+      let messageText = job.message;
+      if (hasTakeover(agentId as string)) {
+        cancelTakeoverTimer(agentId as string); // stop 10min timeout — entry stays for runner-pi to restore handle
+        messageText =
+          `[User completed browser interaction]\n` +
+          `User said: "${job.message}"`;
+      }
+
+      await runAgent(agent!, messageText, (chunk) => {
         broadcastToChannel(job.channelId, { type: 'chunk', chunk });
         if (chunk.type === 'text') {
           fullResponse += chunk.text;
@@ -204,10 +222,29 @@ function main() {
 
       markDone(workspaceDir, job.id);
 
+      // Arm 10-minute timeout if the agent registered a takeover during this run
+      if (hasTakeover(agentId as string)) {
+        const entry = getTakeover(agentId as string)!;
+        const timer = setTimeout(async () => {
+          const current = getTakeover(agentId as string);
+          if (!current) return; // already resolved by user reply
+          clearTakeover(agentId as string);
+          try { await finalizeSession(current.handle, 'closed'); } catch { /* best effort */ }
+          const timeoutMsg =
+            '[System] The user did not take any browser action within 10 minutes. ' +
+            'The browser session has been closed. Please proceed to the next step or finish gracefully.';
+          enqueue(workspaceDir, agentId as string, timeoutMsg, entry.channelId);
+        }, TAKEOVER_TIMEOUT_MS);
+        updateTakeoverTimer(agentId as string, timer);
+      }
+
       // Belt-and-suspenders: if the agent left a browser session open (e.g.
       // forgot to call close), finalize it so recordings don't stay "active"
       // forever and stream subscribers detach cleanly.
-      forceCloseActiveSession(agentId as string);
+      // Skip if a human takeover is pending — browser session must stay alive
+      if (!hasTakeover(agentId as string)) {
+        forceCloseActiveSession(agentId as string);
+      }
 
       // Send the full reply back to Telegram once the turn is complete
       if (isTelegramJob) {

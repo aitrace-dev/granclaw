@@ -89,10 +89,18 @@ function CommandList({
  * JPEG frame as the <img src>. Shows a placeholder if the stream errors or
  * agent-browser isn't running.
  */
+interface ActiveTabInfo {
+  index: number;
+  url: string;
+  title: string;
+}
+
 function LiveView({ agentId, session }: { agentId: string; session: BrowserSessionDetail }) {
   const [frame, setFrame] = useState<string | null>(null);
   const [status, setStatus] = useState<'connecting' | 'attached' | 'error' | 'closed'>('connecting');
   const [errorReason, setErrorReason] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ActiveTabInfo | null>(null);
+  const [tabFlash, setTabFlash] = useState(false);
 
   useEffect(() => {
     const ws = new WebSocket(browserLiveWsUrl(agentId, session.id));
@@ -101,11 +109,26 @@ function LiveView({ agentId, session }: { agentId: string; session: BrowserSessi
     ws.onmessage = (ev) => {
       if (!alive) return;
       try {
-        const msg = JSON.parse(ev.data) as { type: string; data?: string; reason?: string };
+        const msg = JSON.parse(ev.data) as {
+          type: string;
+          data?: string;
+          reason?: string;
+          index?: number;
+          url?: string;
+          title?: string;
+        };
         if (msg.type === 'frame' && msg.data) {
           setFrame(`data:image/jpeg;base64,${msg.data}`);
         } else if (msg.type === 'attached') {
           setStatus('attached');
+          // Initial attach carries url/title/index when the relay knows them
+          if (msg.url != null && msg.title != null && msg.index != null) {
+            setActiveTab({ index: msg.index, url: msg.url, title: msg.title });
+          }
+        } else if (msg.type === 'tab_changed' && msg.url != null && msg.title != null && msg.index != null) {
+          setActiveTab({ index: msg.index, url: msg.url, title: msg.title });
+          setTabFlash(true);
+          window.setTimeout(() => setTabFlash(false), 900);
         } else if (msg.type === 'error' || msg.type === 'detached') {
           setStatus('error');
           setErrorReason(msg.reason ?? 'stream ended');
@@ -141,11 +164,31 @@ function LiveView({ agentId, session }: { agentId: string; session: BrowserSessi
           </p>
         </div>
       )}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-1">
-        <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse inline-block" />
-        <span className="text-[8px] uppercase tracking-[0.15em] text-secondary/70 font-semibold">
-          live
-        </span>
+
+      {/* LIVE badge + active-tab label */}
+      <div className="absolute top-3 left-3 flex items-center gap-2 max-w-[60%]">
+        <div className="flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-1 flex-shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse inline-block" />
+          <span className="text-[8px] uppercase tracking-[0.15em] text-secondary/70 font-semibold">
+            live
+          </span>
+        </div>
+        {activeTab && (
+          <div
+            className={`flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 min-w-0 transition-all duration-500 ${
+              tabFlash ? 'ring-1 ring-primary/60 bg-primary/25' : ''
+            }`}
+            title={activeTab.url}
+          >
+            <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/40 font-semibold flex-shrink-0">
+              tab {activeTab.index}
+            </span>
+            <span className="w-1 h-1 rounded-full bg-on-surface-variant/30 flex-shrink-0" />
+            <span className="text-[10px] text-on-surface/90 truncate">
+              {activeTab.title || activeTab.url}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -110,6 +110,12 @@ function detectChromePath(): string | null {
  *   const argv = ['--session', agentId, ...stealthArgv(), 'open', url];
  */
 export function stealthArgv(): string[] {
+  // DISABLED 2026-04-11: the stealth extension / real-Chrome swap was
+  // producing buggy behaviour in agent browser sessions. Keep the code
+  // in place so we can re-enable with one edit once we understand why.
+  // Set GRANCLAW_STEALTH_ENABLED=1 to opt back in.
+  if (process.env.GRANCLAW_STEALTH_ENABLED !== '1') return [];
+
   if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return [];
 
   const argv: string[] = [];

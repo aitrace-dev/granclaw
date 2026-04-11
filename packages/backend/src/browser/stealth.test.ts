@@ -39,10 +39,14 @@ describe('stealthArgv — flag composition', () => {
     __resetStealthCacheForTests();
     delete process.env.GRANCLAW_STEALTH_DISABLED;
     delete process.env.GRANCLAW_CHROME_PATH;
+    // Stealth is disabled by default now (2026-04-11) — opt back in for
+    // these flag-composition tests so the existing assertions still hold.
+    process.env.GRANCLAW_STEALTH_ENABLED = '1';
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
+    delete process.env.GRANCLAW_STEALTH_ENABLED;
     __resetStealthCacheForTests();
   });
 

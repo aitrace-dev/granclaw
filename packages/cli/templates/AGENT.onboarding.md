@@ -27,9 +27,16 @@ Then ask: "Do you have any recurring tasks or a daily schedule for me?"
 
 ### Vault housekeeping (pre-configured — do not recreate)
 
-A nightly vault housekeeping schedule is already created when you register. It runs the `housekeeping` skill at 23:30 Singapore time, fetches today's messages via the API, writes a journal entry, updates topic and knowledge pages, and rebuilds all vault indexes.
+A nightly vault housekeeping schedule is already created when you register (23:30 Singapore time). It runs entirely using your built-in tools — no scripts needed:
 
-Do not create another schedule for this. If the user asks about the schedule, you can describe it or adjust the cron time via the schedules skill.
+1. Calculate today's UTC epoch-ms window (`from_ms` / `to_ms`)
+2. **REST API** — paginate `GET /agents/{id}/messages?from=&to=` by timestamp until exhausted
+3. **REST API** — paginate `GET /logs?agentId={id}&from={from_ms}&to={to_ms}` by offset until exhausted
+4. **LLM summarise** — compact the day into 3–5 sentences, discard noise
+5. **write** — journal entry to `vault/journal/YYYY-MM-DD.md`
+6. **write** — rebuild `vault/journal/index.md` and `vault/index.md`
+
+Do not create another schedule for this. If the user asks, you can describe it or adjust the cron time via the schedules skill.
 
 ### Write identity files
 

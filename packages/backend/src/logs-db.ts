@@ -51,17 +51,21 @@ export function queryActions(params: {
   agentId?: string;
   type?: string;
   search?: string;
+  from?: number; // epoch ms inclusive
+  to?: number;   // epoch ms inclusive
   limit?: number;
   offset?: number;
 }): { items: ActionRow[]; total: number } {
   const db = getDataDb();
-  const { agentId, type, search, limit = 50, offset = 0 } = params;
+  const { agentId, type, search, from, to, limit = 50, offset = 0 } = params;
 
   const conditions: string[] = [];
   const bindings: unknown[] = [];
 
   if (agentId) { conditions.push('agent_id = ?'); bindings.push(agentId); }
   if (type)    { conditions.push('type = ?');     bindings.push(type); }
+  if (from)    { conditions.push('created_at >= ?'); bindings.push(from); }
+  if (to)      { conditions.push('created_at <= ?'); bindings.push(to); }
   if (search) {
     conditions.push('(input LIKE ? OR output LIKE ?)');
     const term = `%${search}%`;

@@ -299,6 +299,7 @@ export function createServer() {
       role:      q.role      as 'user' | 'assistant' | 'tool_call' | undefined,
       sortBy:    q.sortBy    as 'asc' | 'desc' | undefined,
       limit:     q.limit     ? Number(q.limit) : undefined,
+      offset:    q.offset    ? Number(q.offset) : undefined,
       count:     q.count === 'true',
     });
 

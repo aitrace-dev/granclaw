@@ -70,6 +70,7 @@ export interface MessageQuery {
   role?: 'user' | 'assistant' | 'tool_call';
   sortBy?: 'asc' | 'desc';
   limit?: number;
+  offset?: number;
   count?: boolean;
 }
 
@@ -82,7 +83,7 @@ export function queryMessages(
   query: MessageQuery = {},
 ): Message[] | { count: number } {
   const db = getDataDb();
-  const { channelId, contains, from, to, role, sortBy = 'desc', limit = 50, count = false } = query;
+  const { channelId, contains, from, to, role, sortBy = 'desc', limit = 50, offset = 0, count = false } = query;
 
   const clauses: string[] = ['agent_id = ?'];
   const params: unknown[] = [agentId];
@@ -107,8 +108,8 @@ export function queryMessages(
   const rows = db.prepare(`
     SELECT id, agent_id, channel_id, role, content, created_at
     FROM messages WHERE ${where}
-    ORDER BY created_at ${order} LIMIT ?
-  `).all(...params as [], cappedLimit) as {
+    ORDER BY created_at ${order} LIMIT ? OFFSET ?
+  `).all(...params as [], cappedLimit, offset) as {
     id: string; agent_id: string; channel_id: string;
     role: string; content: string; created_at: number;
   }[];

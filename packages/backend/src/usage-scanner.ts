@@ -47,19 +47,24 @@ export async function scanUsage(agentId: string, days = 30): Promise<UsageSummar
   const modelMap = new Map<string, { inputTokens: number; outputTokens: number; sessions: number; estimatedCostUsd: number }>();
   const toolMap = new Map<string, number>();
 
-  let totalInput = 0, totalOutput = 0, totalCost = 0, totalSessions = 0;
+  let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheWrite = 0, totalCost = 0, totalSessions = 0;
 
   for (const row of systemRows) {
     if (row.created_at < cutoffMs) continue;
     if (!row.output) continue;
 
-    let tokens: { input?: number; output?: number; total?: number } | undefined;
+    // The pi runner logs tokens as { input, output, cacheRead, cacheWrite, total }.
+    // `total` is already input+output+cacheRead; we aggregate the components
+    // separately so the UI can break them out (Cache Read / Cache Write bars).
+    let tokens:
+      | { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number }
+      | undefined;
     let cost = 0;
     let model = 'unknown';
 
     try {
       const parsed = JSON.parse(row.output) as {
-        tokens?: { input?: number; output?: number; total?: number };
+        tokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number };
         cost?: number;
         model?: string;
       };
@@ -70,11 +75,15 @@ export async function scanUsage(agentId: string, days = 30): Promise<UsageSummar
 
     const inputTokens = tokens?.input ?? 0;
     const outputTokens = tokens?.output ?? 0;
+    const cacheReadTokens = tokens?.cacheRead ?? 0;
+    const cacheWriteTokens = tokens?.cacheWrite ?? 0;
 
-    if (!inputTokens && !outputTokens && !cost) continue;
+    if (!inputTokens && !outputTokens && !cacheReadTokens && !cacheWriteTokens && !cost) continue;
 
     totalInput += inputTokens;
     totalOutput += outputTokens;
+    totalCacheRead += cacheReadTokens;
+    totalCacheWrite += cacheWriteTokens;
     totalCost += cost;
     totalSessions++;
 
@@ -86,6 +95,8 @@ export async function scanUsage(agentId: string, days = 30): Promise<UsageSummar
     };
     day.inputTokens += inputTokens;
     day.outputTokens += outputTokens;
+    day.cacheReadTokens += cacheReadTokens;
+    day.cacheCreateTokens += cacheWriteTokens;
     day.sessions++;
     day.estimatedCostUsd += cost;
     dailyMap.set(date, day);
@@ -118,8 +129,8 @@ export async function scanUsage(agentId: string, days = 30): Promise<UsageSummar
     daily,
     totalInputTokens: totalInput,
     totalOutputTokens: totalOutput,
-    totalCacheReadTokens: 0,
-    totalCacheCreateTokens: 0,
+    totalCacheReadTokens: totalCacheRead,
+    totalCacheCreateTokens: totalCacheWrite,
     totalSessions,
     totalEstimatedCostUsd: totalCost,
     byModel,

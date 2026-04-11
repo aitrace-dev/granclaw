@@ -5,6 +5,7 @@ import {
   type WorkflowRunStep,
   type WorkflowStep,
 } from '../lib/api.ts';
+import { buttonGhost, cardCls } from '../ui/primitives';
 
 interface Props {
   agentId: string;
@@ -14,12 +15,14 @@ interface Props {
   onBack: () => void;
 }
 
-const statusColors: Record<string, string> = {
-  pending: '#64748b',
-  running: '#facc15',
-  completed: '#4ade80',
-  failed: '#f87171',
-  skipped: '#475569',
+// Tailwind text-color class per status, pulled from the semantic theme
+// tokens so both themes stay in sync.
+const statusText: Record<string, string> = {
+  pending:   'text-on-surface-variant',
+  running:   'text-warning',
+  completed: 'text-success',
+  failed:    'text-error',
+  skipped:   'text-on-surface-variant/60',
 };
 
 const statusIcons: Record<string, string> = {
@@ -43,17 +46,9 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
 
   useEffect(() => {
     void loadRun();
-    // Poll while running
     const id = setInterval(() => { void loadRun(); }, 1500);
     return () => clearInterval(id);
   }, [loadRun]);
-
-  // Stop polling when run is done
-  useEffect(() => {
-    if (run && run.status !== 'running') {
-      // One final load then stop (handled by cleanup)
-    }
-  }, [run]);
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -64,75 +59,78 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
   };
 
   if (!run) {
-    return <div style={{ padding: '1rem', color: '#94a3b8' }}>Loading run...</div>;
+    return (
+      <div className="p-4 font-mono text-sm text-on-surface-variant">
+        Loading run…
+      </div>
+    );
   }
 
-  // Match run_steps to step definitions for names
   const stepMap = new Map(steps.map((s) => [s.id, s]));
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0, marginBottom: '0.75rem' }}>
+    <div className="p-4">
+      <button onClick={onBack} className={`${buttonGhost} mb-3`}>
         ← Back to workflow
       </button>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#e2e8f0' }}>
-          Run — <span style={{ color: statusColors[run.status] }}>{run.status}</span>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-headline text-xl font-bold text-on-surface">
+          Run — <span className={statusText[run.status]}>{run.status}</span>
         </h2>
-        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+        <span className="font-mono text-[11px] text-on-surface-variant">
           {new Date(run.startedAt).toLocaleString()}
           {run.finishedAt && ` · ${((run.finishedAt - run.startedAt) / 1000).toFixed(1)}s`}
         </span>
       </div>
 
       {/* Step timeline */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <div className="flex flex-col gap-1">
         {run.steps.map((rs: WorkflowRunStep) => {
           const stepDef = stepMap.get(rs.stepId);
           const isExpanded = expanded.has(rs.id);
 
           return (
-            <div key={rs.id} style={{ background: '#1e293b', borderRadius: '4px', overflow: 'hidden' }}>
+            <div key={rs.id} className={`${cardCls} overflow-hidden`}>
               <div
                 onClick={() => toggle(rs.id)}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', cursor: 'pointer' }}
+                className="flex items-center gap-2 px-3 py-2 cursor-pointer"
               >
-                <span style={{ color: statusColors[rs.status], fontSize: '0.9rem' }}>
+                <span className={`text-sm ${statusText[rs.status]}`}>
                   {statusIcons[rs.status]}
                 </span>
-                <span style={{ color: '#e2e8f0', fontSize: '0.85rem', flex: 1 }}>
+                <span className="text-sm text-on-surface flex-1">
                   {stepDef?.name ?? rs.stepId}
                 </span>
                 {rs.durationMs !== null && (
-                  <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                  <span className="font-mono text-[10px] text-on-surface-variant">
                     {(rs.durationMs / 1000).toFixed(1)}s
                   </span>
                 )}
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                <span className="font-mono text-[10px] text-on-surface-variant">
                   {isExpanded ? '▾' : '▸'}
                 </span>
               </div>
 
               {isExpanded && (
-                <div style={{ padding: '0 0.75rem 0.75rem', fontSize: '0.8rem' }}>
+                <div className="px-3 pb-3 text-sm space-y-2">
                   {rs.error && (
-                    <div style={{ color: '#f87171', marginBottom: '0.5rem', whiteSpace: 'pre-wrap' }}>
+                    <div className="text-error whitespace-pre-wrap font-mono text-xs">
                       Error: {rs.error}
                     </div>
                   )}
                   {rs.input !== null && (
-                    <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ color: '#94a3b8', fontSize: '0.7rem', marginBottom: '0.25rem' }}>Input:</div>
-                      <pre style={{ margin: 0, color: '#cbd5e1', background: '#0f172a', padding: '0.5rem', borderRadius: '4px', overflowY: 'auto', maxHeight: '200px', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    <div>
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">Input</div>
+                      <pre className="font-mono text-xs text-on-surface bg-surface-container-low p-2 rounded overflow-auto max-h-52 whitespace-pre-wrap break-words">
                         {typeof rs.input === 'string' ? rs.input : JSON.stringify(rs.input, null, 2)}
                       </pre>
                     </div>
                   )}
                   {rs.output !== null && (
                     <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.7rem', marginBottom: '0.25rem' }}>Output:</div>
-                      <pre style={{ margin: 0, color: '#cbd5e1', background: '#0f172a', padding: '0.5rem', borderRadius: '4px', overflowY: 'auto', maxHeight: '200px', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">Output</div>
+                      <pre className="font-mono text-xs text-on-surface bg-surface-container-low p-2 rounded overflow-auto max-h-52 whitespace-pre-wrap break-words">
                         {typeof rs.output === 'string' ? rs.output : JSON.stringify(rs.output, null, 2)}
                       </pre>
                     </div>

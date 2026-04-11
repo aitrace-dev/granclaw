@@ -69,19 +69,19 @@ function RunMessages({ agentId, run, onBack }: { agentId: string; run: ScheduleR
     <div className="p-4 flex flex-col gap-3">
       <button
         onClick={onBack}
-        className="text-[10px] text-on-surface-variant/50 hover:text-on-surface transition-colors self-start"
+        className="text-[10px] text-on-surface-variant hover:text-on-surface transition-colors self-start"
       >
         ← Back to runs
       </button>
 
-      <div className="text-[9px] font-mono text-on-surface-variant/30">
+      <div className="text-[9px] font-mono text-on-surface-variant/60">
         {new Date(run.startedAt).toLocaleString()} · {run.channelId}
       </div>
 
-      {loading && <div className="text-xs text-on-surface-variant/40">Loading...</div>}
+      {loading && <div className="text-xs text-on-surface-variant/70">Loading...</div>}
 
       {!loading && messages.length === 0 && (
-        <div className="text-xs text-on-surface-variant/40 animate-pulse">
+        <div className="text-xs text-on-surface-variant/70 animate-pulse">
           Waiting for response...
         </div>
       )}
@@ -92,14 +92,14 @@ function RunMessages({ agentId, run, onBack }: { agentId: string; run: ScheduleR
             key={m.id}
             className={`rounded-md p-2.5 text-[11px] leading-relaxed whitespace-pre-wrap ${
               m.role === 'user'
-                ? 'bg-[#1e1f26] text-on-surface-variant/70'
+                ? 'bg-surface-container-lowest border border-outline-variant/40 text-on-surface-variant/70'
                 : m.role === 'tool_call'
-                ? 'bg-[#13141a] text-on-surface-variant/40 font-mono text-[10px]'
+                ? 'bg-[#13141a] text-on-surface-variant/70 font-mono text-[10px]'
                 : 'bg-[#1a2235] text-on-surface/90'
             }`}
           >
             {m.role === 'tool_call' && (
-              <span className="text-blue-400/60 mr-1">⚙</span>
+              <span className="text-info/60 mr-1">⚙</span>
             )}
             {m.content}
           </div>
@@ -151,7 +151,7 @@ function ScheduleRuns({
       <div className="flex items-center gap-2">
         <button
           onClick={onBack}
-          className="text-[10px] text-on-surface-variant/50 hover:text-on-surface transition-colors"
+          className="text-[10px] text-on-surface-variant hover:text-on-surface transition-colors"
         >
           ←
         </button>
@@ -159,18 +159,18 @@ function ScheduleRuns({
         <button
           onClick={handleTrigger}
           disabled={triggering}
-          className="text-[9px] px-2 py-0.5 rounded bg-[#33343b] text-on-surface-variant/60 hover:text-on-surface transition-colors disabled:opacity-40"
+          className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-on-surface-variant/60 hover:text-on-surface transition-colors disabled:opacity-40"
         >
           {triggering ? 'Starting...' : 'Run now'}
         </button>
       </div>
 
-      <span className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/40 font-medium">
+      <span className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/70 font-medium">
         Run history
       </span>
 
       {runs.length === 0 && (
-        <p className="text-[10px] text-on-surface-variant/30">
+        <p className="text-[10px] text-on-surface-variant/60">
           No runs yet.
         </p>
       )}
@@ -179,12 +179,12 @@ function ScheduleRuns({
         <button
           key={run.id}
           onClick={() => setSelectedRun(run)}
-          className="text-left rounded-md bg-[#1e1f26] p-2.5 hover:bg-[#25262e] transition-colors"
+          className="text-left rounded-md bg-surface-container-lowest border border-outline-variant/40 p-2.5 hover:bg-[#25262e] transition-colors"
         >
           <div className="text-[10px] text-on-surface/80">
             {new Date(run.startedAt).toLocaleString()}
           </div>
-          <div className="text-[9px] font-mono text-on-surface-variant/30 mt-0.5">
+          <div className="text-[9px] font-mono text-on-surface-variant/60 mt-0.5">
             {run.channelId}
           </div>
         </button>
@@ -234,14 +234,14 @@ export function ScheduleList({ agentId }: { agentId: string }) {
   }
 
   if (loading) {
-    return <div className="text-on-surface-variant/40 text-xs p-6">Loading schedules...</div>;
+    return <div className="text-on-surface-variant/70 text-xs p-6">Loading schedules...</div>;
   }
 
   if (schedules.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-6 gap-3">
         <span className="text-3xl opacity-30">⏰</span>
-        <p className="text-on-surface-variant/50 text-xs">
+        <p className="text-on-surface-variant text-xs">
           No schedules yet. Ask the agent to set up recurring tasks.
         </p>
       </div>
@@ -254,7 +254,7 @@ export function ScheduleList({ agentId }: { agentId: string }) {
         <span className="text-[11px] uppercase tracking-[0.14em] text-on-surface-variant/60 font-medium">
           Schedules
         </span>
-        <span className="text-[9px] font-mono text-on-surface-variant/30">
+        <span className="text-[9px] font-mono text-on-surface-variant/60">
           {schedules.filter(s => s.status === 'active').length} active
         </span>
       </div>
@@ -263,19 +263,19 @@ export function ScheduleList({ agentId }: { agentId: string }) {
         <div
           key={s.id}
           onClick={() => setSelected(s)}
-          className="rounded-md bg-[#1e1f26] p-3 space-y-2 cursor-pointer hover:bg-[#25262e] transition-colors"
+          className="rounded-md bg-surface-container-lowest border border-outline-variant/40 p-3 space-y-2 cursor-pointer hover:bg-[#25262e] transition-colors"
         >
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 rounded-full ${s.status === 'active' ? 'bg-green-500' : 'bg-yellow-500/50'}`} />
             <span className="text-xs text-on-surface font-medium flex-1 truncate">{s.name}</span>
-            <span className="text-[9px] font-mono text-on-surface-variant/40">{s.id}</span>
+            <span className="text-[9px] font-mono text-on-surface-variant/70">{s.id}</span>
           </div>
 
-          <p className="text-[10px] text-on-surface-variant/50 font-mono leading-relaxed break-words" style={{ whiteSpace: 'pre-wrap' }}>
+          <p className="text-[10px] text-on-surface-variant font-mono leading-relaxed break-words" style={{ whiteSpace: 'pre-wrap' }}>
             {s.message}
           </p>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-on-surface-variant/40">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-on-surface-variant/70">
             <span title={s.cron}>{cronToHuman(s.cron)}</span>
             <span>{s.timezone}</span>
             <span title={s.nextRun ? new Date(s.nextRun).toISOString() : ''}>
@@ -291,13 +291,13 @@ export function ScheduleList({ agentId }: { agentId: string }) {
           <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => toggleStatus(s)}
-              className="text-[9px] px-2 py-0.5 rounded bg-[#33343b] text-on-surface-variant/60 hover:text-on-surface transition-colors"
+              className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-on-surface-variant/60 hover:text-on-surface transition-colors"
             >
               {s.status === 'active' ? 'Pause' : 'Resume'}
             </button>
             <button
               onClick={() => handleDelete(s)}
-              className="text-[9px] px-2 py-0.5 rounded bg-[#33343b] text-red-400/60 hover:text-red-400 transition-colors ml-auto"
+              className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-error/60 hover:text-error transition-colors ml-auto"
             >
               Delete
             </button>

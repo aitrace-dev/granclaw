@@ -9,6 +9,7 @@ import {
   type WorkflowRun,
 } from '../lib/api.ts';
 import { WorkflowDetail } from './WorkflowDetail.tsx';
+import { badgeSuccess, badgeWarning, badgeNeutral, buttonPrimary, cardCls } from '../ui/primitives';
 
 export function WorkflowList({ agentId }: { agentId: string }) {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
@@ -42,7 +43,6 @@ export function WorkflowList({ agentId }: { agentId: string }) {
     setRunning(wfId);
     try {
       await triggerWorkflowRun(agentId, wfId);
-      // Refresh runs after trigger
       const wfRuns = await fetchWorkflowRuns(agentId, wfId);
       setRuns(wfRuns);
     } catch (err) {
@@ -68,70 +68,49 @@ export function WorkflowList({ agentId }: { agentId: string }) {
     );
   }
 
-  const statusColor: Record<string, string> = {
-    active: '#4ade80',
-    paused: '#facc15',
-    archived: '#94a3b8',
+  const statusBadge: Record<string, string> = {
+    active:   badgeSuccess,
+    paused:   badgeWarning,
+    archived: badgeNeutral,
   };
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', color: '#e2e8f0' }}>Workflows</h2>
+    <div className="p-4">
+      <h2 className="font-headline text-xl font-bold text-on-surface mb-4">Workflows</h2>
 
       {workflows.length === 0 ? (
-        <p style={{ color: '#64748b', fontSize: '0.85rem' }}>
+        <p className="font-mono text-xs text-on-surface-variant">
           No workflows yet. Ask the agent to create one via chat.
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="flex flex-col gap-2">
           {workflows.map((wf) => (
             <div
               key={wf.id}
               onClick={() => handleSelect(wf.id)}
-              style={{
-                padding: '0.75rem',
-                background: '#1e293b',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                border: '1px solid #334155',
-              }}
+              className={`${cardCls} p-4 cursor-pointer transition-colors hover:border-primary/40`}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ color: '#e2e8f0', fontWeight: 500 }}>{wf.name}</span>
-                  <span style={{
-                    marginLeft: '0.5rem',
-                    fontSize: '0.7rem',
-                    padding: '2px 6px',
-                    borderRadius: '3px',
-                    background: statusColor[wf.status] ?? '#94a3b8',
-                    color: '#0f172a',
-                  }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-headline font-bold text-on-surface truncate">{wf.name}</span>
+                  <span className={statusBadge[wf.status] ?? badgeNeutral}>
                     {wf.status}
                   </span>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleRun(wf.id); }}
                   disabled={running === wf.id || wf.status !== 'active'}
-                  style={{
-                    padding: '4px 12px',
-                    fontSize: '0.8rem',
-                    background: running === wf.id ? '#334155' : '#3b82f6',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: running === wf.id ? 'not-allowed' : 'pointer',
-                  }}
+                  className={buttonPrimary}
                 >
-                  {running === wf.id ? 'Running...' : 'Run'}
+                  {running === wf.id ? 'Running…' : 'Run'}
                 </button>
               </div>
               {wf.description && (
-                <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
+                <p className="mt-1.5 text-sm text-on-surface-variant">
                   {wf.description}
                 </p>
               )}
-              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.25rem' }}>
+              <div className="mt-1 font-mono text-[10px] text-on-surface-variant/60">
                 {wf.id} · Created {new Date(wf.createdAt).toLocaleDateString()}
               </div>
             </div>

@@ -36,10 +36,10 @@ function formatDuration(createdAt: number, closedAt: number | null): string {
 function StatusBadge({ status }: { status: 'active' | 'closed' | 'stale' | 'crashed' }) {
   const style =
     status === 'active'
-      ? 'bg-secondary-container text-[#002113]'
+      ? 'bg-secondary-container text-on-primary'
       : status === 'stale' || status === 'crashed'
-      ? 'bg-amber-500/20 text-amber-300'
-      : 'bg-[#33343b] text-on-surface-variant/60';
+      ? 'bg-amber-500/20 text-warning'
+      : 'bg-surface-container text-on-surface-variant/60';
   return (
     <span
       className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] ${style}`}
@@ -76,7 +76,7 @@ function SessionCard({
             <p className="text-[11px] font-medium text-on-surface truncate">
               {session.name ?? 'Unnamed session'}
             </p>
-            <p className="font-mono text-[9px] text-on-surface-variant/30 mt-0.5 truncate">
+            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-0.5 truncate">
               {session.id}
             </p>
           </div>
@@ -89,15 +89,15 @@ function SessionCard({
         </div>
 
         <div className="flex items-center gap-3 mt-2">
-          <span className="font-mono text-[9px] text-on-surface-variant/30">
+          <span className="font-mono text-[9px] text-on-surface-variant/60">
             {session.videoValid ? 'video' : 'no recording'}
           </span>
           <span className="font-mono text-[9px] text-on-surface-variant/20">·</span>
-          <span className="font-mono text-[9px] text-on-surface-variant/30">
+          <span className="font-mono text-[9px] text-on-surface-variant/60">
             {formatDuration(session.createdAt, session.closedAt)}
           </span>
           <span className="font-mono text-[9px] text-on-surface-variant/20">·</span>
-          <span className="font-mono text-[9px] text-on-surface-variant/30">
+          <span className="font-mono text-[9px] text-on-surface-variant/60">
             {relativeTime(session.createdAt)}
           </span>
         </div>
@@ -159,10 +159,10 @@ function BrowserLauncher({ agentId }: { agentId: string }) {
     loadProfile();
   }
 
-  const inputCls = 'rounded bg-[#33343b] px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow';
+  const inputCls = 'rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow';
 
   return (
-    <div className="px-4 py-3 border-b border-white/5 space-y-3">
+    <div className="px-4 py-3 border-b border-outline-variant/30 space-y-3">
       <div className="flex items-center gap-2">
         <span className="text-[13px] opacity-60">🔑</span>
         <span className="text-[11px] uppercase tracking-[0.14em] font-medium text-on-surface-variant">
@@ -198,7 +198,7 @@ function BrowserLauncher({ agentId }: { agentId: string }) {
           <button
             onClick={handleLaunch}
             disabled={launching || !url.trim()}
-            className="rounded bg-[#33343b] px-2.5 py-[7px] text-[11px] text-on-surface-variant/50 transition-all disabled:opacity-20 hover:bg-[#282a30] hover:text-on-surface flex-shrink-0"
+            className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface-variant transition-all disabled:opacity-20 hover:bg-surface-container hover:text-on-surface flex-shrink-0"
           >
             {launching ? '…' : 'Launch'}
           </button>
@@ -206,17 +206,17 @@ function BrowserLauncher({ agentId }: { agentId: string }) {
       )}
 
       {error && (
-        <p className="font-mono text-[9px] text-red-400/70">{error}</p>
+        <p className="font-mono text-[9px] text-error/70">{error}</p>
       )}
 
       {hasProfile && !activeUrl && (
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] text-on-surface-variant/40">
+          <span className="font-mono text-[10px] text-on-surface-variant/70">
             Persistent profile — all logins retained
           </span>
           <button
             onClick={handleDeleteProfile}
-            className="text-[9px] text-on-surface-variant/30 hover:text-red-400 transition-colors"
+            className="text-[9px] text-on-surface-variant/60 hover:text-error transition-colors"
           >
             Reset
           </button>
@@ -284,14 +284,14 @@ export function BrowserView({ agentId }: { agentId: string }) {
   return (
     <div className="flex flex-1 flex-col h-full min-w-0 rounded-lg" style={{ background: '#111319' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/30">
         <div className="flex items-center gap-2">
           <span className="text-[13px] opacity-60">🌐</span>
           <span className="text-[11px] uppercase tracking-[0.14em] font-medium text-on-surface-variant">
             Browser Sessions
           </span>
         </div>
-        <span className="font-mono text-[9px] text-on-surface-variant/30 tabular-nums">
+        <span className="font-mono text-[9px] text-on-surface-variant/60 tabular-nums">
           {sessions.length} sessions
         </span>
       </div>
@@ -302,7 +302,7 @@ export function BrowserView({ agentId }: { agentId: string }) {
       {/* Loading overlay */}
       {loading && (
         <div className="flex items-center justify-center py-8">
-          <span className="font-mono text-[10px] text-on-surface-variant/30 animate-pulse">
+          <span className="font-mono text-[10px] text-on-surface-variant/60 animate-pulse">
             loading session…
           </span>
         </div>
@@ -319,10 +319,10 @@ export function BrowserView({ agentId }: { agentId: string }) {
                   alt=""
                   className="w-44 h-44 mx-auto mb-6 opacity-90"
                 />
-                <h2 className="font-display text-xl font-semibold text-on-surface mb-3">
+                <h2 className="font-headline text-xl font-semibold text-on-surface mb-3">
                   Set up browser access
                 </h2>
-                <p className="text-[13px] text-on-surface-variant/50 leading-relaxed mb-8 max-w-sm mx-auto">
+                <p className="text-[13px] text-on-surface-variant leading-relaxed mb-8 max-w-sm mx-auto">
                   Your agent needs a browser profile to access websites with your saved logins.
                 </p>
                 <div className="flex flex-col gap-4 max-w-xs mx-auto text-left mb-8">
@@ -330,21 +330,21 @@ export function BrowserView({ agentId }: { agentId: string }) {
                     <span className="w-7 h-7 rounded-full bg-primary/15 text-primary text-[12px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
                     <div>
                       <p className="text-[13px] text-on-surface/80 font-medium">Launch a browser</p>
-                      <p className="text-[11px] text-on-surface-variant/40 mt-0.5">Enter a login URL above and click Launch</p>
+                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">Enter a login URL above and click Launch</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
                     <span className="w-7 h-7 rounded-full bg-primary/15 text-primary text-[12px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
                     <div>
                       <p className="text-[13px] text-on-surface/80 font-medium">Log in to your accounts</p>
-                      <p className="text-[11px] text-on-surface-variant/40 mt-0.5">Sign in to any website the agent needs access to</p>
+                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">Sign in to any website the agent needs access to</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
                     <span className="w-7 h-7 rounded-full bg-primary/15 text-primary text-[12px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
                     <div>
                       <p className="text-[13px] text-on-surface/80 font-medium">Close the browser</p>
-                      <p className="text-[11px] text-on-surface-variant/40 mt-0.5">Your logins are saved automatically for the agent to reuse</p>
+                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">Your logins are saved automatically for the agent to reuse</p>
                     </div>
                   </div>
                 </div>

@@ -406,8 +406,8 @@ export function ChatPage() {
                           prose-ul:my-1 prose-ol:my-1 prose-li:my-0
                           prose-a:text-secondary prose-strong:text-on-surface
                           prose-table:border-collapse prose-table:text-xs prose-table:w-full
-                          prose-th:border prose-th:border-white/10 prose-th:px-2 prose-th:py-1 prose-th:bg-surface-dim prose-th:text-left prose-th:font-medium
-                          prose-td:border prose-td:border-white/10 prose-td:px-2 prose-td:py-1">
+                          prose-th:border prose-th:border-outline-variant/40 prose-th:px-2 prose-th:py-1 prose-th:bg-surface-dim prose-th:text-left prose-th:font-medium
+                          prose-td:border prose-td:border-outline-variant/40 prose-td:px-2 prose-td:py-1">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{m.text}</ReactMarkdown>
                         </div>
                       : '…'

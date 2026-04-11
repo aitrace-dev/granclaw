@@ -53,6 +53,7 @@ import { handleBrowserLiveUpgrade } from './browser-live.js';
 import { stealthArgv } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
+import { getTakeoverByToken } from '../takeover-state.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -85,6 +86,38 @@ export function createServer() {
   const headedBrowsers = new Map<string, { url: string }>();
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
+
+  // ── Human browser takeover ────────────────────────────────────────────────────
+
+  app.get('/api/takeover/:token', (req, res) => {
+    const entry = getTakeoverByToken(req.params.token);
+    if (!entry) {
+      res.status(404).json({ error: 'expired or invalid' });
+      return;
+    }
+    res.json({
+      agentId: entry.agentId,
+      sessionId: entry.handle.sessionId,
+      reason: entry.reason,
+      url: entry.url ?? null,
+    });
+  });
+
+  app.post('/api/takeover/:token/resolve', (req, res) => {
+    const entry = getTakeoverByToken(req.params.token);
+    if (!entry) {
+      res.status(404).json({ error: 'expired or invalid' });
+      return;
+    }
+    const managed = getManagedAgent(entry.agentId);
+    if (!managed) {
+      res.status(503).json({ error: 'agent not running' });
+      return;
+    }
+    const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+    enqueue(workspaceDir, entry.agentId, '[User clicked Done on takeover page]', entry.channelId);
+    res.json({ ok: true });
+  });
 
   // ── Provider settings ─────────────────────────────────────────────────────────
 

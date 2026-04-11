@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  fetchAgents, createAgent, deleteAgent, fetchProviderSettings,
+  fetchAgents, createAgent, deleteAgent, fetchProviderSettings, importAgent,
   type Agent, type ProviderSettings,
 } from '../lib/api.ts';
 import { getModelsForProvider, getDefaultModel } from '../lib/models.ts';
@@ -59,7 +59,42 @@ export function DashboardPage() {
   const [newModel, setNewModel] = useState('');
   const [newWorkspace, setNewWorkspace] = useState('');
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setError(null);
+    try {
+      let result;
+      try {
+        result = await importAgent(file);
+      } catch (err) {
+        // If the agent id collides, prompt for a new one and retry
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('already exists')) {
+          const newId = prompt(
+            `${msg}\n\nEnter a new id for the imported agent:`,
+            ''
+          )?.trim();
+          if (!newId) { setImporting(false); return; }
+          result = await importAgent(file, { id: newId });
+        } else {
+          throw err;
+        }
+      }
+      await loadAll();
+      navigate(`/agents/${result.id}/chat`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  }
 
   const loadAll = () => {
     Promise.all([fetchAgents(), fetchProviderSettings()])
@@ -149,13 +184,30 @@ export function DashboardPage() {
           <h1 className="font-display text-2xl font-semibold text-on-surface">Agents</h1>
           <p className="font-mono text-[11px] text-on-surface-variant/40 mt-1">{agents.length} agent{agents.length !== 1 ? 's' : ''} configured</p>
         </div>
-        <button
-          onClick={() => setShowCreate(s => !s)}
-          disabled={!providerSettings?.configured}
-          className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {showCreate ? 'Cancel' : '+ New Agent'}
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            onChange={handleImport}
+            className="hidden"
+          />
+          <button
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing || !providerSettings?.configured}
+            className="rounded-lg bg-[#33343b] px-4 py-2 text-sm font-medium text-on-surface-variant transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Import an agent from a granclaw export zip"
+          >
+            {importing ? 'Importing…' : '↥ Import'}
+          </button>
+          <button
+            onClick={() => setShowCreate(s => !s)}
+            disabled={!providerSettings?.configured}
+            className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {showCreate ? 'Cancel' : '+ New Agent'}
+          </button>
+        </div>
       </div>
 
       {/* Create form */}

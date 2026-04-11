@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Agent } from '../lib/api.ts';
-import { addSecret, deleteSecretApi, exportVaultUrl } from '../lib/api.ts';
+import { addSecret, deleteSecretApi, exportAgentUrl } from '../lib/api.ts';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AgentSettingsPanel
@@ -377,11 +377,12 @@ export function AgentSettingsPanel({
       {/* ═════════════════════  BRAIN + DANGER  ══════════════════════════ */}
       <div className="mt-auto pt-1 space-y-1">
         <a
-          href={exportVaultUrl(agentId)}
+          href={exportAgentUrl(agentId)}
           download
           className="block w-full rounded-md bg-[#191b22] px-3 py-2 font-mono text-[10px] text-on-surface-variant/40 transition-all hover:bg-[#1e1f26] hover:text-on-surface-variant/70"
+          title="Download a full backup of this agent's workspace as a zip"
         >
-          📦 Export Brain
+          📦 Export agent
         </a>
         <button
           onClick={onWipe}

@@ -438,6 +438,36 @@ export function exportVaultUrl(agentId: string): string {
   return `${BASE}/agents/${agentId}/vault/export`;
 }
 
+export function exportAgentUrl(agentId: string): string {
+  return `${BASE}/agents/${agentId}/export`;
+}
+
+export interface ImportAgentResult {
+  id: string;
+  wsPort: number;
+  granclawVersion?: string;
+}
+
+/**
+ * Upload a granclaw-agent-export-v1 zip and import it as a new agent.
+ * The optional `id` parameter renames the agent on import (use to resolve
+ * collisions when an agent with the same id already exists).
+ */
+export async function importAgent(file: File, opts?: { id?: string }): Promise<ImportAgentResult> {
+  const url = new URL(`${BASE}/agents/import`, window.location.origin);
+  if (opts?.id) url.searchParams.set('id', opts.id);
+  const res = await fetch(url.toString().replace(window.location.origin, ''), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/zip' },
+    body: file,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
+    throw new Error(err.error);
+  }
+  return res.json() as Promise<ImportAgentResult>;
+}
+
 // ── Monitor ───────────────────────────────────────────────────────────────
 
 export interface MonitorJob {

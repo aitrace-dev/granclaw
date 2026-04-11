@@ -25,6 +25,7 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { WebSocket, WebSocketServer } from 'ws';
 import { randomUUID } from 'crypto';
@@ -75,6 +76,9 @@ export function createServer() {
   const app = express();
   app.use(cors());
   app.use(express.json());
+  // Raw body parser for the agent-import endpoint (zip upload).
+  // Limit matches the explicit cap inside the route handler.
+  app.use('/agents/import', express.raw({ type: 'application/zip', limit: '500mb' }));
 
   // Track headed browser processes (one per agent)
   const headedBrowsers = new Map<string, { url: string }>();
@@ -687,7 +691,197 @@ export function createServer() {
   });
 
 
+  // ── Agent export / import ───────────────────────────────────────────────
+  //
+  // workspace.json contract (granclaw-agent-export-v1):
+  //   {
+  //     "format": "granclaw-agent-export-v1",
+  //     "granclawVersion": "0.1.0",
+  //     "exportedAt": <epoch ms>,
+  //     "agent": {
+  //       "id": "lucia",
+  //       "name": "Lucia",
+  //       "model": "...",
+  //       "provider": "...",
+  //       "workspaceDir": "./workspaces/lucia",
+  //       "allowedTools": [...]
+  //     }
+  //   }
+  //
+  // The zip contains workspace.json at the root + the entire workspace
+  // directory contents (excluding transient SQLite WAL/shm files and
+  // wrapper lock files). On import, the file is uploaded as a raw
+  // application/zip POST body.
+
+  app.get('/agents/:id/export', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+    if (!fs.existsSync(workspaceDir)) { res.status(404).json({ error: 'Workspace not found' }); return; }
+
+    // Read backend version from packages/backend/package.json (cached at module
+    // load is sufficient — version doesn't change at runtime).
+    let granclawVersion = '0.0.0';
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'));
+      granclawVersion = pkg.version ?? '0.0.0';
+    } catch { /* fallback */ }
+
+    const manifest = {
+      format: 'granclaw-agent-export-v1',
+      granclawVersion,
+      exportedAt: Date.now(),
+      agent: managed.config,
+    };
+
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `agent-${req.params.id}-${date}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Stage workspace.json + zip in a temp dir so we don't pollute the
+    // workspace itself (and so transient files don't sneak into the zip).
+    const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'granclaw-export-'));
+    const manifestPath = path.join(stagingDir, 'workspace.json');
+    const zipPath = path.join(stagingDir, 'export.zip');
+
+    try {
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      // Copy the workspace into the staging dir so the archive has a clean
+      // "workspace/" subdirectory and we don't leak the user's absolute path.
+      // Symlinks were tempting but `zip -y` stores them as-is and `zip` won't
+      // recurse into a symlinked directory by default — copy is the simplest
+      // path that just works.
+      const stagedWorkspace = path.join(stagingDir, 'workspace');
+      const { execSync } = require('child_process');
+      execSync(`cp -R "${workspaceDir}" "${stagedWorkspace}"`, { stdio: 'pipe' });
+
+      // Zip both entries with one pass, excluding transient SQLite WAL/shm
+      // and wrapper lock files.
+      execSync(
+        `cd "${stagingDir}" && zip -q -r "${zipPath}" workspace.json workspace ` +
+        `-x "workspace/*.sqlite-wal" "workspace/*.sqlite-shm" ` +
+        `"workspace/.browser-sessions/.lock*" "workspace/.browser-sessions/.lock.d/*" ` +
+        `"workspace/.browser-sessions/.resolved-session"`,
+        { stdio: 'pipe' },
+      );
+
+      const stream = fs.createReadStream(zipPath);
+      stream.pipe(res);
+      stream.on('end', () => { try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch {} });
+      stream.on('error', () => { try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch {} });
+    } catch (err) {
+      try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch {}
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: `Failed to create export: ${message}` });
+    }
+  });
+
+  app.post('/agents/import', async (req, res) => {
+    // Body is the raw zip bytes (Content-Type: application/zip).
+    if (!req.is('application/zip')) {
+      res.status(400).json({ error: 'expected Content-Type: application/zip' });
+      return;
+    }
+
+    const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'granclaw-import-'));
+    const zipPath = path.join(stagingDir, 'upload.zip');
+
+    try {
+      // express.raw() has already collected the body into req.body as a Buffer
+      const buf = req.body as Buffer | undefined;
+      if (!buf || !Buffer.isBuffer(buf) || buf.length === 0) {
+        res.status(400).json({ error: 'empty request body' });
+        return;
+      }
+      fs.writeFileSync(zipPath, buf);
+
+      // Extract
+      const { execSync } = require('child_process');
+      const extractDir = path.join(stagingDir, 'extract');
+      fs.mkdirSync(extractDir);
+      try {
+        execSync(`unzip -q "${zipPath}" -d "${extractDir}"`, { stdio: 'pipe' });
+      } catch {
+        res.status(400).json({ error: 'invalid or corrupt zip file' });
+        return;
+      }
+
+      // Validate workspace.json
+      const manifestPath = path.join(extractDir, 'workspace.json');
+      if (!fs.existsSync(manifestPath)) {
+        res.status(400).json({ error: 'workspace.json missing — not a granclaw agent export' });
+        return;
+      }
+      let manifest: { format?: string; granclawVersion?: string; agent?: AgentConfig };
+      try {
+        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      } catch {
+        res.status(400).json({ error: 'workspace.json is not valid JSON' });
+        return;
+      }
+
+      if (manifest.format !== 'granclaw-agent-export-v1') {
+        res.status(400).json({ error: `unsupported export format: ${manifest.format ?? 'missing'}` });
+        return;
+      }
+      if (!manifest.agent || !manifest.agent.id || !manifest.agent.name) {
+        res.status(400).json({ error: 'workspace.json missing required agent fields' });
+        return;
+      }
+
+      // Optional rename via query string (?id=newId) — handles collisions
+      const requestedId = (req.query.id as string | undefined)?.trim() || manifest.agent.id;
+      if (getManagedAgent(requestedId)) {
+        res.status(409).json({ error: `Agent "${requestedId}" already exists. Pass ?id=<new-id> to import under a different id.` });
+        return;
+      }
+
+      // Move the extracted workspace contents into the real workspaces dir.
+      // The zip put them under workspace/ (per the export layout).
+      const sourceWorkspace = path.join(extractDir, 'workspace');
+      if (!fs.existsSync(sourceWorkspace)) {
+        res.status(400).json({ error: 'workspace/ directory missing in zip' });
+        return;
+      }
+      const targetWorkspace = path.resolve(REPO_ROOT, `./workspaces/${requestedId}`);
+      if (fs.existsSync(targetWorkspace)) {
+        res.status(409).json({ error: `Workspace dir already exists at ${targetWorkspace}` });
+        return;
+      }
+      fs.mkdirSync(path.dirname(targetWorkspace), { recursive: true });
+      // Use cp -R because rename doesn't work across filesystems (tmp → repo)
+      execSync(`cp -R "${sourceWorkspace}" "${targetWorkspace}"`, { stdio: 'pipe' });
+
+      const agentConfig: AgentConfig = {
+        ...manifest.agent,
+        id: requestedId,
+        workspaceDir: `./workspaces/${requestedId}`,
+      };
+
+      const agents = getAgents();
+      agents.push(agentConfig);
+      saveAgents(agents);
+
+      // Bring it online
+      const managed = startNewAgent(agentConfig);
+
+      res.status(201).json({
+        id: agentConfig.id,
+        wsPort: managed.wsPort,
+        granclawVersion: manifest.granclawVersion,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: `Import failed: ${message}` });
+    } finally {
+      try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch {}
+    }
+  });
+
   // ── Vault ───────────────────────────────────────────────────────────────
+  // Legacy: zips just the vault dir. Kept for backwards compat with existing
+  // links — the recommended export is GET /agents/:id/export above.
 
   app.get('/agents/:id/vault/export', (req, res) => {
     const managed = getManagedAgent(req.params.id);

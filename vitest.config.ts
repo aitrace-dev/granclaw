@@ -17,6 +17,7 @@ export default defineConfig({
       '**/dist/**',
       '.research/**',
       'packages/frontend/tests/**', // playwright e2e, not vitest
+      'packages/cli/scripts/**',    // playwright gate smoke, not vitest
       'e2e/**',
     ],
   },

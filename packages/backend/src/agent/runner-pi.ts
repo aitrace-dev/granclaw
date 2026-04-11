@@ -19,7 +19,7 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { AgentConfig, REPO_ROOT } from '../config.js';
-import { saveSession } from '../agent-db.js';
+import { saveSession, getSessionFile } from '../agent-db.js';
 import { logAction } from '../logs-db.js';
 import { getProvider, getProviderApiKey, getSearchApiKey } from '../providers-config.js';
 import { createSchedule, listSchedules } from '../schedules-db.js';
@@ -332,10 +332,18 @@ export async function runAgent(
     // ── Session manager ─────────────────────────────────────────────────
     // pi stores sessions as JSONL in a sessions directory. We place it
     // inside the agent workspace so it lives alongside the workspace data.
+    //
+    // Per-channel isolation: each channel (ui, schedule, sch-<cronId>, telegram)
+    // gets its own session file. Without this, every channel was colliding on
+    // the most recent file via continueRecent(), causing cross-channel context
+    // bloat — a UI turn would replay every cron execution and vice versa.
     const sessionsDir = path.join(workspaceDir, '.pi-sessions');
     fs.mkdirSync(sessionsDir, { recursive: true });
 
-    const sessionManager = SessionManager.continueRecent(workspaceDir, sessionsDir);
+    const savedSessionFile = getSessionFile(workspaceDir, agent.id, channelId);
+    const sessionManager = savedSessionFile && fs.existsSync(savedSessionFile)
+      ? SessionManager.open(savedSessionFile, sessionsDir)
+      : SessionManager.create(workspaceDir, sessionsDir);
 
     // ── Load SYSTEM.md as appended system prompt ────────────────────────
     // The old Claude runner used --append-system-prompt-file to inject
@@ -415,6 +423,62 @@ export async function runAgent(
             return { content: [{ type: 'text' as const, text }] };
           } catch (err) {
             return { content: [{ type: 'text' as const, text: `recall_history error: ${err instanceof Error ? err.message : String(err)}` }] };
+          }
+        },
+      });
+    });
+
+    // compact_context tool: lets the agent trigger context compaction on
+    // demand. Useful when the agent notices the conversation is getting long
+    // and wants to free up headroom without waiting for auto-compaction.
+    // Compaction runs non-blockingly via ExtensionContext.compact().
+    extensionFactories.push((pi: any) => {
+      pi.registerTool({
+        name: 'compact_context',
+        label: 'Compact Context',
+        description:
+          'Summarize older conversation turns to free up context-window space. ' +
+          'Use when you notice your context is getting long and you want to keep ' +
+          'working on the same task without losing essentials. Auto-compaction ' +
+          'fires at ~60% of the model context window; call this sooner if you want.',
+        promptSnippet: 'Compact older turns',
+        promptGuidelines: [
+          'Call when you see context approaching the window limit.',
+          'Pass a focus hint for what MUST survive the summary (e.g. "preserve all task IDs and file paths touched this session").',
+          'After compaction, older turns are replaced with a summary — you keep the most recent turns verbatim.',
+        ],
+        parameters: {
+          type: 'object',
+          properties: {
+            focus: {
+              type: 'string',
+              description: 'Optional custom instructions for the summariser (what to preserve)',
+            },
+          },
+        },
+        async execute(
+          _toolCallId: string,
+          params: { focus?: string },
+          _signal: AbortSignal | undefined,
+          _onUpdate: unknown,
+          ctx: { getContextUsage?: () => { tokens: number | null; contextWindow: number; percent: number | null } | undefined; compact?: (opts?: { customInstructions?: string }) => void },
+        ) {
+          try {
+            const before = ctx.getContextUsage?.();
+            // ctx.compact fires without awaiting — pi schedules compaction between
+            // turns. session.compact() would abort the current turn, which we don't
+            // want when the tool is being called mid-agent-loop.
+            ctx.compact?.({ customInstructions: params.focus });
+            const pct = before?.percent != null ? `${Math.round(before.percent * 100)}%` : 'unknown';
+            const tokens = before?.tokens ?? 'unknown';
+            return {
+              content: [{
+                type: 'text' as const,
+                text: `Scheduled context compaction. Current usage: ${tokens} tokens (${pct} of ${before?.contextWindow ?? 'unknown'}). Older turns will be replaced with a summary before the next LLM call.`,
+              }],
+            };
+          } catch (err) {
+            return { content: [{ type: 'text' as const, text: `compact_context error: ${err instanceof Error ? err.message : String(err)}` }] };
           }
         },
       });
@@ -757,6 +821,25 @@ export async function runAgent(
 
     // Register for abort
     activeSessions.set(agent.id, { session });
+
+    // ── Auto-compaction: trigger at 60% of the model's context window ──
+    // Pi's default triggers at contextWindow - 16k (about 87% for a 128k
+    // model — way too late for slow providers). We override reserveTokens
+    // to 40% of the window, which means shouldCompact fires when usage
+    // crosses ~60%. keepRecentTokens stays at the pi default (~15% of window
+    // or 20k, whichever is smaller) so the most recent turns survive intact.
+    try {
+      const contextWindow =
+        (model as { contextWindow?: number } | undefined)?.contextWindow ?? 128_000;
+      const reserveTokens = Math.floor(contextWindow * 0.4);
+      const keepRecentTokens = Math.min(20_000, Math.floor(contextWindow * 0.15));
+      session.settingsManager.applyOverrides({
+        compaction: { enabled: true, reserveTokens, keepRecentTokens },
+      });
+      session.setAutoCompactionEnabled(true);
+    } catch (err) {
+      console.error(`[runner-pi:${agent.id}] failed to configure auto-compaction:`, err);
+    }
 
     // ── Subscribe to events ─────────────────────────────────────────────
     // pi emits AgentEvent (from pi-agent-core) and AgentSessionEvent

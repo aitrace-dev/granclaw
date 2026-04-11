@@ -18,6 +18,18 @@ export function getSession(workspaceDir: string, agentId: string, channelId = 'u
   return row?.session_id || null;
 }
 
+export function getSessionFile(
+  workspaceDir: string,
+  agentId: string,
+  channelId = 'ui',
+): string | null {
+  const db = getWorkspaceDb(workspaceDir);
+  const row = db.prepare(
+    `SELECT session_file FROM sessions WHERE agent_id = ? AND channel_id = ?`,
+  ).get(agentId, channelId) as { session_file: string | null } | undefined;
+  return row?.session_file || null;
+}
+
 export function saveSession(
   workspaceDir: string,
   agentId: string,

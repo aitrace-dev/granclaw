@@ -21,6 +21,11 @@ export function setTakeover(
   agentId: string,
   entry: Omit<TakeoverEntry, 'timer'>,
 ): void {
+  const existing = byAgent.get(agentId);
+  if (existing) {
+    if (existing.timer) clearTimeout(existing.timer);
+    byToken.delete(existing.token);
+  }
   byAgent.set(agentId, { ...entry, timer: null });
   byToken.set(entry.token, agentId);
 }
@@ -60,5 +65,8 @@ export function updateTakeoverTimer(
   timer: ReturnType<typeof setTimeout>,
 ): void {
   const entry = byAgent.get(agentId);
-  if (entry) entry.timer = timer;
+  if (entry) {
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = timer;
+  }
 }

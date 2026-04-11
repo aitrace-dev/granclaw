@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createSeededAgent, teardownAgent } from './helpers/agent.ts';
+import { setupTestProvider, teardownTestProvider } from './helpers/provider.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,12 +19,16 @@ const wsConnected = (page: import('@playwright/test').Page) =>
   page.locator('[title="WS connected"]');
 
 test.describe('Agent Task Creation', () => {
+  let providerAddedByTest = false;
+
   test.beforeAll(async () => {
+    providerAddedByTest = await setupTestProvider();
     await createSeededAgent(AGENT_ID, SEED_DIR);
   });
 
   test.afterAll(async () => {
     await teardownAgent(AGENT_ID);
+    await teardownTestProvider(providerAddedByTest);
   });
 
   test('agent creates a task via chat that appears in the task board', async ({ page }) => {

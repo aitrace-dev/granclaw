@@ -13,6 +13,7 @@ import { test, expect } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createSeededAgent, teardownAgent } from './helpers/agent.ts';
+import { setupTestProvider, teardownTestProvider } from './helpers/provider.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,12 +29,16 @@ const wsConnected = (page: import('@playwright/test').Page) =>
   page.locator('[title="WS connected"]');
 
 test.describe('Recall History', () => {
+  let providerAddedByTest = false;
+
   test.beforeAll(async () => {
+    providerAddedByTest = await setupTestProvider();
     await createSeededAgent(AGENT_ID, SEED_DIR);
   });
 
   test.afterAll(async () => {
     await teardownAgent(AGENT_ID);
+    await teardownTestProvider(providerAddedByTest);
   });
 
   test('agent calls recall_history tool when asked to query message history', async ({ page }) => {
@@ -60,8 +65,8 @@ test.describe('Recall History', () => {
     // Wait for streaming to finish
     await expect(page.locator('div.animate-pulse')).toHaveCount(0, { timeout: 150_000 });
 
-    // Agent reply must be visible
-    const reply = page.locator('div.bg-surface-high').last();
+    // Agent reply must be visible (class renamed bg-surface-high → bg-surface-container in ui migration)
+    const reply = page.locator('div.bg-surface-container').last();
     await expect(reply).toBeVisible({ timeout: 5_000 });
 
     // Poll logs until recall_history tool_call from THIS run appears.

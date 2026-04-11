@@ -10,21 +10,34 @@
  *   .mcp.json           — empty MCP config (prevents inheriting host servers)
  *   .pi-sessions/       — pi JSONL session storage
  *   vault/{journal,sessions,actions,topics,knowledge}/
- *   .pi/skills/{agent-browser,housekeeping,memory,schedules,task-board,web-search,workflows}/
- *   .pi/extensions/     — pi built-in extensions (web-search.ts, etc.)
+ *   .pi/skills/{housekeeping,memory,schedules,workflows}/
  *   DB: "Vault housekeeping" schedule (cron 30 23 * * *)
  */
 
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { teardownAgent } from './helpers/agent.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const REPO_ROOT = path.resolve(__dirname, '../../../');
+// Always resolve to the main git worktree root so the workspace path matches
+// what the server (which runs from the main repo) resolves to. In a normal
+// checkout this is the repo root; in a git worktree it's still the main repo.
+function getMainRepoRoot(): string {
+  try {
+    const lines = execSync('git worktree list --porcelain', { cwd: __dirname })
+      .toString().split('\n');
+    const mainLine = lines.find(l => l.startsWith('worktree '));
+    if (mainLine) return mainLine.replace('worktree ', '').trim();
+  } catch { /* fall through */ }
+  return path.resolve(__dirname, '../../../');
+}
+
+const REPO_ROOT = getMainRepoRoot();
 const AGENT_ID = 'test-bootstrap-e2e';
 const API = 'http://localhost:3001';
 const WORKSPACE_DIR = path.resolve(REPO_ROOT, '.test', 'workspaces', AGENT_ID);
@@ -83,7 +96,9 @@ test.describe('Agent Bootstrap', () => {
     const skillsDir = path.join(WORKSPACE_DIR, '.pi', 'skills');
     expect(fs.existsSync(skillsDir), '.pi/skills/').toBe(true);
 
-    const expected = ['agent-browser', 'housekeeping', 'memory', 'schedules', 'task-board', 'web-search', 'workflows'];
+    // agent-browser, task-board, web-search were removed from the template —
+    // they are now registered as inline extensionFactories in runner-pi.ts.
+    const expected = ['housekeeping', 'memory', 'schedules', 'workflows'];
     const present = fs.readdirSync(skillsDir);
     for (const skill of expected) {
       expect(present, `skill "${skill}"`).toContain(skill);
@@ -92,12 +107,6 @@ test.describe('Agent Bootstrap', () => {
         `.pi/skills/${skill}/SKILL.md`
       ).toBe(true);
     }
-  });
-
-  test('pi extensions are bootstrapped into .pi/extensions/', () => {
-    const extDir = path.join(WORKSPACE_DIR, '.pi', 'extensions');
-    expect(fs.existsSync(extDir), '.pi/extensions/').toBe(true);
-    expect(fs.readdirSync(extDir).length, 'at least one extension file').toBeGreaterThan(0);
   });
 
   test('default vault housekeeping schedule is created in the DB', async () => {

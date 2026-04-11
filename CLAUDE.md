@@ -111,24 +111,19 @@ Edit `agents.config.json`, add an entry to the `agents` array. The backend reads
 
 ---
 
-## IMPORTANT: Pi extensions must ship with GranClaw
+## IMPORTANT: Agent tools ship as inline extensionFactories
 
-**Never install framework extensions machine-locally.** Any capability you add to GranClaw agents must work for every user, including those who installed via `npx granclaw`. The global `~/.pi/agent/extensions/` path is machine-local and must not be used for framework features.
+**Never use file-based pi extensions.** The programmatic runner does not load from `.pi/extensions/` — only the interactive pi TUI does. File-based extensions are not portable and may fail silently.
 
-**The rule:** every pi extension added to the framework goes in `packages/cli/templates/pi-extensions/`.
+**The rule:** every tool added to GranClaw agents is registered as an inline `extensionFactory` in `runner-pi.ts`.
 
-- `packages/cli/templates/` is listed in the CLI package `"files"` array — it ships with `npx granclaw`
-- On every agent startup, `bootstrapWorkspace` in `runner-pi.ts` copies `templates/pi-extensions/` → `<workspaceDir>/.pi/extensions/` (always overwrites, so fixes propagate automatically)
-- Any npm packages the extension imports must be added to `packages/cli/package.json` `"dependencies"`
-
-**Adding a new extension:**
-1. Write it in `packages/cli/templates/pi-extensions/<name>.ts`
-2. Add any new `npm` deps to `packages/cli/package.json` → `"dependencies"`
-3. Restart the backend — `bootstrapWorkspace` will copy the extension on the next agent start
+- Add a new `extensionFactories.push((pi: any) => { pi.registerTool({...}) })` block in `runAgent()`
+- The tool is available to every agent immediately on next restart — no file copying required
+- Any new npm packages the tool needs must be added to `packages/backend/package.json` `"dependencies"`
 
 **Do not:**
+- Write extensions to `packages/cli/templates/pi-extensions/` — that directory no longer exists
 - Install extensions into `~/.pi/agent/extensions/` — they only exist on your machine
-- Install extensions into `~/.pi/agent/extensions/` and consider the task done — this is not scalable
 
 ---
 

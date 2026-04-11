@@ -3,84 +3,56 @@
  *
  * Reads browser session data from the agent's workspace filesystem.
  * Sessions are stored in `.browser-sessions/sess-{timestamp}/` directories,
- * each containing a `meta.json` and PNG screenshots.
- * Can generate session names via Claude Haiku.
+ * each containing a `meta.json` and a `recording.webm` video.
+ *
+ * Sessions may be in one of four statuses:
+ *   - active   — recording in progress
+ *   - closed   — finished normally via the wrapper's `close` path
+ *   - stale    — wrapper detected an abandoned "active" session (heartbeat
+ *                older than STALE_TIMEOUT_MS) and force-closed it
+ *   - crashed  — backend reconciled an active session with no heartbeat for
+ *                longer than STALE_TIMEOUT_MS (belt-and-suspenders in case
+ *                no wrapper invocation ever re-enters the dir)
  */
 
-import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import Anthropic from '@anthropic-ai/sdk';
 import { REPO_ROOT, getAgent } from './config.js';
-// Claude CLI binary + spawn environment (inlined from former runner.ts).
-// Used only for the Haiku CLI fallback path when no Anthropic API key is set.
-const claudeBin: string = process.env.CLAUDE_BIN ?? 'claude';
-const spawnEnv: NodeJS.ProcessEnv = {
-  ...process.env,
-  PATH: [
-    path.join(process.env.HOME ?? '', '.local', 'bin'),
-    path.join(process.env.HOME ?? '', '.nvm', 'versions', 'node', process.version, 'bin'),
-    process.env.PATH ?? '',
-  ].filter(Boolean).join(':'),
-};
+
+const STALE_TIMEOUT_MS = 15 * 60 * 1000;
+const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+export type SessionStatus = 'active' | 'closed' | 'stale' | 'crashed';
 
 export interface SessionCommand {
   args: string;
   timestamp: number;
-  screenshot: string | null;
 }
 
 export interface BrowserSession {
   id: string;
   name: string | null;
-  status: 'active' | 'closed';
+  status: SessionStatus;
   createdAt: number;
   closedAt: number | null;
-  screenshotCount: number;
+  heartbeat: number;
+  video: string | null;
+  videoValid: boolean;
+  durationMs: number | null;
   commands: SessionCommand[];
 }
 
 interface MetaJson {
   id: string;
   name?: string | null;
-  status: 'active' | 'closed';
+  status: SessionStatus;
   createdAt: number;
   closedAt?: number | null;
-  commands?: Array<{ args: string; timestamp: number; screenshot?: string | null }>;
-}
-
-// ── Haiku — direct API if key available, CLI fallback ────────────────────────
-
-const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
-
-async function callHaiku(prompt: string): Promise<string> {
-  if (anthropic) {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
-    return text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-  }
-
-  return new Promise((resolve, reject) => {
-    const args = ['-p', prompt, '--output-format', 'json', '--permission-mode', 'bypassPermissions', '--model', 'claude-haiku-4-5-20251001'];
-    const proc = spawn(claudeBin, args, { env: spawnEnv, stdio: ['pipe', 'pipe', 'pipe'] });
-    proc.stdin?.end();
-    let output = '';
-    proc.stdout.on('data', (raw: Buffer) => { output += raw.toString(); });
-    proc.on('close', () => {
-      try {
-        const wrapper = JSON.parse(output.trim()) as { result?: string };
-        const inner = wrapper.result ?? output;
-        resolve(inner.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim());
-      } catch { resolve(output.trim()); }
-    });
-    proc.on('error', reject);
-  });
+  heartbeat?: number;
+  video?: string | null;
+  commands?: Array<{ args: string; timestamp: number }>;
 }
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
@@ -92,15 +64,6 @@ function getSessionsDir(agentId: string): string {
   return path.join(workspaceDir, '.browser-sessions');
 }
 
-function getSessionDir(sessionsDir: string, sessionId: string): string {
-  return path.join(sessionsDir, sessionId);
-}
-
-function countPngs(dir: string): number {
-  if (!fs.existsSync(dir)) return 0;
-  return fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.png')).length;
-}
-
 function readMeta(metaPath: string): MetaJson | null {
   try {
     const raw = fs.readFileSync(metaPath, 'utf-8');
@@ -110,27 +73,72 @@ function readMeta(metaPath: string): MetaJson | null {
   }
 }
 
+function writeMeta(metaPath: string, meta: MetaJson): void {
+  const tmp = `${metaPath}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(meta, null, 2), 'utf-8');
+  fs.renameSync(tmp, metaPath);
+}
+
+/**
+ * Verify a file starts with the WebM EBML magic bytes. Cheap, no ffprobe dep.
+ */
+function isWebmValid(filePath: string): boolean {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const header = Buffer.alloc(4);
+    const bytes = fs.readSync(fd, header, 0, 4, 0);
+    fs.closeSync(fd);
+    return bytes === 4 && header.equals(WEBM_MAGIC);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reconcile an "active" session that looks abandoned. Mutates meta.json in
+ * place and returns the updated value. No-op for non-active statuses.
+ */
+function reconcile(metaPath: string, meta: MetaJson): MetaJson {
+  if (meta.status !== 'active') return meta;
+  const hb = meta.heartbeat ?? 0;
+  if (hb === 0) return meta;
+  const age = Date.now() - hb;
+  if (age <= STALE_TIMEOUT_MS) return meta;
+
+  const updated: MetaJson = {
+    ...meta,
+    status: 'crashed',
+    closedAt: Date.now(),
+  };
+  try { writeMeta(metaPath, updated); } catch { /* best effort */ }
+  return updated;
+}
+
 function metaToSession(meta: MetaJson, sessionDir: string): BrowserSession {
+  const video = meta.video ?? null;
+  const videoPath = video ? path.join(sessionDir, video) : null;
+  const videoValid = videoPath != null && fs.existsSync(videoPath) && isWebmValid(videoPath);
+  const durationMs = meta.closedAt != null ? meta.closedAt - meta.createdAt : null;
+
   return {
     id: meta.id,
     name: meta.name ?? null,
     status: meta.status,
     createdAt: meta.createdAt,
     closedAt: meta.closedAt ?? null,
-    screenshotCount: countPngs(sessionDir),
+    heartbeat: meta.heartbeat ?? 0,
+    video,
+    videoValid,
+    durationMs,
     commands: (meta.commands ?? []).map((c) => ({
       args: c.args,
       timestamp: c.timestamp,
-      screenshot: c.screenshot ?? null,
     })),
   };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/**
- * List all sessions for an agent, sorted by createdAt descending.
- */
 export function listSessions(agentId: string): BrowserSession[] {
   const sessionsDir = getSessionsDir(agentId);
   if (!fs.existsSync(sessionsDir)) return [];
@@ -142,102 +150,69 @@ export function listSessions(agentId: string): BrowserSession[] {
     if (!entry.isDirectory() || !entry.name.startsWith('sess-')) continue;
     const sessionDir = path.join(sessionsDir, entry.name);
     const metaPath = path.join(sessionDir, 'meta.json');
-    const meta = readMeta(metaPath);
-    if (!meta) continue;
+    const raw = readMeta(metaPath);
+    if (!raw) continue;
+    const meta = reconcile(metaPath, raw);
     sessions.push(metaToSession(meta, sessionDir));
   }
 
   return sessions.sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/**
- * Get a single session by ID. Guards against path traversal.
- */
 export function getSession(agentId: string, sessionId: string): BrowserSession | null {
   const sessionsDir = getSessionsDir(agentId);
   const sessionDir = path.resolve(sessionsDir, sessionId);
-
-  // Block path traversal
   if (!sessionDir.startsWith(sessionsDir + path.sep)) return null;
 
   const metaPath = path.join(sessionDir, 'meta.json');
   if (!fs.existsSync(metaPath)) return null;
 
-  const meta = readMeta(metaPath);
-  if (!meta) return null;
+  const raw = readMeta(metaPath);
+  if (!raw) return null;
 
+  const meta = reconcile(metaPath, raw);
   return metaToSession(meta, sessionDir);
 }
 
 /**
- * List PNG filenames in a session directory, sorted chronologically (by name).
+ * Resolve the absolute path of a session's recording, or null if missing
+ * or corrupt. Blocks path traversal.
  */
-export function getSessionScreenshots(agentId: string, sessionId: string): string[] {
+export function getVideoPath(agentId: string, sessionId: string): string | null {
   const sessionsDir = getSessionsDir(agentId);
   const sessionDir = path.resolve(sessionsDir, sessionId);
-
-  // Block path traversal
-  if (!sessionDir.startsWith(sessionsDir + path.sep)) return [];
-  if (!fs.existsSync(sessionDir)) return [];
-
-  return fs.readdirSync(sessionDir)
-    .filter((f) => f.toLowerCase().endsWith('.png'))
-    .sort();
-}
-
-/**
- * Resolve the full filesystem path for a screenshot.
- * Returns null if not found, path traversal detected, or not a PNG.
- */
-export function getScreenshotPath(agentId: string, sessionId: string, filename: string): string | null {
-  if (!filename.toLowerCase().endsWith('.png')) return null;
-
-  const sessionsDir = getSessionsDir(agentId);
-  const sessionDir = path.resolve(sessionsDir, sessionId);
-
-  // Block path traversal on session dir
   if (!sessionDir.startsWith(sessionsDir + path.sep)) return null;
 
-  const filePath = path.resolve(sessionDir, filename);
+  const metaPath = path.join(sessionDir, 'meta.json');
+  const meta = readMeta(metaPath);
+  if (!meta || !meta.video) return null;
 
-  // Block path traversal on filename
+  const filePath = path.resolve(sessionDir, meta.video);
   if (!filePath.startsWith(sessionDir + path.sep)) return null;
-
   if (!fs.existsSync(filePath)) return null;
+  if (!isWebmValid(filePath)) return null;
 
   return filePath;
 }
 
 /**
- * Generate a short name for the session using Haiku and write it back to meta.json.
+ * Force-close any active session for this agent. Called when a task run
+ * ends so the wrapper never leaves orphans. Best-effort; never throws.
  */
-export async function generateSessionName(agentId: string, sessionId: string): Promise<string | null> {
-  const sessionsDir = getSessionsDir(agentId);
-  const sessionDir = path.resolve(sessionsDir, sessionId);
-
-  // Block path traversal
-  if (!sessionDir.startsWith(sessionsDir + path.sep)) return null;
-
-  const metaPath = path.join(sessionDir, 'meta.json');
-  if (!fs.existsSync(metaPath)) return null;
-
-  const meta = readMeta(metaPath);
-  if (!meta) return null;
-
-  const commandList = (meta.commands ?? [])
-    .map((c, i) => `${i + 1}. ${c.args}`)
-    .join('\n');
-
-  const prompt = commandList.trim()
-    ? `You are naming a browser automation session. Below is the list of commands that were run:\n\n${commandList}\n\nGive this session a short, descriptive name in under 10 words. Output only the name, no punctuation, no quotes.`
-    : 'Give this empty browser session a short generic name in under 10 words. Output only the name, no punctuation, no quotes.';
-
-  const name = await callHaiku(prompt);
-  const trimmedName = name.slice(0, 100); // safety cap
-
-  // Write name back to meta.json
-  const updated: MetaJson = { ...meta, name: trimmedName };
-  fs.writeFileSync(metaPath, JSON.stringify(updated, null, 2), 'utf-8');
-
-  return trimmedName;
+export function forceCloseActiveSession(agentId: string): void {
+  try {
+    const sessionsDir = getSessionsDir(agentId);
+    if (!fs.existsSync(sessionsDir)) return;
+    const activeFile = path.join(sessionsDir, '.active-session');
+    if (!fs.existsSync(activeFile)) return;
+    const sid = fs.readFileSync(activeFile, 'utf-8').trim();
+    if (!sid) return;
+    const metaPath = path.join(sessionsDir, sid, 'meta.json');
+    const meta = readMeta(metaPath);
+    if (!meta || meta.status !== 'active') return;
+    writeMeta(metaPath, { ...meta, status: 'closed', closedAt: Date.now() });
+    try { fs.writeFileSync(activeFile, ''); } catch {}
+  } catch {
+    // best effort
+  }
 }

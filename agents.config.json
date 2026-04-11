@@ -10,6 +10,18 @@
         "browser",
         "task-manager"
       ]
+    },
+    {
+      "id": "lucia",
+      "name": "Lucia",
+      "model": "deepseek/deepseek-v3.2",
+      "provider": "openrouter",
+      "workspaceDir": "./workspaces/lucia",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
     }
   ]
 }

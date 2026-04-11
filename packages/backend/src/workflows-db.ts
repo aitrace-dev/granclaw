@@ -2,14 +2,13 @@
  * workflows-db.ts
  *
  * Per-agent SQLite store for workflows, steps, runs, and run steps.
- * DB file: <workspace>/workflows.sqlite (created lazily on first access).
+ * Backed by <workspaceDir>/agent.sqlite (shared via workspace-pool).
  */
 
-import Database from 'better-sqlite3';
 import path from 'path';
-import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { REPO_ROOT, getAgent } from './config.js';
+import { getWorkspaceDb, closeWorkspaceDb } from './workspace-pool.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -67,97 +66,12 @@ export interface RunWithSteps extends Run {
   steps: RunStep[];
 }
 
-// ── Database pool ─────────────────────────────────────────────────────────
+// ── Internal DB accessor ──────────────────────────────────────────────────
 
-const dbPool = new Map<string, Database.Database>();
-
-function getDb(agentId: string): Database.Database {
-  const cached = dbPool.get(agentId);
-  if (cached) return cached;
-
+function getDb(agentId: string) {
   const agent = getAgent(agentId);
   if (!agent) throw new Error(`Agent "${agentId}" not found in config`);
-
-  const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
-  if (!fs.existsSync(workspaceDir)) fs.mkdirSync(workspaceDir, { recursive: true });
-
-  const dbPath = path.join(workspaceDir, 'workflows.sqlite');
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS workflows (
-      id          TEXT PRIMARY KEY,
-      name        TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      status      TEXT NOT NULL DEFAULT 'active'
-                    CHECK(status IN ('active','paused','archived')),
-      created_at  INTEGER NOT NULL,
-      updated_at  INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS steps (
-      id          TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-      position    INTEGER NOT NULL,
-      name        TEXT NOT NULL,
-      type        TEXT NOT NULL CHECK(type IN ('code','llm','agent')),
-      config      TEXT NOT NULL,
-      transitions TEXT DEFAULT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_steps_workflow ON steps(workflow_id, position);
-
-    CREATE TABLE IF NOT EXISTS runs (
-      id          TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-      status      TEXT NOT NULL DEFAULT 'running'
-                    CHECK(status IN ('running','completed','failed','cancelled')),
-      trigger     TEXT NOT NULL CHECK(trigger IN ('manual','chat')),
-      started_at  INTEGER NOT NULL,
-      finished_at INTEGER
-    );
-    CREATE INDEX IF NOT EXISTS idx_runs_workflow ON runs(workflow_id, started_at);
-
-    CREATE TABLE IF NOT EXISTS run_steps (
-      id          TEXT PRIMARY KEY,
-      run_id      TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-      step_id     TEXT NOT NULL REFERENCES steps(id) ON DELETE CASCADE,
-      status      TEXT NOT NULL DEFAULT 'pending'
-                    CHECK(status IN ('pending','running','completed','failed','skipped')),
-      input       TEXT,
-      output      TEXT,
-      error       TEXT,
-      started_at  INTEGER,
-      finished_at INTEGER,
-      duration_ms INTEGER
-    );
-    CREATE INDEX IF NOT EXISTS idx_run_steps_run ON run_steps(run_id, started_at);
-  `);
-
-  // Migration: add 'agent' to steps.type CHECK constraint for existing DBs
-  const stepsSchema = (db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='steps'`).get() as { sql: string } | undefined);
-  if (stepsSchema?.sql && !stepsSchema.sql.includes('agent')) {
-    db.exec(`
-      CREATE TABLE steps_new (
-        id          TEXT PRIMARY KEY,
-        workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-        position    INTEGER NOT NULL,
-        name        TEXT NOT NULL,
-        type        TEXT NOT NULL CHECK(type IN ('code','llm','agent')),
-        config      TEXT NOT NULL,
-        transitions TEXT DEFAULT NULL
-      );
-      INSERT INTO steps_new SELECT * FROM steps;
-      DROP TABLE steps;
-      ALTER TABLE steps_new RENAME TO steps;
-      CREATE INDEX IF NOT EXISTS idx_steps_workflow ON steps(workflow_id, position);
-    `);
-    console.log('[workflows-db] migrated steps table (added agent type)');
-  }
-
-  db.pragma('foreign_keys = ON');
-  dbPool.set(agentId, db);
-  return db;
+  return getWorkspaceDb(path.resolve(REPO_ROOT, agent.workspaceDir));
 }
 
 // ── Row mappers ───────────────────────────────────────────────────────────
@@ -213,7 +127,7 @@ function rowToRunStep(r: Record<string, unknown>): RunStep {
 
 // ── Workflow CRUD ─────────────────────────────────────────────────────────
 
-function nextWorkflowId(db: Database.Database): string {
+function nextWorkflowId(db: ReturnType<typeof getWorkspaceDb>): string {
   const row = db.prepare(`SELECT COALESCE(MAX(CAST(SUBSTR(id, 4) AS INTEGER)), 0) + 1 AS next FROM workflows`).get() as { next: number };
   return `WF-${String(row.next).padStart(3, '0')}`;
 }
@@ -279,7 +193,6 @@ export function addStep(agentId: string, workflowId: string, data: {
     INSERT INTO steps (id, workflow_id, position, name, type, config, transitions)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(id, workflowId, pos, data.name, data.type, JSON.stringify(data.config), data.transitions ? JSON.stringify(data.transitions) : null);
-  // Update workflow timestamp
   db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), workflowId);
   return rowToStep(db.prepare(`SELECT * FROM steps WHERE id = ?`).get(id) as Record<string, unknown>);
 }
@@ -329,8 +242,7 @@ export function createRun(agentId: string, workflowId: string, trigger: string):
 }
 
 export function updateRun(agentId: string, runId: string, data: { status: RunStatus; finishedAt?: number }): void {
-  const db = getDb(agentId);
-  db.prepare(`UPDATE runs SET status = ?, finished_at = ? WHERE id = ?`).run(data.status, data.finishedAt ?? null, runId);
+  getDb(agentId).prepare(`UPDATE runs SET status = ?, finished_at = ? WHERE id = ?`).run(data.status, data.finishedAt ?? null, runId);
 }
 
 export function listRuns(agentId: string, workflowId: string): Run[] {
@@ -366,8 +278,7 @@ export function updateRunStep(agentId: string, runStepId: string, data: {
   status: RunStepStatus; input?: unknown; output?: unknown; error?: string;
   startedAt?: number; finishedAt?: number; durationMs?: number;
 }): void {
-  const db = getDb(agentId);
-  db.prepare(`
+  getDb(agentId).prepare(`
     UPDATE run_steps SET status = ?, input = ?, output = ?, error = ?,
       started_at = ?, finished_at = ?, duration_ms = ?
     WHERE id = ?
@@ -405,9 +316,7 @@ export function getRunningRuns(agentId: string): { runId: string; workflowId: st
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
 export function closeWorkflowsDb(agentId: string): void {
-  const db = dbPool.get(agentId);
-  if (db) {
-    db.close();
-    dbPool.delete(agentId);
-  }
+  const agent = getAgent(agentId);
+  if (!agent) return;
+  closeWorkspaceDb(path.resolve(REPO_ROOT, agent.workspaceDir));
 }

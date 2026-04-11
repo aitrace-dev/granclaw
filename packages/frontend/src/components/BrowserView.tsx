@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { BrowserSessionSummary, BrowserSessionDetail } from '../lib/api.ts';
-import { fetchBrowserSessions, fetchBrowserSession, generateBrowserSessionName, launchBrowser, closeBrowser, fetchBrowserProfile, deleteBrowserProfile } from '../lib/api.ts';
+import { fetchBrowserSessions, fetchBrowserSession, launchBrowser, closeBrowser, fetchBrowserProfile, deleteBrowserProfile } from '../lib/api.ts';
 import { SessionPlayer } from './SessionPlayer.tsx';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -33,14 +33,16 @@ function formatDuration(createdAt: number, closedAt: number | null): string {
   return `${h}h ${m % 60}m`;
 }
 
-function StatusBadge({ status }: { status: 'active' | 'closed' }) {
+function StatusBadge({ status }: { status: 'active' | 'closed' | 'stale' | 'crashed' }) {
+  const style =
+    status === 'active'
+      ? 'bg-secondary-container text-[#002113]'
+      : status === 'stale' || status === 'crashed'
+      ? 'bg-amber-500/20 text-amber-300'
+      : 'bg-[#33343b] text-on-surface-variant/60';
   return (
     <span
-      className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] ${
-        status === 'active'
-          ? 'bg-secondary-container text-[#002113]'
-          : 'bg-[#33343b] text-on-surface-variant/60'
-      }`}
+      className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] ${style}`}
     >
       {status}
     </span>
@@ -88,7 +90,7 @@ function SessionCard({
 
         <div className="flex items-center gap-3 mt-2">
           <span className="font-mono text-[9px] text-on-surface-variant/30">
-            {session.screenshotCount} frames
+            {session.videoValid ? 'video' : 'no recording'}
           </span>
           <span className="font-mono text-[9px] text-on-surface-variant/20">·</span>
           <span className="font-mono text-[9px] text-on-surface-variant/30">
@@ -260,19 +262,7 @@ export function BrowserView({ agentId }: { agentId: string }) {
   const handleSelectSession = async (summary: BrowserSessionSummary) => {
     setLoading(true);
     try {
-      let detail = await fetchBrowserSession(agentId, summary.id);
-
-      // Auto-name closed + unnamed sessions
-      if (detail.status === 'closed' && !detail.name) {
-        const name = await generateBrowserSessionName(agentId, detail.id).catch(() => null);
-        if (name) {
-          detail = { ...detail, name };
-          setSessions((prev) =>
-            prev.map((s) => (s.id === detail.id ? { ...s, name } : s))
-          );
-        }
-      }
-
+      const detail = await fetchBrowserSession(agentId, summary.id);
       setSelectedSession(detail);
     } catch (err) {
       console.error('Failed to load session', err);

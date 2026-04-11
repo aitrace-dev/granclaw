@@ -24,6 +24,7 @@ import { enqueue, dequeueNext, markDone, markFailed, cleanupStaleJobs } from '..
 import { runAgent, stopAgent } from './runner-pi.js';
 import { saveMessage } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
+import { forceCloseActiveSession } from '../browser-sessions.js';
 
 const agentId = process.env.AGENT_ID;
 const port = Number(process.env.AGENT_PORT);
@@ -164,6 +165,11 @@ function main() {
       } catch { /* non-fatal */ }
 
       markDone(workspaceDir, job.id);
+
+      // Belt-and-suspenders: if the agent left a browser session open (e.g.
+      // forgot to call close), finalize it so recordings don't stay "active"
+      // forever and stream subscribers detach cleanly.
+      forceCloseActiveSession(agentId as string);
 
       // Send the full reply back to Telegram once the turn is complete
       if (isTelegramJob) {

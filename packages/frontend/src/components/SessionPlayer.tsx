@@ -1,29 +1,267 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { BrowserSessionDetail } from '../lib/api.ts';
-import { fetchBrowserSession, generateBrowserSessionName, browserScreenshotUrl } from '../lib/api.ts';
+import type { BrowserSessionDetail, BrowserSessionStatus, SessionCommand } from '../lib/api.ts';
+import { fetchBrowserSession, browserVideoUrl, browserLiveWsUrl } from '../lib/api.ts';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  SessionPlayer
  *  ─────────────
- *  Timeline player for browsing through browser session screenshots.
- *  Supports play/pause, speed control, live mode, and scrubbing.
+ *  Renders a browser session two ways:
+ *    - closed/stale/crashed → <video> replay of the recorded WebM, with
+ *      command markers laid over the scrubber as chapter dots
+ *    - active               → live CDP screencast streamed over WebSocket
+ *                             (JPEG frames → <img src="data:image/jpeg...">)
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function StatusBadge({ status }: { status: 'active' | 'closed' }) {
+function StatusBadge({ status }: { status: BrowserSessionStatus }) {
+  const style =
+    status === 'active'
+      ? 'bg-secondary-container text-[#002113]'
+      : status === 'stale' || status === 'crashed'
+      ? 'bg-amber-500/20 text-amber-300'
+      : 'bg-[#33343b] text-on-surface-variant/60';
   return (
     <span
-      className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] ${
-        status === 'active'
-          ? 'bg-secondary-container text-[#002113]'
-          : 'bg-[#33343b] text-on-surface-variant/60'
-      }`}
+      className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] ${style}`}
     >
       {status}
     </span>
   );
 }
 
-type Speed = 1 | 2 | 4;
+function CommandList({
+  commands,
+  activeIndex,
+  onJump,
+}: {
+  commands: SessionCommand[];
+  activeIndex: number;
+  onJump: (index: number) => void;
+}) {
+  const activeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [activeIndex]);
+
+  if (commands.length === 0) return null;
+
+  return (
+    <div
+      className="w-56 flex-shrink-0 flex flex-col border-l border-white/5 overflow-hidden"
+      style={{ background: '#191b22' }}
+    >
+      <div className="px-3 py-2 border-b border-white/5">
+        <span className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
+          Events ({commands.length})
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
+        {commands.map((cmd, i) => {
+          const isActive = i === activeIndex;
+          return (
+            <div
+              key={i}
+              ref={isActive ? activeRef : undefined}
+              onClick={() => onJump(i)}
+              className={`px-3 py-2 border-b border-white/3 transition-colors cursor-pointer hover:bg-[#282a30]/50 ${
+                isActive ? 'bg-primary/10 border-l-2 border-l-primary' : ''
+              }`}
+            >
+              <p
+                className={`font-mono text-[10px] leading-snug break-all ${
+                  isActive ? 'text-primary' : 'text-on-surface-variant/50'
+                }`}
+              >
+                {cmd.args}
+              </p>
+              <p className="font-mono text-[8px] text-on-surface-variant/20 mt-0.5">
+                {new Date(cmd.timestamp).toLocaleTimeString()}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Live view — subscribes to the CDP screencast relay over WS and renders each
+ * JPEG frame as the <img src>. Shows a placeholder if the stream errors or
+ * agent-browser isn't running.
+ */
+function LiveView({ agentId, session }: { agentId: string; session: BrowserSessionDetail }) {
+  const [frame, setFrame] = useState<string | null>(null);
+  const [status, setStatus] = useState<'connecting' | 'attached' | 'error' | 'closed'>('connecting');
+  const [errorReason, setErrorReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ws = new WebSocket(browserLiveWsUrl(agentId, session.id));
+    let alive = true;
+
+    ws.onmessage = (ev) => {
+      if (!alive) return;
+      try {
+        const msg = JSON.parse(ev.data) as { type: string; data?: string; reason?: string };
+        if (msg.type === 'frame' && msg.data) {
+          setFrame(`data:image/jpeg;base64,${msg.data}`);
+        } else if (msg.type === 'attached') {
+          setStatus('attached');
+        } else if (msg.type === 'error' || msg.type === 'detached') {
+          setStatus('error');
+          setErrorReason(msg.reason ?? 'stream ended');
+        }
+      } catch { /* ignore malformed frame */ }
+    };
+    ws.onclose = () => { if (alive) setStatus('closed'); };
+    ws.onerror = () => { if (alive) { setStatus('error'); setErrorReason('websocket error'); } };
+
+    return () => {
+      alive = false;
+      try { ws.close(); } catch {}
+    };
+  }, [agentId, session.id]);
+
+  return (
+    <div className="flex-1 flex items-center justify-center overflow-hidden relative" style={{ background: '#111319' }}>
+      {frame ? (
+        <img
+          src={frame}
+          alt="live browser frame"
+          className="max-w-full max-h-full object-contain select-none"
+          draggable={false}
+        />
+      ) : (
+        <div className="flex flex-col items-center justify-center text-center p-8">
+          <span className="text-[32px] opacity-10 mb-3">📺</span>
+          <p className="font-mono text-[10px] text-on-surface-variant/35">
+            {status === 'connecting' && 'connecting to live stream…'}
+            {status === 'attached' && 'waiting for first frame…'}
+            {status === 'error' && `live stream unavailable${errorReason ? ` — ${errorReason}` : ''}`}
+            {status === 'closed' && 'live stream closed'}
+          </p>
+        </div>
+      )}
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse inline-block" />
+        <span className="text-[8px] uppercase tracking-[0.15em] text-secondary/70 font-semibold">
+          live
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Replay view — <video> element with command markers laid over the scrubber
+ * as chapter dots. Clicking a command seeks to its offset.
+ */
+function ReplayView({
+  agentId,
+  session,
+}: {
+  agentId: string;
+  session: BrowserSessionDetail;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const sessionStart = session.createdAt;
+  const durationFromMeta = session.closedAt != null ? session.closedAt - session.createdAt : 0;
+
+  const commandOffsets = session.commands.map((cmd) => {
+    return Math.max(0, (cmd.timestamp - sessionStart) / 1000);
+  });
+
+  let activeIndex = -1;
+  for (let i = 0; i < commandOffsets.length; i++) {
+    if (commandOffsets[i] <= currentTime + 0.01) activeIndex = i;
+  }
+
+  const handleJump = useCallback((i: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const t = commandOffsets[i] ?? 0;
+    video.currentTime = Math.min(t, video.duration || t);
+    void video.play().catch(() => {});
+  }, [commandOffsets]);
+
+  const handleLoadedMetadata = () => {
+    const d = videoRef.current?.duration ?? 0;
+    setDuration(Number.isFinite(d) ? d : 0);
+  };
+
+  const handleTimeUpdate = () => {
+    setCurrentTime(videoRef.current?.currentTime ?? 0);
+  };
+
+  const videoSrc = session.videoValid ? browserVideoUrl(agentId, session.id) : null;
+  const effectiveDuration = duration || durationFromMeta / 1000;
+
+  return (
+    <>
+      <div
+        className="flex-1 flex items-center justify-center overflow-hidden relative"
+        style={{ background: '#111319', minHeight: 0 }}
+      >
+        {videoSrc ? (
+          <div className="relative w-full h-full flex items-center justify-center">
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              controls
+              preload="metadata"
+              onLoadedMetadata={handleLoadedMetadata}
+              onTimeUpdate={handleTimeUpdate}
+              className="max-w-full max-h-full object-contain"
+            />
+            {effectiveDuration > 0 && session.commands.length > 0 && (
+              <div className="absolute left-0 right-0 bottom-[42px] pointer-events-none px-[12px]">
+                <div className="relative h-2">
+                  {commandOffsets.map((offset, i) => {
+                    const pct = Math.min(1, offset / effectiveDuration) * 100;
+                    const isActive = i === activeIndex;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => handleJump(i)}
+                        style={{ left: `${pct}%` }}
+                        className={`absolute top-0 -translate-x-1/2 rounded-full pointer-events-auto transition-all ${
+                          isActive
+                            ? 'w-2.5 h-2.5 bg-primary ring-2 ring-primary/30'
+                            : 'w-1.5 h-1.5 bg-primary/50 hover:bg-primary/80'
+                        }`}
+                        title={session.commands[i].args}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-center p-8">
+            <span className="text-[32px] opacity-10 mb-3">🎞</span>
+            <p className="font-mono text-[10px] text-on-surface-variant/25">
+              recording unavailable
+            </p>
+            {(session.status === 'stale' || session.status === 'crashed') && (
+              <p className="font-mono text-[9px] text-amber-400/50 mt-2">
+                session was abandoned before finalizing
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <CommandList
+        commands={session.commands}
+        activeIndex={activeIndex}
+        onJump={handleJump}
+      />
+    </>
+  );
+}
 
 export function SessionPlayer({
   agentId,
@@ -35,200 +273,33 @@ export function SessionPlayer({
   onBack: () => void;
 }) {
   const [session, setSession] = useState<BrowserSessionDetail>(initialSession);
-  const [currentFrame, setCurrentFrame] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState<Speed>(1);
-  const [live, setLive] = useState(initialSession.status === 'active');
 
-  const screenshots = session.screenshots;
-  const totalFrames = screenshots.length;
-
-  // Interval ref for playback
-  const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Interval ref for live polling
-  const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Playback ──────────────────────────────────────────────────────────────
-
-  const stopPlayback = useCallback(() => {
-    if (playIntervalRef.current) {
-      clearInterval(playIntervalRef.current);
-      playIntervalRef.current = null;
-    }
-    setPlaying(false);
-  }, []);
-
-  const startPlayback = useCallback(() => {
-    if (playIntervalRef.current) clearInterval(playIntervalRef.current);
-
-    // Base interval: 500ms per frame at 1x (screenshots are typically seconds apart)
-    playIntervalRef.current = setInterval(() => {
-      setCurrentFrame((prev) => {
-        const next = prev + 1;
-        if (next >= totalFrames) {
-          stopPlayback();
-          return prev;
-        }
-        return next;
-      });
-    }, Math.round(500 / speed));
-
-    setPlaying(true);
-  }, [speed, totalFrames, stopPlayback]);
-
-  // Restart interval when speed changes while playing
+  // Refresh details every 3s while active — flips to replay when status changes
   useEffect(() => {
-    if (playing) {
-      startPlayback();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speed]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (playIntervalRef.current) clearInterval(playIntervalRef.current);
-      if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
-    };
-  }, []);
-
-  // ── Live polling ──────────────────────────────────────────────────────────
-
-  const pollSession = useCallback(async () => {
-    try {
-      const updated = await fetchBrowserSession(agentId, session.id);
-      setSession(updated);
-
-      // Auto-advance to latest frame in live mode
-      setCurrentFrame(Math.max(0, updated.screenshots.length - 1));
-
-      // Session just closed — name it if unnamed
-      if (updated.status === 'closed' && !updated.name) {
-        const name = await generateBrowserSessionName(agentId, session.id).catch(() => null);
-        if (name) setSession((s) => ({ ...s, name }));
-        setLive(false);
-      }
-
-      if (updated.status === 'closed') {
-        setLive(false);
-      }
-    } catch (err) {
-      console.error('SessionPlayer poll error', err);
-    }
-  }, [agentId, session.id]);
-
-  useEffect(() => {
-    if (live) {
-      if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
-      liveIntervalRef.current = setInterval(() => void pollSession(), 2000);
-    } else {
-      if (liveIntervalRef.current) {
-        clearInterval(liveIntervalRef.current);
-        liveIntervalRef.current = null;
-      }
-    }
-    return () => {
-      if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
-    };
-  }, [live, pollSession]);
-
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+    if (session.status !== 'active') return;
+    const id = setInterval(() => {
+      fetchBrowserSession(agentId, session.id)
+        .then(setSession)
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(id);
+  }, [agentId, session.id, session.status]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') { e.preventDefault(); handlePrev(); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); handleNext(); }
-      else if (e.key === ' ') { e.preventDefault(); handlePlayPause(); }
-      else if (e.key === 'Escape') { onBack(); }
+      if (e.key === 'Escape') onBack();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  });
+  }, [onBack]);
 
-  // ── Image preloading ──────────────────────────────────────────────────────
-
-  useEffect(() => {
-    for (let i = 1; i <= 5; i++) {
-      const idx = currentFrame + i;
-      if (idx < screenshots.length) {
-        const img = new Image();
-        img.src = browserScreenshotUrl(agentId, session.id, screenshots[idx]);
-      }
-    }
-  }, [currentFrame, screenshots, agentId, session.id]);
-
-  // ── Command mapping ────────────────────────────────────────────────────────
-
-  const currentScreenshotFilename = screenshots[currentFrame] ?? null;
-
-  // Map each command to its frame index (for click-to-jump)
-  const commandFrameMap = session.commands.map((cmd) => {
-    const frameIdx = cmd.screenshot ? screenshots.indexOf(cmd.screenshot) : -1;
-    return { ...cmd, frameIdx };
-  });
-
-  // Ref for auto-scrolling active event into view
-  const eventListRef = useRef<HTMLDivElement>(null);
-  const activeEventRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    activeEventRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [currentFrame]);
-
-  // ── Controls ──────────────────────────────────────────────────────────────
-
-  const handlePlayPause = () => {
-    if (playing) {
-      stopPlayback();
-    } else {
-      if (currentFrame >= totalFrames - 1) {
-        // At end — restart from beginning
-        setCurrentFrame(0);
-      }
-      startPlayback();
-    }
-  };
-
-  const handlePrev = () => {
-    stopPlayback();
-    setLive(false);
-    setCurrentFrame((f) => Math.max(0, f - 1));
-  };
-
-  const handleNext = () => {
-    stopPlayback();
-    setLive(false);
-    setCurrentFrame((f) => Math.min(totalFrames - 1, f + 1));
-  };
-
-  const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
-    stopPlayback();
-    setLive(false);
-    setCurrentFrame(Number(e.target.value));
-  };
-
-  const handleLiveToggle = () => {
-    if (!live) {
-      setCurrentFrame(Math.max(0, screenshots.length - 1));
-    }
-    setLive((l) => !l);
-  };
-
-  // ── Screenshot URL ────────────────────────────────────────────────────────
-
-  const screenshotUrl =
-    currentScreenshotFilename
-      ? browserScreenshotUrl(agentId, session.id, currentScreenshotFilename)
-      : null;
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const isLive = session.status === 'active';
 
   return (
     <div className="flex flex-1 flex-col h-full min-w-0 rounded-lg" style={{ background: '#111319' }}>
 
-      {/* ══ Header ══════════════════════════════════════════════════════════ */}
+      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 flex-shrink-0">
-        {/* Back */}
         <button
           onClick={onBack}
           className="flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-[#282a30] text-on-surface-variant/50 hover:text-on-surface"
@@ -239,7 +310,6 @@ export function SessionPlayer({
           </svg>
         </button>
 
-        {/* Session info */}
         <div className="flex-1 min-w-0">
           <p className="text-[11px] font-medium text-on-surface truncate">
             {session.name ?? 'Unnamed session'}
@@ -247,193 +317,28 @@ export function SessionPlayer({
           <p className="font-mono text-[9px] text-on-surface-variant/30 truncate">{session.id}</p>
         </div>
 
-        {/* Status + live indicator + frame counter */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <StatusBadge status={session.status} />
-          {live && (
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse inline-block" />
-              <span className="text-[8px] uppercase tracking-[0.15em] text-secondary/70 font-semibold">
-                live
-              </span>
-            </span>
-          )}
           <span className="font-mono text-[9px] text-on-surface-variant/40 tabular-nums">
-            {totalFrames === 0 ? '0 / 0' : `${currentFrame + 1} / ${totalFrames}`}
+            {session.commands.length} cmd{session.commands.length === 1 ? '' : 's'}
           </span>
         </div>
       </div>
 
-      {/* ══ Main content: Screenshot + Event Log ════════════════════════════ */}
+      {/* Main content */}
       <div className="flex-1 flex min-h-0">
-
-        {/* Screenshot area */}
-        <div
-          className="flex-1 flex items-center justify-center overflow-hidden"
-          style={{ background: '#111319', minHeight: 0 }}
-        >
-          {screenshotUrl ? (
-            <img
-              key={screenshotUrl}
-              src={screenshotUrl}
-              alt={`Frame ${currentFrame + 1}`}
-              className="max-w-full max-h-full object-contain select-none"
-              draggable={false}
-              loading="eager"
-              style={{ imageRendering: 'auto' }}
+        {isLive ? (
+          <>
+            <LiveView agentId={agentId} session={session} />
+            <CommandList
+              commands={session.commands}
+              activeIndex={session.commands.length - 1}
+              onJump={() => {}}
             />
-          ) : (
-            <div className="flex flex-col items-center justify-center text-center p-8">
-              <span className="text-[32px] opacity-10 mb-3">🖼</span>
-              <p className="font-mono text-[10px] text-on-surface-variant/25">
-                No screenshots captured yet
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Event log panel */}
-        {commandFrameMap.length > 0 && (
-          <div
-            className="w-56 flex-shrink-0 flex flex-col border-l border-white/5 overflow-hidden"
-            style={{ background: '#191b22' }}
-          >
-            <div className="px-3 py-2 border-b border-white/5">
-              <span className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
-                Events ({commandFrameMap.length})
-              </span>
-            </div>
-            <div ref={eventListRef} className="flex-1 overflow-y-auto scrollbar-thin">
-              {commandFrameMap.map((cmd, i) => {
-                const isActive = cmd.frameIdx === currentFrame;
-                const hasFrame = cmd.frameIdx >= 0;
-                return (
-                  <div
-                    key={i}
-                    ref={isActive ? activeEventRef : undefined}
-                    onClick={() => {
-                      if (hasFrame) {
-                        stopPlayback();
-                        setLive(false);
-                        setCurrentFrame(cmd.frameIdx);
-                      }
-                    }}
-                    className={`px-3 py-2 border-b border-white/3 transition-colors ${
-                      hasFrame ? 'cursor-pointer hover:bg-[#282a30]/50' : 'opacity-40'
-                    } ${isActive ? 'bg-primary/10 border-l-2 border-l-primary' : ''}`}
-                  >
-                    <p
-                      className={`font-mono text-[10px] leading-snug break-all ${
-                        isActive ? 'text-primary' : 'text-on-surface-variant/50'
-                      }`}
-                    >
-                      {cmd.args}
-                    </p>
-                    <p className="font-mono text-[8px] text-on-surface-variant/20 mt-0.5">
-                      {new Date(cmd.timestamp).toLocaleTimeString()}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          </>
+        ) : (
+          <ReplayView agentId={agentId} session={session} />
         )}
-      </div>
-
-      {/* ══ Controls bar ═════════════════════════════════════════════════════ */}
-      <div
-        className="px-4 py-3 flex flex-col gap-2.5 flex-shrink-0 border-t border-white/5"
-        style={{ background: '#1e1f26' }}
-      >
-        {/* Scrubber */}
-        <input
-          type="range"
-          min={0}
-          max={Math.max(0, totalFrames - 1)}
-          value={currentFrame}
-          onChange={handleScrub}
-          disabled={totalFrames === 0}
-          className="w-full h-1 accent-primary rounded cursor-pointer disabled:opacity-30"
-          style={{ accentColor: 'var(--color-primary, #a178ff)' }}
-        />
-
-        {/* Buttons row */}
-        <div className="flex items-center gap-2">
-          {/* Prev */}
-          <button
-            onClick={handlePrev}
-            disabled={currentFrame === 0 || totalFrames === 0}
-            className="rounded bg-primary/15 text-primary/70 hover:bg-primary/25 px-2 py-1 text-[10px] transition-colors disabled:opacity-20"
-            title="Previous frame"
-          >
-            ‹
-          </button>
-
-          {/* Play/Pause */}
-          <button
-            onClick={handlePlayPause}
-            disabled={totalFrames === 0}
-            className="rounded bg-primary/15 text-primary/70 hover:bg-primary/25 px-3 py-1 text-[10px] transition-colors disabled:opacity-20 font-mono min-w-[40px] text-center"
-          >
-            {playing ? '⏸' : '▶'}
-          </button>
-
-          {/* Next */}
-          <button
-            onClick={handleNext}
-            disabled={currentFrame >= totalFrames - 1 || totalFrames === 0}
-            className="rounded bg-primary/15 text-primary/70 hover:bg-primary/25 px-2 py-1 text-[10px] transition-colors disabled:opacity-20"
-            title="Next frame"
-          >
-            ›
-          </button>
-
-          <div className="flex-1" />
-
-          {/* Speed selector */}
-          <div className="flex items-center gap-1">
-            <span className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mr-1">
-              speed
-            </span>
-            {([1, 2, 4] as Speed[]).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSpeed(s)}
-                className={`rounded px-1.5 py-[2px] text-[9px] font-mono transition-colors ${
-                  speed === s
-                    ? 'bg-primary/25 text-primary'
-                    : 'bg-primary/10 text-primary/40 hover:bg-primary/20 hover:text-primary/60'
-                }`}
-              >
-                {s}×
-              </button>
-            ))}
-          </div>
-
-          {/* Live toggle (only for active sessions) */}
-          {session.status === 'active' && (
-            <button
-              onClick={handleLiveToggle}
-              className={`rounded px-2 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-                live
-                  ? 'bg-secondary-container text-[#002113]'
-                  : 'bg-[#33343b] text-on-surface-variant/50 hover:text-on-surface-variant/80'
-              }`}
-            >
-              live
-            </button>
-          )}
-        </div>
-
-        {/* Frame label row */}
-        <div className="flex items-center justify-between">
-          <span className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/25 font-semibold">
-            frames
-          </span>
-          <span className="font-mono text-[9px] text-on-surface-variant/30 tabular-nums">
-            {totalFrames === 0 ? '—' : `${currentFrame + 1} of ${totalFrames}`}
-          </span>
-        </div>
       </div>
     </div>
   );

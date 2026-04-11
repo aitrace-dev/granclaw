@@ -108,19 +108,22 @@ function CostChart({ data }: { data: UsageSummary }) {
 
     if (chartRef.current) chartRef.current.destroy();
 
+    // Bar chart (not line): a Chart.js line chart with a single data
+    // point draws nothing — just a lone dot with no connecting line —
+    // so fresh agents that had one session saw a confusingly empty
+    // cost chart. A bar chart renders one bar cleanly regardless of
+    // day count, and still reads as a trend when there are many days.
+    // See regression C.
     chartRef.current = new Chart(canvasRef.current, {
-      type: 'line',
+      type: 'bar',
       data: {
         labels: data.daily.map(d => d.date.slice(5)),
         datasets: [
           {
             label: 'Est. Cost (USD)',
             data: data.daily.map(d => Number(d.estimatedCostUsd.toFixed(2))),
-            borderColor: themeColor('secondary', 0.9),
-            backgroundColor: themeColor('secondary', 0.12),
-            fill: true,
-            tension: 0.3,
-            pointRadius: 3,
+            backgroundColor: themeColor('secondary', 0.75),
+            borderRadius: 2,
           },
         ],
       },

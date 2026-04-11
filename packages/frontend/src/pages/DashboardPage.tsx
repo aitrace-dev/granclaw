@@ -5,6 +5,11 @@ import {
   type Agent, type ProviderSettings,
 } from '../lib/api.ts';
 import { getModelsForProvider, getDefaultModel } from '../lib/models.ts';
+import {
+  buttonPrimary, buttonSecondary, buttonDanger,
+  inputCls as baseInputCls, inputMono,
+  cardCls, badgeSuccess, badgeNeutral,
+} from '../ui/primitives';
 
 function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
   const navigate = useNavigate();
@@ -13,33 +18,34 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
   return (
     <div
       onClick={() => navigate(`/agents/${agent.id}/chat`)}
-      className="flex items-center gap-4 rounded-lg bg-[#1e1f26] p-4 cursor-pointer transition-all hover:bg-[#252630] group"
+      className="group flex items-center gap-4 rounded-xl bg-surface-container-lowest border border-outline-variant/40 p-4 cursor-pointer transition-all hover:border-primary/40 hover:shadow-callout"
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-display text-[15px] font-semibold text-on-surface">{agent.name}</span>
-          <span
-            className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] ${
-              isActive ? 'bg-secondary-container text-[#002113]' : 'bg-[#33343b] text-on-surface-variant/60'
-            }`}
-          >
+          <span className="font-headline text-lg font-bold text-on-surface">{agent.name}</span>
+          <span className={isActive ? badgeSuccess : badgeNeutral}>
             {agent.status}
           </span>
         </div>
         <div className="flex items-center gap-3 mt-1">
-          <span className="font-mono text-[10px] text-primary/50">{agent.model}</span>
-          <span className="font-mono text-[10px] text-on-surface-variant/30">id: {agent.id}</span>
+          <span className="font-mono text-[10px] text-primary/70">{agent.model}</span>
+          <span className="font-mono text-[10px] text-on-surface-variant/60">id: {agent.id}</span>
         </div>
       </div>
       <div className="flex items-center gap-2">
         <div className="flex flex-wrap gap-1">
           {agent.allowedTools.slice(0, 3).map(t => (
-            <span key={t} className="font-mono text-[9px] text-on-surface-variant/30 bg-[#33343b] rounded px-1.5 py-0.5">{t}</span>
+            <span
+              key={t}
+              className="font-mono text-[9px] text-on-surface-variant bg-surface-container rounded px-1.5 py-0.5"
+            >
+              {t}
+            </span>
           ))}
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="text-[10px] px-2 py-1 rounded text-transparent group-hover:text-on-surface-variant/30 hover:!text-red-400 hover:!bg-red-950/20 transition-colors"
+          className={`${buttonDanger} opacity-0 group-hover:opacity-100`}
         >
           Delete
         </button>
@@ -142,25 +148,26 @@ export function DashboardPage() {
     loadAll();
   }
 
-  const inputCls = 'rounded bg-[#33343b] px-3 py-2 text-[12px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow';
-
-  if (loading) return <div className="text-on-surface-variant/40 font-mono text-xs p-8">loading agents…</div>;
+  if (loading) {
+    return (
+      <div className="font-mono text-xs text-on-surface-variant p-8">
+        loading agents…
+      </div>
+    );
+  }
 
   // Full-screen CTA only for truly fresh installs: no provider AND no agents
   if (!loading && providerSettings && !providerSettings.configured && agents.length === 0) {
     return (
-      <div className="max-w-3xl mx-auto py-8 px-4">
-        <div className="text-center py-24">
-          <p className="font-display text-2xl font-semibold text-on-surface mb-3">
-            Get started with GranClaw
-          </p>
-          <p className="font-mono text-[12px] text-on-surface-variant/50 mb-8">
+      <div className="max-w-3xl mx-auto py-16 px-4">
+        <div className="text-center">
+          <h1 className="font-headline text-4xl font-bold text-on-surface mb-4">
+            Get started with <span className="highlight-marker">GranClaw</span>
+          </h1>
+          <p className="font-mono text-xs text-on-surface-variant mb-8">
             Configure a provider and API key before creating agents.
           </p>
-          <Link
-            to="/settings"
-            className="rounded-lg bg-primary-container px-6 py-3 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90"
-          >
+          <Link to="/settings" className={buttonPrimary}>
             Configure provider
           </Link>
         </div>
@@ -169,20 +176,26 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
+    <div className="max-w-4xl mx-auto py-8 px-4">
       {/* Provider warning banner (shown when agents exist but provider not configured) */}
       {providerSettings && !providerSettings.configured && (
-        <div className="rounded-lg bg-amber-950/20 border border-amber-600/20 px-4 py-3 mb-4 flex items-center justify-between">
-          <p className="font-mono text-[11px] text-amber-400/70">No provider configured — agents cannot run until you set one up.</p>
-          <Link to="/settings" className="font-mono text-[11px] text-primary/70 hover:text-primary">Configure →</Link>
+        <div className="rounded-xl bg-warning/10 border border-warning/30 px-4 py-3 mb-6 flex items-center justify-between">
+          <p className="font-mono text-[11px] text-warning">
+            No provider configured — agents cannot run until you set one up.
+          </p>
+          <Link to="/settings" className="font-label text-[11px] font-semibold uppercase tracking-widest text-primary hover:text-surface-tint">
+            Configure →
+          </Link>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-on-surface">Agents</h1>
-          <p className="font-mono text-[11px] text-on-surface-variant/40 mt-1">{agents.length} agent{agents.length !== 1 ? 's' : ''} configured</p>
+          <h1 className="font-headline text-4xl font-bold text-on-surface">Agents</h1>
+          <p className="font-mono text-[11px] text-on-surface-variant mt-1">
+            {agents.length} agent{agents.length !== 1 ? 's' : ''} configured
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -195,7 +208,7 @@ export function DashboardPage() {
           <button
             onClick={() => importInputRef.current?.click()}
             disabled={importing || !providerSettings?.configured}
-            className="rounded-lg bg-[#33343b] px-4 py-2 text-sm font-medium text-on-surface-variant transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonSecondary}
             title="Import an agent from a granclaw export zip"
           >
             {importing ? 'Importing…' : '↥ Import'}
@@ -203,7 +216,7 @@ export function DashboardPage() {
           <button
             onClick={() => setShowCreate(s => !s)}
             disabled={!providerSettings?.configured}
-            className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            className={buttonPrimary}
           >
             {showCreate ? 'Cancel' : '+ New Agent'}
           </button>
@@ -212,17 +225,19 @@ export function DashboardPage() {
 
       {/* Create form */}
       {showCreate && (
-        <div className="rounded-lg bg-[#1e1f26] p-4 mb-4 space-y-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium">Create new agent</p>
+        <div className={`${cardCls} p-5 mb-6 space-y-3`}>
+          <p className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
+            Create new agent
+          </p>
           <div className="grid grid-cols-2 gap-2">
             <input
-              className={inputCls}
+              className={inputMono}
               placeholder="agent-id (lowercase, no spaces)"
               value={newId}
               onChange={e => setNewId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
             />
             <input
-              className={inputCls}
+              className={baseInputCls}
               placeholder="Display name"
               value={newName}
               onChange={e => setNewName(e.target.value)}
@@ -230,7 +245,7 @@ export function DashboardPage() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <select
-              className={`${inputCls} appearance-none`}
+              className={`${baseInputCls} appearance-none`}
               value={newProvider}
               onChange={e => handleProviderChange(e.target.value)}
             >
@@ -239,7 +254,7 @@ export function DashboardPage() {
               ))}
             </select>
             <select
-              className={`${inputCls} appearance-none`}
+              className={`${baseInputCls} appearance-none`}
               value={newModel}
               onChange={e => setNewModel(e.target.value)}
             >
@@ -249,30 +264,32 @@ export function DashboardPage() {
             </select>
           </div>
           <input
-            className={inputCls + ' w-full'}
+            className={inputMono}
             placeholder={`Workspace path (optional, defaults to ./workspaces/${newId || 'agent-id'})`}
             value={newWorkspace}
             onChange={e => setNewWorkspace(e.target.value)}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={handleCreate}
               disabled={creating || !newId.trim() || !newName.trim() || !newModel}
-              className="rounded bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
+              className={buttonPrimary}
             >
               {creating ? 'Creating…' : 'Create'}
             </button>
-            {error && <span className="font-mono text-[10px] text-red-400">{error}</span>}
+            {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
         </div>
       )}
 
       {/* Agent list */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         {agents.length === 0 ? (
           <div className="text-center py-16">
-            <span className="text-3xl opacity-20">🤖</span>
-            <p className="font-mono text-[11px] text-on-surface-variant/40 mt-3">No agents yet. Create one to get started.</p>
+            <span className="text-3xl opacity-30">🤖</span>
+            <p className="font-mono text-[11px] text-on-surface-variant mt-3">
+              No agents yet. Create one to get started.
+            </p>
           </div>
         ) : (
           agents.map(a => (

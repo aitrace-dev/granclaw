@@ -55,3 +55,6 @@ packages/cli/granclaw-*.tgz
 
 # Test workspaces — ephemeral, created and deleted by e2e test runs
 .test/
+
+# Git worktrees — isolated branch workspaces, not shipped
+.worktrees/

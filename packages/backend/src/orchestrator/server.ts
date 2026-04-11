@@ -53,7 +53,7 @@ import { handleBrowserLiveUpgrade } from './browser-live.js';
 import { stealthArgv } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
-import { getTakeoverByToken } from '../takeover-state.js';
+import { getTakeoverByToken, clearTakeover } from '../takeover-state.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -114,6 +114,8 @@ export function createServer() {
       res.status(503).json({ error: 'agent not running' });
       return;
     }
+    // Atomically consume the token before enqueuing — prevents double-POST from double-enqueuing
+    clearTakeover(entry.agentId);
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
     enqueue(workspaceDir, entry.agentId, '[User clicked Done on takeover page]', entry.channelId);
     res.json({ ok: true });

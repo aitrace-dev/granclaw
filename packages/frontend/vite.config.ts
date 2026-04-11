@@ -32,7 +32,7 @@ export default defineConfig({
       '^/agents/[^/]+/export': backendUrl,
       '^/agents/import$': backendUrl,
       '^/logs': backendUrl,
-      '^/settings': backendUrl,
+      '^/settings/': backendUrl,
       '^/search': backendUrl,
       '^/health$': backendUrl,
       // WebSocket proxy: browser → vite → backend → internal agent process.

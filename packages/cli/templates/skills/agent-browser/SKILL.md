@@ -29,7 +29,7 @@ The fundamental loop is: **open → snapshot → interact → re-snapshot**.
 .agent/skills/agent-browser/browser-wrapper.sh snapshot --annotate -i
 ```
 
-**Screenshots are captured automatically after every command.** You do not need to take them manually. The audit trail is handled by the wrapper.
+**The entire session is recorded as video automatically.** You do not need to take screenshots for the audit trail. Recording starts on the first command and finalizes when you call `close`. **Never call `record start` or `record stop` yourself — the wrapper manages recording, and calling `record` directly will be rejected with exit code 2.**
 
 Use `--annotate -i` for snapshots during reasoning — it overlays numbered labels on interactive elements so you can reference them precisely. Plain `snapshot` (without `--annotate`) gives you the accessibility tree for text extraction.
 
@@ -174,7 +174,7 @@ Navigate to the login page and fill credentials directly:
 ### Capture
 | Command | Description |
 |---------|-------------|
-| `.agent/skills/agent-browser/browser-wrapper.sh screenshot` | Take screenshot (auto-captured anyway) |
+| `.agent/skills/agent-browser/browser-wrapper.sh screenshot` | Take a one-off screenshot (the session is already recorded as video) |
 | `.agent/skills/agent-browser/browser-wrapper.sh screenshot --annotate -i` | Annotated screenshot for agent reasoning |
 | `.agent/skills/agent-browser/browser-wrapper.sh screenshot --path <file>` | Save screenshot to a file |
 | `.agent/skills/agent-browser/browser-wrapper.sh pdf --path <file>` | Save page as PDF |

@@ -6,21 +6,26 @@
  * Lifecycle:
  *   1. Frontend opens ws://.../browser-live/:agentId/:sessionId
  *   2. On first subscriber for a (agentId, sessionId) pair, the backend:
- *        a. shells out to `agent-browser get cdp-url` to discover Chrome's CDP port
- *        b. fetches http://<host>:<port>/json/list to find the active "page" target
- *        c. opens a CDP WebSocket to that page target
- *        d. sends Page.startScreencast (jpeg, q60, 800×600, every frame)
- *   3. Every screencastFrame is fanned out as a JSON message to all subscribers
- *   4. On last subscriber disconnect (ref-count → 0), the screencast is stopped
+ *        a. shells out to `agent-browser --session <id> get cdp-url` to find
+ *           that agent's dedicated daemon
+ *        b. polls `agent-browser --session <id> tab --json` for the currently
+ *           active tab (the one with active:true)
+ *        c. matches that tab's URL against http://<host>:<port>/json/list
+ *           to find the matching CDP page target
+ *        d. opens a CDP WebSocket to that page target and sends
+ *           Page.startScreencast
+ *   3. Every screencastFrame is fanned out as a JSON frame message to all
+ *      subscribers
+ *   4. A 2-second poll loop re-runs step 2 + 3. If the agent switches tabs
+ *      (via `tab N` or `tab new`), the relay detaches from the old target,
+ *      attaches to the new one, and emits a `tab_changed` event so the
+ *      frontend can show a "Watching: <title>" label
+ *   5. On last subscriber disconnect (ref-count → 0), the poll is cancelled
  *      and the Chrome CDP socket is closed
  *
- * The relay is best-effort. If Chrome isn't running or CDP isn't reachable,
- * the subscriber socket is closed with a descriptive reason so the frontend
- * can show a placeholder.
- *
- * Known limitation: this only follows the *first* page target discovered. If
- * the agent switches tabs, the live view will still show the original tab
- * until the agent closes it. Tab-following via Target.targetCreated is TODO.
+ * The relay is best-effort. If agent-browser isn't running or CDP is
+ * unreachable, subscribers see an error event and the live view shows a
+ * placeholder.
  */
 
 import http from 'http';
@@ -31,13 +36,32 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
+const TAB_POLL_INTERVAL_MS = 2000;
+
+interface CdpPage {
+  id: string;
+  url: string;
+  title: string;
+  webSocketDebuggerUrl: string;
+}
+
+interface ActiveTab {
+  index: number;
+  url: string;
+  title: string;
+}
+
 interface Stream {
   agentId: string;
   sessionId: string;
+  workspaceDir: string;
+  browserCdpUrl: string | null;
   chromeWs: WebSocket | null;
+  currentTargetId: string | null;
   subscribers: Set<WebSocket>;
   cdpMessageId: number;
   screencastSessionId: number | null;
+  pollTimer: ReturnType<typeof setInterval> | null;
   disposed: boolean;
 }
 
@@ -58,10 +82,8 @@ function sendToSubscribers(stream: Stream, payload: object): void {
 }
 
 /**
- * Discover the CDP URL for this agent's dedicated agent-browser daemon.
- * The --session flag scopes the lookup so the CDP relay binds to that
- * agent's Chrome (not the default daemon or another agent's).
- * Returns null if that daemon isn't running or agent-browser fails.
+ * Discover the browser-level CDP URL for this agent's dedicated daemon.
+ * Returns null if that daemon isn't running.
  */
 async function discoverCdpUrl(agentId: string, workspaceDir: string): Promise<string | null> {
   try {
@@ -78,12 +100,37 @@ async function discoverCdpUrl(agentId: string, workspaceDir: string): Promise<st
 }
 
 /**
- * From a browser-level CDP URL (ws://.../devtools/browser/<uuid>) extract the
- * host:port and query the /json/list endpoint to find the active page target.
+ * Ask agent-browser which tab is currently active. Uses --json so there's no
+ * ANSI-escape parsing. Returns null if agent-browser isn't running or the
+ * response can't be parsed.
  */
-async function findPageTarget(browserCdpUrl: string): Promise<string | null> {
+async function getActiveTab(agentId: string, workspaceDir: string): Promise<ActiveTab | null> {
+  try {
+    const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+    const { stdout } = await execFileAsync(bin, ['--session', agentId, 'tab', '--json'], {
+      cwd: workspaceDir,
+      timeout: 3000,
+    });
+    const parsed = JSON.parse(stdout) as {
+      success?: boolean;
+      data?: { tabs?: Array<{ active?: boolean; index: number; url: string; title: string }> };
+    };
+    const tabs = parsed.data?.tabs ?? [];
+    const active = tabs.find((t) => t.active === true);
+    if (!active) return null;
+    return { index: active.index, url: active.url, title: active.title };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch the CDP page list from the browser. Returns only targets with type
+ * 'page' that have a webSocketDebuggerUrl.
+ */
+async function fetchCdpPages(browserCdpUrl: string): Promise<CdpPage[]> {
   const match = /^wss?:\/\/([^/]+)\//.exec(browserCdpUrl);
-  if (!match) return null;
+  if (!match) return [];
   const host = match[1];
 
   return new Promise((resolve) => {
@@ -92,38 +139,90 @@ async function findPageTarget(browserCdpUrl: string): Promise<string | null> {
       res.on('data', (c) => { body += c.toString(); });
       res.on('end', () => {
         try {
-          const targets = JSON.parse(body) as Array<{ type: string; webSocketDebuggerUrl?: string }>;
-          const page = targets.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
-          resolve(page?.webSocketDebuggerUrl ?? null);
+          const targets = JSON.parse(body) as Array<{
+            id: string;
+            type: string;
+            url?: string;
+            title?: string;
+            webSocketDebuggerUrl?: string;
+          }>;
+          const pages: CdpPage[] = targets
+            .filter((t) => t.type === 'page' && t.webSocketDebuggerUrl)
+            .map((t) => ({
+              id: t.id,
+              url: t.url ?? '',
+              title: t.title ?? '',
+              webSocketDebuggerUrl: t.webSocketDebuggerUrl as string,
+            }));
+          resolve(pages);
         } catch {
-          resolve(null);
+          resolve([]);
         }
       });
     });
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.on('error', () => resolve([]));
+    req.on('timeout', () => { req.destroy(); resolve([]); });
   });
 }
 
-async function attachChrome(stream: Stream, workspaceDir: string): Promise<string | null> {
-  const browserCdp = await discoverCdpUrl(stream.agentId, workspaceDir);
-  if (!browserCdp) return 'agent-browser not running or CDP unavailable';
+/**
+ * Find the CDP page target that matches agent-browser's active tab URL.
+ *
+ * Selection rules:
+ *   1. Exact URL match — best case, unique mapping
+ *   2. If multiple exact matches (duplicate URLs across tabs), pick the
+ *      first one. Agent-browser's tab index and Chrome's /json/list ordering
+ *      are not guaranteed to correlate, so we can't perfectly disambiguate
+ *      duplicates without a stable cross-reference. In practice duplicate
+ *      URLs across tabs are rare; the "frontend tab picker" follow-up can
+ *      fix the edge case later.
+ *   3. No exact match — fall back to the newest non-inert page (skipping
+ *      about:blank, chrome://, devtools://, view-source:). This covers the
+ *      window between a `tab new <url>` and agent-browser finishing its
+ *      navigation, when the tab temporarily has a different URL.
+ */
+function pickCdpPageForTab(pages: CdpPage[], activeUrl: string): CdpPage | null {
+  if (pages.length === 0) return null;
 
-  const pageCdp = await findPageTarget(browserCdp);
-  if (!pageCdp) return 'no page target available';
+  const exact = pages.filter((p) => p.url === activeUrl);
+  if (exact.length > 0) return exact[0];
 
-  const chromeWs = new WebSocket(pageCdp);
+  const isInert = (url: string): boolean =>
+    !url ||
+    url === 'about:blank' ||
+    url.startsWith('chrome://') ||
+    url.startsWith('chrome-untrusted://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('view-source:');
+
+  const real = pages.filter((p) => !isInert(p.url));
+  return real.length > 0 ? real[real.length - 1] : pages[pages.length - 1];
+}
+
+/**
+ * Attach to a specific CDP page target and begin screencasting. Called on
+ * initial attach and again whenever we need to rebind to a new tab.
+ */
+function attachPageCdp(stream: Stream, page: CdpPage): void {
+  const chromeWs = new WebSocket(page.webSocketDebuggerUrl);
   stream.chromeWs = chromeWs;
+  stream.currentTargetId = page.id;
+  stream.screencastSessionId = null;
 
   chromeWs.on('open', () => {
-    if (stream.disposed) { chromeWs.close(); return; }
+    if (stream.disposed) { try { chromeWs.close(); } catch {} return; }
     const id = ++stream.cdpMessageId;
     chromeWs.send(JSON.stringify({
       id,
       method: 'Page.startScreencast',
       params: { format: 'jpeg', quality: 60, maxWidth: 1280, maxHeight: 720, everyNthFrame: 1 },
     }));
-    sendToSubscribers(stream, { type: 'attached' });
+    sendToSubscribers(stream, {
+      type: 'attached',
+      targetId: page.id,
+      url: page.url,
+      title: page.title,
+    });
   });
 
   chromeWs.on('message', (buf) => {
@@ -135,7 +234,6 @@ async function attachChrome(stream: Stream, workspaceDir: string): Promise<strin
       const sessionId = msg.params.sessionId as number;
       stream.screencastSessionId = sessionId;
       sendToSubscribers(stream, { type: 'frame', data, timestamp: Date.now() });
-      // Ack the frame so Chrome keeps sending more
       const ackId = ++stream.cdpMessageId;
       try {
         chromeWs.send(JSON.stringify({
@@ -148,33 +246,111 @@ async function attachChrome(stream: Stream, workspaceDir: string): Promise<strin
   });
 
   chromeWs.on('close', () => {
-    if (!stream.disposed) {
+    if (!stream.disposed && stream.chromeWs === chromeWs) {
       sendToSubscribers(stream, { type: 'detached', reason: 'chrome disconnected' });
     }
   });
 
   chromeWs.on('error', () => {
-    if (!stream.disposed) {
+    if (!stream.disposed && stream.chromeWs === chromeWs) {
       sendToSubscribers(stream, { type: 'error', reason: 'chrome cdp error' });
     }
   });
+}
 
+/**
+ * Gracefully detach from the current page target — stop the screencast,
+ * close the WS. Safe to call on a stream with no current binding.
+ */
+function detachPageCdp(stream: Stream): void {
+  const ws = stream.chromeWs;
+  if (!ws) return;
+  try {
+    if (ws.readyState === WebSocket.OPEN && stream.screencastSessionId != null) {
+      ws.send(JSON.stringify({
+        id: ++stream.cdpMessageId,
+        method: 'Page.stopScreencast',
+      }));
+    }
+  } catch { /* already gone */ }
+  try { ws.close(); } catch { /* already gone */ }
+  stream.chromeWs = null;
+  stream.currentTargetId = null;
+  stream.screencastSessionId = null;
+}
+
+/**
+ * Ask agent-browser which tab is active, find the matching CDP target, and
+ * rebind the screencast if it differs from the currently bound one. Runs
+ * every TAB_POLL_INTERVAL_MS while the stream has subscribers.
+ */
+async function pollActiveTab(stream: Stream): Promise<void> {
+  if (stream.disposed || !stream.browserCdpUrl) return;
+
+  const active = await getActiveTab(stream.agentId, stream.workspaceDir);
+  if (!active) return;
+
+  const pages = await fetchCdpPages(stream.browserCdpUrl);
+  if (pages.length === 0) return;
+
+  const target = pickCdpPageForTab(pages, active.url);
+  if (!target) return;
+
+  if (target.id === stream.currentTargetId) return;
+
+  // Tab switch detected — detach and rebind
+  detachPageCdp(stream);
+  if (stream.disposed) return;
+  sendToSubscribers(stream, {
+    type: 'tab_changed',
+    index: active.index,
+    url: active.url,
+    title: active.title,
+  });
+  attachPageCdp(stream, target);
+}
+
+function startPollLoop(stream: Stream): void {
+  if (stream.pollTimer) return;
+  stream.pollTimer = setInterval(() => {
+    void pollActiveTab(stream);
+  }, TAB_POLL_INTERVAL_MS);
+}
+
+function stopPollLoop(stream: Stream): void {
+  if (stream.pollTimer) {
+    clearInterval(stream.pollTimer);
+    stream.pollTimer = null;
+  }
+}
+
+/**
+ * Initial attach: discover the daemon, find the active tab, bind screencast,
+ * start the poll loop.
+ */
+async function attachChrome(stream: Stream): Promise<string | null> {
+  const browserCdp = await discoverCdpUrl(stream.agentId, stream.workspaceDir);
+  if (!browserCdp) return 'agent-browser not running or CDP unavailable';
+  stream.browserCdpUrl = browserCdp;
+
+  const active = await getActiveTab(stream.agentId, stream.workspaceDir);
+  const pages = await fetchCdpPages(browserCdp);
+  if (pages.length === 0) return 'no page targets available';
+
+  const target = active
+    ? pickCdpPageForTab(pages, active.url)
+    : pickCdpPageForTab(pages, ''); // triggers the "newest non-inert" fallback
+  if (!target) return 'no suitable page target';
+
+  attachPageCdp(stream, target);
+  startPollLoop(stream);
   return null;
 }
 
 function disposeStream(key: string, stream: Stream): void {
   stream.disposed = true;
-  if (stream.chromeWs && stream.chromeWs.readyState === WebSocket.OPEN) {
-    try {
-      if (stream.screencastSessionId != null) {
-        stream.chromeWs.send(JSON.stringify({
-          id: ++stream.cdpMessageId,
-          method: 'Page.stopScreencast',
-        }));
-      }
-      stream.chromeWs.close();
-    } catch { /* already gone */ }
-  }
+  stopPollLoop(stream);
+  detachPageCdp(stream);
   streams.delete(key);
 }
 
@@ -208,15 +384,19 @@ export function handleBrowserLiveUpgrade(
       stream = {
         agentId,
         sessionId,
+        workspaceDir,
+        browserCdpUrl: null,
         chromeWs: null,
+        currentTargetId: null,
         subscribers: new Set([ws]),
         cdpMessageId: 0,
         screencastSessionId: null,
+        pollTimer: null,
         disposed: false,
       };
       streams.set(key, stream);
 
-      void attachChrome(stream, workspaceDir).then((err) => {
+      void attachChrome(stream).then((err) => {
         if (err) {
           sendToSubscribers(stream!, { type: 'error', reason: err });
         }
@@ -224,7 +404,7 @@ export function handleBrowserLiveUpgrade(
     } else {
       stream.subscribers.add(ws);
       if (stream.chromeWs?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'attached' }));
+        ws.send(JSON.stringify({ type: 'attached', targetId: stream.currentTargetId }));
       }
     }
 

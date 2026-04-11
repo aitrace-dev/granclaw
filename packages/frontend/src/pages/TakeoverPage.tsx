@@ -49,7 +49,10 @@ export function TakeoverPage() {
         }
       } catch {}
     };
-    return () => { ws.close(); };
+    return () => {
+      ws.onmessage = null;
+      ws.close();
+    };
   }, [info]);
 
   // Focus container for keyboard capture
@@ -76,16 +79,18 @@ export function TakeoverPage() {
     return (e.shiftKey ? 8 : 0) | (e.ctrlKey ? 2 : 0) | (e.altKey ? 1 : 0) | (e.metaKey ? 4 : 0);
   }, []);
 
+  const buttonName = (b: number): string => b === 2 ? 'right' : b === 1 ? 'middle' : 'left';
+
   // Mouse handlers
   const onMouseMove = (e: React.MouseEvent) => {
     send({ type: 'mouse', eventType: 'mouseMoved', ...toViewport(e.clientX, e.clientY), button: 'none', clickCount: 0, modifiers: modifiers(e.nativeEvent) });
   };
   const onMouseDown = (e: React.MouseEvent) => {
     containerRef.current?.focus();
-    send({ type: 'mouse', eventType: 'mousePressed', ...toViewport(e.clientX, e.clientY), button: 'left', clickCount: 1, modifiers: modifiers(e.nativeEvent) });
+    send({ type: 'mouse', eventType: 'mousePressed', ...toViewport(e.clientX, e.clientY), button: buttonName(e.button), clickCount: 1, modifiers: modifiers(e.nativeEvent) });
   };
   const onMouseUp = (e: React.MouseEvent) => {
-    send({ type: 'mouse', eventType: 'mouseReleased', ...toViewport(e.clientX, e.clientY), button: 'left', clickCount: 1, modifiers: modifiers(e.nativeEvent) });
+    send({ type: 'mouse', eventType: 'mouseReleased', ...toViewport(e.clientX, e.clientY), button: buttonName(e.button), clickCount: 1, modifiers: modifiers(e.nativeEvent) });
   };
   const onWheel = (e: React.WheelEvent) => {
     send({ type: 'scroll', ...toViewport(e.clientX, e.clientY), deltaY: e.deltaY });
@@ -116,6 +121,7 @@ export function TakeoverPage() {
     setSubmitting(true);
     try {
       await fetch(`/api/takeover/${token}/resolve`, { method: 'POST' });
+      wsRef.current?.close();
       setDone(true);
     } catch {
       setSubmitting(false);
@@ -182,6 +188,7 @@ export function TakeoverPage() {
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
         onPaste={onPaste}
+        onContextMenu={(e) => e.preventDefault()}
         style={{ background: '#111319' }}
       >
         {frame ? (

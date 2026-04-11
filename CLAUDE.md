@@ -137,16 +137,49 @@ Edit `agents.config.json`, add an entry to the `agents` array. The backend reads
 
 ## Testing
 
-**Every UI change must be verified with a Playwright test.** No exceptions.
+**CRITICAL: Every fix ships with a test that fails before the fix and passes after.** No exceptions, no "I'll add it later". If the change can't be tested, write it down — explain why in the commit message and open a follow-up issue.
+
+### The rule in one line
+
+> A fix without a regression test is half a fix. The bug comes back.
+
+### What to write, by layer
+
+| Bug lives in | Test lives in | Why |
+|---|---|---|
+| **Backend logic** (runner, config, db, workflows) | `packages/backend/src/*.test.ts` — vitest | Runs in-process, fast, deterministic |
+| **Backend packaging / runtime** (ESM loader, tarball shape, prepublish gate) | `packages/backend/src/*.test.ts` using `execFileSync(process.execPath, …)` for real-node runs | Vitest runs in a VM sandbox; real Node behaviour needs a subprocess |
+| **Frontend component behaviour** (rendering, state, hooks) | `packages/frontend/tests/*.spec.ts` — Playwright against the full stack | React hook lifecycles + WebSocket + router interactions can't be caught by unit tests |
+| **End-to-end flow** (user types → tool call → render) | `packages/frontend/tests/chat.spec.ts` | Exercises the real LLM or the mocked provider layer |
+| **CLI tarball / publish pipeline** | `packages/cli/scripts/prepublish-gate.sh` steps + `packages/cli/scripts/gate-e2e.spec.ts` | Catches packaging regressions that only manifest after `npm install -g` |
+
+### Workflow for a fix
+
+1. **Reproduce with a failing test first.** If the test passes on a buggy build, it's not catching the bug — rewrite it.
+2. **Make the test fail loudly** — assertion with a specific message about what's broken, not just `expect(x).toBe(y)`.
+3. **Apply the minimal fix in the dev stack** (`npm run dev`) for fast iteration — HMR gives you instant feedback on both backend (`tsx watch`) and frontend (Vite).
+4. **Confirm the test now passes** and that no other test regressed.
+5. **Commit the test in the same commit as the fix** — never a separate "add test" follow-up. The test is part of the fix.
+6. **Verify against the packaged tarball, not the dev stack.** Run the full build → pack → install → start → regression-test loop against `/tmp/granclaw-verify-prefix` on port 18787 before claiming "done". Packaging bugs (ESM loader, missing assets, stale dist) only manifest after `npm install -g`, so the dev-stack pass is necessary but not sufficient.
+
+**Never fix in the verify install, never verify in the dev stack.** The dev stack is for iteration; the verify install is for the final green light. Confusing the two is how packaging bugs reach users.
+
+### Running tests
 
 ```bash
-npm run test:e2e -w packages/frontend   # run all E2E tests
+npm run test -w @granclaw/backend          # backend vitest
+npm run test:e2e -w packages/frontend      # full-stack Playwright
+npm run gate -w granclaw                   # prepublish gate (build + audit + tarball install + smoke)
 ```
 
-- Tests live in `packages/frontend/tests/chat.spec.ts`
-- The full stack must be running before tests execute (backend :3001, agent :3100, frontend :5173)
-- Each new UI feature or behaviour change requires a corresponding test that proves it works
-- Tests run serially (1 worker) against the live stack — no mocks
+- Playwright tests need the full stack running (backend :3001, agent :3100, frontend :5173), one worker, no mocks.
+- The prepublish gate spins up its own server from the packed tarball on port 18787 and cleans up after itself.
+
+### Known regression tests and the bugs they guard
+
+- `packages/backend/src/esm-import.test.ts` — bare `await import('@mariozechner/pi-ai')` was silently rewritten to `require()` by tsc and crashed the tarball-installed CLI. Tests shell out to a real Node process *and* statically scan backend source for the forbidden pattern.
+- `packages/backend/src/providers-config.test.ts` — legacy `active` single-provider format must migrate transparently to the new `providers` map on read.
+- `packages/backend/src/config.test.ts` — GRANCLAW_HOME resolution priority (CLI flag > env var > default) and whitespace handling.
 
 ---
 

@@ -106,9 +106,18 @@ function ToolCallsBlock({ toolCalls, isStreaming }: { toolCalls: string[]; isStr
 // ── Component ─────────────────────────────────────────────────────────────
 
 export function ChatPage() {
-  const { id: agentId = '', view: viewParam } = useParams<{ id: string; view: string }>();
+  // Single splat route (see App.tsx) means this component stays mounted
+  // across view switches — WebSocket + streaming state survive navigation.
+  // The splat captures everything after /agents/:id/, so we parse the
+  // view out of it rather than using a named param.
+  const { id: agentId = '', '*': rest = '' } = useParams();
   const navigate = useNavigate();
-  const mainView: MainView = viewParam && VALID_VIEWS.includes(viewParam as MainView) ? (viewParam as MainView) : 'chat';
+  const mainView: MainView = (() => {
+    if (!rest || rest === 'chat') return 'chat';
+    const match = rest.match(/^view\/([\w-]+)$/);
+    if (match && VALID_VIEWS.includes(match[1] as MainView)) return match[1] as MainView;
+    return 'chat';
+  })();
   const setMainView = (view: MainView) => {
     if (view === 'chat') navigate(`/agents/${agentId}/chat`, { replace: true });
     else navigate(`/agents/${agentId}/view/${view}`, { replace: true });
@@ -135,14 +144,13 @@ export function ChatPage() {
   const [, setBbGuardrailsActive] = useState(false);
   const bbBottomRef = useRef<HTMLDivElement>(null);
 
-  // Clear stale streaming state when WS reconnects after a drop
-  const handleReconnect = useCallback(() => {
-    setMessages(prev => prev.map(m => m.isStreaming ? { ...m, isStreaming: false, text: m.text || '(connection lost)' } : m));
-    setIsSending(false);
-    setPendingApproval(null);
-  }, []);
-
-  const { sendMessage, stopMessage, connected } = useAgentSocket(agent?.id, undefined, handleReconnect);
+  // NOTE: no `handleReconnect` callback. Brief WS hiccups used to clear
+  // isSending and stamp streaming messages as "(connection lost)", which
+  // let the user start a second concurrent turn while the agent was
+  // still running. Now useAgentSocket keeps the handler and state intact
+  // across reconnects — long outages fall through to the 90s stream
+  // timeout in useAgentSocket itself. See regression A spec.
+  const { sendMessage, stopMessage, connected } = useAgentSocket(agent?.id);
 
   function handleStop() {
     stopMessage();

@@ -1,20 +1,21 @@
 import 'dotenv/config';
 import net from 'net';
 import { createServer } from './orchestrator/server.js';
-import { startAllAgents } from './orchestrator/agent-manager.js';
+import { startAllAgents, plannedAgentPorts } from './orchestrator/agent-manager.js';
 import { startScheduler } from './scheduler.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
-function checkPortAvailable(port: number): Promise<void> {
+function checkPortAvailable(port: number, label: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tester = net.createServer();
     tester.once('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
         reject(new Error(
-          `\n[orchestrator] Port ${port} is already in use.\n` +
+          `\n[orchestrator] ${label} port ${port} is already in use.\n` +
           `Another GranClaw instance (or a stale process) is already running.\n` +
-          `Run: lsof -i :${port} -P -n  to find and kill it, then restart.\n`
+          `Run: lsof -i :${port} -P -n  to find the holder.\n` +
+          `For agent WS ports, set AGENT_BASE_PORT=<free base> before starting.\n`
         ));
       } else {
         reject(err);
@@ -25,7 +26,20 @@ function checkPortAvailable(port: number): Promise<void> {
   });
 }
 
-checkPortAvailable(PORT)
+async function preflight(): Promise<void> {
+  // Orchestrator REST/WS port must be free.
+  await checkPortAvailable(PORT, 'REST');
+
+  // Every agent's WS port must be free too — otherwise the agent
+  // child process would crash on startup with EADDRINUSE and the
+  // user would get a half-broken server serving the UI over a dead
+  // agent. Better to refuse to start.
+  for (const { agentId, port } of plannedAgentPorts()) {
+    await checkPortAvailable(port, `agent "${agentId}"`);
+  }
+}
+
+preflight()
   .then(() => {
     startAllAgents();
     startScheduler();

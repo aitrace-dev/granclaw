@@ -11,6 +11,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { REPO_ROOT, getAgent } from '../config.js';
+import { esmImport } from '../esm-import.js';
 import {
   getWorkflow,
   createRun,
@@ -102,7 +103,7 @@ async function executeLlmStep(
   const apiKey = getProviderApiKey();
   if (!apiKey) throw new Error('Provider API key missing. Go to Settings to reconfigure.');
 
-  const { getModel, complete } = await import('@mariozechner/pi-ai');
+  const { getModel, complete } = await esmImport<typeof import('@mariozechner/pi-ai')>('@mariozechner/pi-ai');
 
   const modelId = agentModel?.trim() || providerCfg.model;
   const model = (getModel as (p: string, m: string) => unknown)(providerCfg.provider, modelId);

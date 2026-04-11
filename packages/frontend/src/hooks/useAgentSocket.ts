@@ -99,9 +99,14 @@ export function useAgentSocket(
         if (!mountedRef.current) return;
         setConnected(true);
         reconnectDelayRef.current = RECONNECT_MIN_MS; // reset backoff
-        if (subscribeChannelRef.current) {
-          ws.send(JSON.stringify({ type: 'subscribe', channelId: subscribeChannelRef.current }));
-        }
+        // Always (re)subscribe to the channel on open so chunks route
+        // correctly after both fresh connections and reconnects. Default
+        // to 'ui' — the chat channel the dashboard listens on. Without
+        // this, the backend's channelClients set loses the client on
+        // every disconnect and in-flight chunks are broadcast into the
+        // void until the user sends a new message.
+        const channel = subscribeChannelRef.current ?? 'ui';
+        ws.send(JSON.stringify({ type: 'subscribe', channelId: channel }));
       };
 
       ws.onmessage = (event: MessageEvent) => {
@@ -135,12 +140,17 @@ export function useAgentSocket(
         setConnected(false);
         console.warn(`[ws] ${agentId} disconnected — reconnecting in ${reconnectDelayRef.current}ms`);
 
-        // Clear any stale streaming state
-        clearStreamTimeout();
-        if (handlerRef.current) {
-          handlerRef.current = null;
-        }
-        onReconnectRef.current?.();
+        // DO NOT null handlerRef or fire onReconnect here. The backend
+        // turn may still be running; if the WS reconnects quickly the
+        // chunks resume flowing into the same handler and the UI picks
+        // up where it left off. Previously we cleared `isSending` and
+        // flagged streaming messages as "(connection lost)" on every
+        // brief hiccup, which let the user start a second concurrent
+        // turn while the first was still running — regression A.
+        //
+        // Catastrophic long-disconnect cleanup is handled by the 90s
+        // stream timeout in resetStreamTimeout(), which fires if no
+        // chunks arrive for 90s and gracefully marks the turn done.
 
         // Auto-reconnect with exponential backoff
         reconnectTimer = setTimeout(() => {

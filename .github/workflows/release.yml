@@ -1,0 +1,80 @@
+name: release
+
+# On-demand release cutter. Bumps the version in packages/cli/package.json,
+# commits, tags vX.Y.Z (or a beta variant), and pushes — which in turn fires
+# publish.yml (tag-triggered) to run the gate and push the tarball to npm.
+#
+# Separation of concerns:
+#   release.yml  — bump + tag + push       (this file, workflow_dispatch)
+#   publish.yml  — build + gate + publish  (triggered by the tag)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.0.1-beta.1 or 0.1.0). Omit the leading v.'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate version string
+        run: |
+          v='${{ inputs.version }}'
+          if ! echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$'; then
+            echo "::error::invalid version '$v' — expected semver like 0.1.0 or 0.0.1-beta.1"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "::error::tag v$v already exists"
+            exit 1
+          fi
+
+      - name: Configure git
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Bump CLI package version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('packages/cli/package.json', 'utf8'));
+            p.version = '${{ inputs.version }}';
+            fs.writeFileSync('packages/cli/package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+          echo '--- packages/cli/package.json ---'
+          head -5 packages/cli/package.json
+
+      - name: Commit, tag, push
+        run: |
+          git add packages/cli/package.json
+          git commit -m "chore(release): v${{ inputs.version }}"
+          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
+          git push origin HEAD --follow-tags
+
+      - name: Summary
+        run: |
+          echo "### Release v${{ inputs.version }} tagged" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tag \`v${{ inputs.version }}\` pushed to \`${{ github.ref_name }}\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Watch [publish.yml](../../actions/workflows/publish.yml) for the npm release." >> "$GITHUB_STEP_SUMMARY"

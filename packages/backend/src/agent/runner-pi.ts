@@ -19,6 +19,7 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { AgentConfig, REPO_ROOT } from '../config.js';
+import { esmImport } from '../esm-import.js';
 import { saveSession, getSessionFile } from '../agent-db.js';
 import { logAction } from '../logs-db.js';
 import { getProvider, getProviderApiKey, getSearchApiKey } from '../providers-config.js';
@@ -304,9 +305,10 @@ export async function runAgent(
   const browserState: { handle: BrowserSessionHandle | null } = { handle: null };
 
   try {
-    // ── Load pi packages (ESM-only, must use dynamic import) ───────────
-    const { getModel } = await import('@mariozechner/pi-ai');
-    const { createAgentSession, SessionManager, DefaultResourceLoader } = await import('@mariozechner/pi-coding-agent');
+    // ── Load pi packages (ESM-only, must bypass tsc's require rewrite) ──
+    const { getModel } = await esmImport<typeof import('@mariozechner/pi-ai')>('@mariozechner/pi-ai');
+    const { createAgentSession, SessionManager, DefaultResourceLoader } =
+      await esmImport<typeof import('@mariozechner/pi-coding-agent')>('@mariozechner/pi-coding-agent');
 
     // ── Resolve model ───────────────────────────────────────────────────
     // getModel() expects KnownProvider literals at the type level, but our

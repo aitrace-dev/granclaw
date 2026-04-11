@@ -15,7 +15,20 @@ import path from 'path';
 import { getAgents, getAgent, AgentConfig, REPO_ROOT } from '../config.js';
 import { getSecrets } from '../secrets-vault.js';
 
-const BASE_AGENT_PORT = Number(process.env.AGENT_BASE_PORT ?? 3100);
+export const BASE_AGENT_PORT = Number(process.env.AGENT_BASE_PORT ?? 3100);
+
+/**
+ * Compute the WS ports this orchestrator will ask for on startup.
+ * Used by index.ts to preflight-check every port before spawning
+ * any child processes, so a port collision fails the whole CLI
+ * with one clean error instead of limping along with broken agents.
+ */
+export function plannedAgentPorts(): { agentId: string; port: number }[] {
+  return getAgents().map((agent, index) => ({
+    agentId: agent.id,
+    port: BASE_AGENT_PORT + index,
+  }));
+}
 
 export interface ManagedAgent {
   config: AgentConfig;

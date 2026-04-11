@@ -146,9 +146,18 @@ function main() {
         saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: job.channelId, role: 'user', content: job.message });
       } catch { /* non-fatal */ }
 
-      // Stream chunks directly to channel clients
+      // Stream chunks directly to channel clients.
+      //
+      // tool_call rows are persisted to the DB the moment they arrive
+      // (not batched at turn end). Reason: if a user leaves the chat view
+      // mid-turn and navigates to /dashboard, ChatPage unmounts and loses
+      // its in-memory streaming state. On return, it refetches history
+      // from the DB — if tool_calls were still buffered in memory, the
+      // user would see an empty chat while the agent was clearly still
+      // working. Persisting as-they-happen makes the live state
+      // refetchable. See regression A (view-switch-state.spec.ts).
       let fullResponse = '';
-      const toolCallStrings: string[] = [];
+      let toolCallCount = 0;
 
       await runAgent(agent!, job.message, (chunk) => {
         broadcastToChannel(job.channelId, { type: 'chunk', chunk });
@@ -159,7 +168,17 @@ function main() {
           }
         }
         if (chunk.type === 'tool_call') {
-          toolCallStrings.push(`${chunk.tool}(${JSON.stringify(chunk.input)})`);
+          const tcString = `${chunk.tool}(${JSON.stringify(chunk.input)})`;
+          toolCallCount++;
+          try {
+            saveMessage({
+              id: randomUUID(),
+              agentId: agentId as string,
+              channelId: job.channelId,
+              role: 'tool_call',
+              content: tcString,
+            });
+          } catch { /* non-fatal — WAL/locking can fail under parallel writes */ }
           if (isTelegramJob) {
             // Live status update — appears in the user's chat as the
             // acknowledgment message gets edited to show progress.
@@ -168,14 +187,18 @@ function main() {
         }
       }, { channelId: job.channelId });
 
-      // Persist tool calls + response
-      const saveTime = Date.now();
+      // Persist the final assistant message. tool_call rows were already
+      // saved one-by-one above, so no batch here.
       try {
-        for (const [i, tc] of toolCallStrings.entries()) {
-          saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: job.channelId, role: 'tool_call', content: tc, createdAt: saveTime + i });
-        }
         if (fullResponse) {
-          saveMessage({ id: randomUUID(), agentId: agentId as string, channelId: job.channelId, role: 'assistant', content: fullResponse, createdAt: saveTime + toolCallStrings.length });
+          saveMessage({
+            id: randomUUID(),
+            agentId: agentId as string,
+            channelId: job.channelId,
+            role: 'assistant',
+            content: fullResponse,
+            createdAt: Date.now() + toolCallCount, // ordered after the last tool_call
+          });
         }
       } catch { /* non-fatal */ }
 

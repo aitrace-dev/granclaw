@@ -10,9 +10,10 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="agents/:id/chat" element={<ChatPage />} />
-        <Route path="agents/:id/view/:view" element={<ChatPage />} />
-        <Route path="agents/:id" element={<Navigate to="chat" replace />} />
+        {/* Single splat route so ChatPage stays mounted across view switches —
+            WebSocket, streaming state, and scroll position all survive
+            navigation between chat/monitor/tasks/etc. */}
+        <Route path="agents/:id/*" element={<ChatPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>

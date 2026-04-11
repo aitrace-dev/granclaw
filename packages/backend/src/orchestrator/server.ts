@@ -176,6 +176,18 @@ export function createServer() {
       const workspaceDir = path.resolve(REPO_ROOT, m.config.workspaceDir);
       const agentName = readAgentName(workspaceDir);
       const sessionId = getSession(workspaceDir, m.config.id);
+      // `busy` = is there currently a job with status='processing'
+      // for this agent? Used by the dashboard to show a live indicator
+      // for agents that are mid-turn. `status` is retained for
+      // backwards compatibility ('active' = ever ran a session,
+      // 'idle' = never ran) — new callers should use `busy` instead.
+      // See regression D.
+      let busy = false;
+      try {
+        busy = getActiveJobs(workspaceDir, m.config.id).some(
+          (j) => j.status === 'processing',
+        );
+      } catch { /* non-fatal — missing workspace DB just means not busy */ }
       return {
         id: m.config.id,
         name: agentName ?? m.config.name,
@@ -186,6 +198,7 @@ export function createServer() {
         pid: m.pid,
         sessionId,
         status: sessionId ? 'active' : 'idle',
+        busy,
         installedTools: readInstalledTools(workspaceDir) ?? {},
         guardrails: null,
       };

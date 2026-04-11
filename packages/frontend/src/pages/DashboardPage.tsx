@@ -14,6 +14,7 @@ import {
 function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
   const navigate = useNavigate();
   const isActive = agent.status === 'active';
+  const isBusy = agent.busy === true;
 
   return (
     <div
@@ -23,9 +24,22 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-headline text-lg font-bold text-on-surface">{agent.name}</span>
-          <span className={isActive ? badgeSuccess : badgeNeutral}>
-            {agent.status}
-          </span>
+          {/* Busy indicator takes priority — when the agent is mid-turn
+              we show "busy" with a pulsing dot regardless of its static
+              active/idle status. See regression D. */}
+          {isBusy ? (
+            <span
+              data-testid="busy-badge"
+              className="inline-flex items-center gap-1 rounded-full bg-secondary/15 border border-secondary/30 px-2 py-0.5 text-[10px] font-label font-semibold uppercase tracking-wider text-secondary"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
+              busy
+            </span>
+          ) : (
+            <span className={isActive ? badgeSuccess : badgeNeutral}>
+              {agent.status}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 mt-1">
           <span className="font-mono text-[10px] text-primary/70">{agent.model}</span>
@@ -117,7 +131,16 @@ export function DashboardPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    loadAll();
+    // Poll every 2s so the busy indicator reflects live agent state.
+    // The /agents endpoint is cheap (~5ms per agent) and the dashboard
+    // is only visible when the user is looking at it, so this is fine.
+    const interval = setInterval(() => {
+      fetchAgents().then(setAgents).catch(() => { /* swallow — next tick retries */ });
+    }, 2_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const navigate = useNavigate();
   const configuredProviders = providerSettings?.providers ?? [];

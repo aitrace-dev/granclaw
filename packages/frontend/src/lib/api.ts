@@ -7,7 +7,13 @@ export interface Agent {
   allowedTools: string[];
   bigBrother: { enabled: boolean };
   sessionId: string | null;
+  /** 'active' = has ever run a session, 'idle' = never run. Retained for
+   *  backwards compat; prefer `busy` for mid-turn UI state. */
   status: 'active' | 'idle';
+  /** True if the backend currently has a `processing` job for this agent
+   *  (i.e. the agent is in the middle of a turn). Dashboard polls /agents
+   *  every 2s to refresh this. See regression D. */
+  busy?: boolean;
   wsPort: number;
   bbPort: number | null;
   pid?: number;

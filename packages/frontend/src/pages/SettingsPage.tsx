@@ -83,7 +83,7 @@ function ConfiguredProviderRow({
       </div>
 
       {replacing && (
-        <div className="space-y-2 pt-1 border-t border-[#33343b]">
+        <div className="space-y-2 pt-1 border-t border-outline-variant/40">
           <div>
             <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1">
               Model
@@ -248,12 +248,14 @@ export function SettingsPage() {
   if (loading) return <div className="text-on-surface-variant/70 font-mono text-xs p-8">loading…</div>;
 
   return (
-    <div className="max-w-lg mx-auto py-8 px-4">
+    <div className="max-w-2xl mx-auto py-8 px-4">
 
       {/* ── Provider Settings ── */}
-      <div className="mb-6">
-        <h1 className="font-headline text-2xl font-semibold text-on-surface">Provider Settings</h1>
-        <p className="font-mono text-[11px] text-on-surface-variant/70 mt-1">
+      <div className="mb-8">
+        <h1 className="font-headline text-4xl font-bold text-on-surface">
+          <span className="highlight-marker">Provider</span> Settings
+        </h1>
+        <p className="font-mono text-[11px] text-on-surface-variant mt-2">
           Configure AI providers. Each agent can use a different provider.
         </p>
       </div>
@@ -343,8 +345,8 @@ export function SettingsPage() {
       )}
 
       {/* ── Web Search ── */}
-      <div className="mt-8 pt-8 border-t border-[#33343b]">
-        <h2 className="font-headline text-lg font-semibold text-on-surface mb-1">Web Search</h2>
+      <div className="mt-8 pt-8 border-t border-outline-variant/40">
+        <h2 className="font-headline text-2xl font-bold text-on-surface mb-1">Web Search</h2>
         <p className="font-mono text-[11px] text-on-surface-variant/70 mb-6">
           Brave Search gives agents real web search capability.{' '}
           {searchConfigured

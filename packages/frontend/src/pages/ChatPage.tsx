@@ -478,7 +478,7 @@ export function ChatPage() {
                 <p className="font-headline text-lg font-semibold text-on-surface tracking-tight mb-2">
                   Guardian
                 </p>
-                <span className="rounded-full bg-amber-400/10 border border-amber-400/20 px-3 py-1 font-mono text-[10px] text-warning uppercase tracking-widest mb-4">
+                <span className="rounded-full bg-warning/10 border border-warning/30 px-3 py-1 font-label text-[10px] font-semibold text-warning uppercase tracking-widest mb-4">
                   Coming Soon
                 </span>
                 <p className="max-w-[260px] text-center font-mono text-[10px] text-on-surface-variant leading-relaxed px-4">

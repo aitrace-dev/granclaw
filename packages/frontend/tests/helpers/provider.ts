@@ -54,3 +54,42 @@ export async function teardownTestProvider(weAdded: boolean): Promise<void> {
     await fetch(`${API}/settings/providers/${PROVIDER}`, { method: 'DELETE' });
   }
 }
+
+// ── Brave Search ──────────────────────────────────────────────────────────────
+
+/**
+ * Ensures Brave Search is configured. Returns true if this call added it.
+ * Reads BRAVE_API_KEY from the environment.
+ */
+export async function setupTestSearch(): Promise<boolean> {
+  const apiKey = process.env.BRAVE_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      'BRAVE_API_KEY is not set.\n' +
+      'Add it to .env at the repo root before running web-search tests.'
+    );
+  }
+
+  const res = await fetch(`${API}/settings/search`);
+  const { configured } = await res.json() as { configured: boolean };
+
+  if (!configured) {
+    await fetch(`${API}/settings/search`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    });
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Removes Brave Search config only if setupTestSearch() added it.
+ */
+export async function teardownTestSearch(weAdded: boolean): Promise<void> {
+  if (weAdded) {
+    await fetch(`${API}/settings/search`, { method: 'DELETE' });
+  }
+}

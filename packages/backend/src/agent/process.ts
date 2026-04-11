@@ -226,14 +226,18 @@ function main() {
       if (hasTakeover(agentId as string)) {
         const entry = getTakeover(agentId as string)!;
         const timer = setTimeout(async () => {
-          const current = getTakeover(agentId as string);
-          if (!current) return; // already resolved by user reply
-          clearTakeover(agentId as string);
-          try { await finalizeSession(current.handle, 'closed'); } catch { /* best effort */ }
-          const timeoutMsg =
-            '[System] The user did not take any browser action within 10 minutes. ' +
-            'The browser session has been closed. Please proceed to the next step or finish gracefully.';
-          enqueue(workspaceDir, agentId as string, timeoutMsg, entry.channelId);
+          try {
+            const current = getTakeover(agentId as string);
+            if (!current) return; // already resolved by user reply
+            clearTakeover(agentId as string);
+            try { await finalizeSession(current.handle, 'closed'); } catch { /* best effort */ }
+            const timeoutMsg =
+              '[System] The user did not take any browser action within 10 minutes. ' +
+              'The browser session has been closed. Please proceed to the next step or finish gracefully.';
+            enqueue(workspaceDir, agentId as string, timeoutMsg, current.channelId);
+          } catch (err) {
+            console.error(`[agent:${agentId}] takeover timeout callback failed`, err);
+          }
         }, TAKEOVER_TIMEOUT_MS);
         updateTakeoverTimer(agentId as string, timer);
       }

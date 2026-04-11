@@ -453,6 +453,61 @@ export function handleBrowserLiveUpgrade(
       }
     }
 
+    // Relay input events from the takeover page to Chrome via CDP
+    ws.on('message', (data: import('ws').RawData) => {
+      const s = streams.get(key);
+      if (!s?.chromeWs || s.chromeWs.readyState !== WebSocket.OPEN) return;
+
+      let msg: Record<string, unknown>;
+      try { msg = JSON.parse(data.toString()); } catch { return; }
+
+      const nextId = () => ++s.cdpMessageId;
+
+      if (msg.type === 'mouse') {
+        s.chromeWs.send(JSON.stringify({
+          id: nextId(),
+          method: 'Input.dispatchMouseEvent',
+          params: {
+            type: msg.eventType,
+            x: msg.x,
+            y: msg.y,
+            button: msg.button ?? 'none',
+            clickCount: msg.clickCount ?? 0,
+            modifiers: msg.modifiers ?? 0,
+          },
+        }));
+      } else if (msg.type === 'key') {
+        s.chromeWs.send(JSON.stringify({
+          id: nextId(),
+          method: 'Input.dispatchKeyEvent',
+          params: {
+            type: msg.eventType,
+            key: msg.key,
+            code: msg.code,
+            modifiers: msg.modifiers ?? 0,
+          },
+        }));
+      } else if (msg.type === 'insertText') {
+        s.chromeWs.send(JSON.stringify({
+          id: nextId(),
+          method: 'Input.insertText',
+          params: { text: msg.text },
+        }));
+      } else if (msg.type === 'scroll') {
+        s.chromeWs.send(JSON.stringify({
+          id: nextId(),
+          method: 'Input.dispatchMouseEvent',
+          params: {
+            type: 'mouseWheel',
+            x: msg.x,
+            y: msg.y,
+            deltaX: 0,
+            deltaY: msg.deltaY,
+          },
+        }));
+      }
+    });
+
     ws.on('close', () => {
       const s = streams.get(key);
       if (!s) return;

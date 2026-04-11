@@ -58,13 +58,15 @@ function sendToSubscribers(stream: Stream, payload: object): void {
 }
 
 /**
- * Discover the CDP URL for the currently running agent-browser daemon.
- * Returns null if Chrome isn't running or agent-browser fails.
+ * Discover the CDP URL for this agent's dedicated agent-browser daemon.
+ * The --session flag scopes the lookup so the CDP relay binds to that
+ * agent's Chrome (not the default daemon or another agent's).
+ * Returns null if that daemon isn't running or agent-browser fails.
  */
-async function discoverCdpUrl(workspaceDir: string): Promise<string | null> {
+async function discoverCdpUrl(agentId: string, workspaceDir: string): Promise<string | null> {
   try {
     const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
-    const { stdout } = await execFileAsync(bin, ['get', 'cdp-url'], {
+    const { stdout } = await execFileAsync(bin, ['--session', agentId, 'get', 'cdp-url'], {
       cwd: workspaceDir,
       timeout: 5000,
     });
@@ -104,7 +106,7 @@ async function findPageTarget(browserCdpUrl: string): Promise<string | null> {
 }
 
 async function attachChrome(stream: Stream, workspaceDir: string): Promise<string | null> {
-  const browserCdp = await discoverCdpUrl(workspaceDir);
+  const browserCdp = await discoverCdpUrl(stream.agentId, workspaceDir);
   if (!browserCdp) return 'agent-browser not running or CDP unavailable';
 
   const pageCdp = await findPageTarget(browserCdp);

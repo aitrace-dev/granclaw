@@ -916,10 +916,12 @@ export function createServer() {
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
     const profileDir = path.join(workspaceDir, '.browser-profile');
 
-    // Use persistent Chrome profile — keeps cookies, IndexedDB, localStorage, everything
+    // Each agent gets its own dedicated agent-browser daemon via --session.
+    // Paired with --profile so cookies/localStorage/IndexedDB persist at the
+    // path the frontend already displays ("profile saved" badge).
     try {
       const { execSync } = await import('child_process');
-      execSync(`agent-browser --headed --profile "${profileDir}" open "${url}"`, {
+      execSync(`agent-browser --session "${req.params.id}" --headed --profile "${profileDir}" open "${url}"`, {
         cwd: workspaceDir,
         timeout: 30000,
         stdio: 'pipe',
@@ -944,7 +946,7 @@ export function createServer() {
 
     try {
       const { execSync } = await import('child_process');
-      execSync(`agent-browser close`, {
+      execSync(`agent-browser --session "${req.params.id}" close`, {
         cwd: path.resolve(REPO_ROOT, managed.config.workspaceDir),
         timeout: 10000,
         stdio: 'pipe',

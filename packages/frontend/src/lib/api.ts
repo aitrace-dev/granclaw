@@ -386,14 +386,12 @@ export function browserVideoUrl(agentId: string, sessionId: string): string {
 }
 
 export function browserLiveWsUrl(agentId: string, sessionId: string): string {
+  // Always same-origin — in dev Vite proxies /browser-live/* to the backend
+  // via the ws:true rule; in prod the orchestrator serves the frontend on
+  // the same port as the API.
   const loc = window.location;
   const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-  try {
-    const base = new URL(BASE, loc.origin);
-    return `${wsProto}//${base.host}/browser-live/${agentId}/${sessionId}`;
-  } catch {
-    return `${wsProto}//${loc.host}/browser-live/${agentId}/${sessionId}`;
-  }
+  return `${wsProto}//${loc.host}/browser-live/${agentId}/${sessionId}`;
 }
 
 // ── Browser Profile ───────────────────────────────────────────────────

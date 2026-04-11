@@ -29,6 +29,18 @@ LOCK_FILE="$SESSIONS_DIR/.lock"
 AGENT_BROWSER_BIN="${AGENT_BROWSER_BIN:-agent-browser}"
 STALE_TIMEOUT_MS="${AGENT_BROWSER_STALE_TIMEOUT_MS:-900000}"  # 15 min
 
+# Each agent gets its own dedicated agent-browser daemon via --session.
+# The runner sets AGENT_ID when it spawns the agent subprocess; bash tool
+# calls inherit it. Without AGENT_ID (e.g., manual shell testing), we fall
+# back to the workspace dir name so sessions are still isolated per workspace.
+if [ -z "${AGENT_BROWSER_SESSION:-}" ]; then
+  if [ -n "${AGENT_ID:-}" ]; then
+    export AGENT_BROWSER_SESSION="$AGENT_ID"
+  else
+    export AGENT_BROWSER_SESSION="$(basename "$PWD")"
+  fi
+fi
+
 # ── Utilities ─────────────────────────────────────────────────────────────
 
 timestamp_ms() {
@@ -108,8 +120,24 @@ start_recording_if_needed() {
 
   local file="recording.webm"
   local path="$SESSIONS_DIR/$session_id/$file"
-  if "$AGENT_BROWSER_BIN" record start "$path" >/dev/null 2>&1; then
+
+  # agent-browser's recording state is a global daemon singleton — if a
+  # previous wrapper invocation left a recording dangling (crash, SIGKILL),
+  # "record start" will fail with "Recording already active". Force-stop
+  # any orphan, then retry. Log any unexpected failure so we don't silently
+  # end up with video=null in meta.json.
+  local out
+  out=$("$AGENT_BROWSER_BIN" record start "$path" 2>&1)
+  local rc=$?
+  if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "already active"; then
+    "$AGENT_BROWSER_BIN" record stop >/dev/null 2>&1 || true
+    out=$("$AGENT_BROWSER_BIN" record start "$path" 2>&1)
+    rc=$?
+  fi
+  if [ $rc -eq 0 ]; then
     meta set-video "$SESSIONS_DIR/$session_id" "$file" 2>/dev/null || true
+  else
+    echo "[browser-wrapper] record start failed for $session_id: $out" >&2
   fi
 }
 
@@ -176,20 +204,14 @@ SESSION_ID=$(cat "$SESSIONS_DIR/.resolved-session" 2>/dev/null || printf '')
 rm -f "$SESSIONS_DIR/.resolved-session"
 
 # Auto-inject persistent browser profile if it exists.
+# With per-session daemons (AGENT_BROWSER_SESSION above), we no longer need
+# to kill the daemon to switch profiles — each session has its own daemon
+# pinned to its own profile path. First invocation loads the profile from
+# disk, subsequent invocations reuse the running daemon.
 PROFILE_ARGS=""
 PROFILE_DIR=".browser-profile"
 if [ -d "$PROFILE_DIR" ] && ! printf '%s' "$ALL_ARGS" | grep -q -- "--profile"; then
   PROFILE_ARGS="--profile $PROFILE_DIR"
-
-  # A running daemon ignores --profile on subsequent commands, so kill it on
-  # navigation. This wipes any in-flight recording — we restart below.
-  if [ "$FIRST_ARG" = "go" ] || [ "$FIRST_ARG" = "open" ]; then
-    stop_recording_quietly
-    "$AGENT_BROWSER_BIN" close >/dev/null 2>&1 || true
-    # Clear the recording marker so start_recording_if_needed kicks in again
-    _clear_vid() { meta set-video "$SESSIONS_DIR/$SESSION_ID" ""; }
-    with_lock _clear_vid
-  fi
 fi
 
 # Start recording on the first command (after any daemon kill). Done before

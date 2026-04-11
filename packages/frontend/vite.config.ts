@@ -40,6 +40,12 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      // Live CDP screencast relay for active browser sessions.
+      '^/browser-live/.*': {
+        target: backendWsUrl,
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 });

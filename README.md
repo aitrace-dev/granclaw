@@ -73,7 +73,7 @@ Every token, every session, every day. Per-model breakdown, cost estimates, cach
 One command. No clone, no build, no global install.
 
 ```bash
-npx granclaw
+npx granclaw@beta
 ```
 
 Open `http://localhost:8787` → **Settings** → paste an API key for your provider → **+ New Agent** → done.

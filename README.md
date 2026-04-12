@@ -70,34 +70,17 @@ Every token, every session, every day. Per-model breakdown, cost estimates, cach
 
 ## Quick Start
 
+One command. No clone, no build, no global install.
+
 ```bash
 npx granclaw
 ```
 
-Open `http://localhost:8787` → **Settings** → add an API key for your provider → **+ New Agent** → done.
+Open `http://localhost:8787` → **Settings** → paste an API key for your provider → **+ New Agent** → done.
+
+**That's it.** Runtime state lives in `~/.granclaw/` (override with `--home <path>` or `GRANCLAW_HOME`). Your workspaces, databases, and agent configs all stay on your machine.
 
 **Prerequisites:** Node 20+ and an API key from any of [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com/), [Google Gemini](https://aistudio.google.com/app/apikey), [Groq](https://console.groq.com/keys), or [OpenRouter](https://openrouter.ai/keys). You only need one.
-
-### Or install globally
-
-```bash
-npm i -g granclaw
-granclaw
-```
-
-Runtime state lives in `~/.granclaw/` (override with `--home <path>` or `GRANCLAW_HOME`).
-
-### Or run it in Docker
-
-The whole stack ships on a single port. The container needs your provider API key and (optionally) the workspaces directory you want to mount.
-
-```bash
-docker compose up --build
-```
-
-Open `http://localhost:3002` → **Settings** → paste your API key. The host port is remappable in `docker-compose.yml` — same-origin WebSockets mean the port can be anything.
-
-The image installs `agent-browser` and Chromium, so the host only needs Docker Desktop 4.30+.
 
 ---
 

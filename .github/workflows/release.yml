@@ -1,33 +1,28 @@
-name: release
+name: deploy beta release
 
-# Single release pipeline: bump → gate → publish → tag → GitHub Release.
+# Beta release pipeline: auto-version → bump → gate → publish → tag → GitHub Release.
 #
 # Flow (workflow_dispatch, manual button):
-#   1. Validate the version input is semver and unused
+#   1. Derive next beta version from packages/cli/package.json base + highest
+#      existing vX.Y.Z-beta.N tag → produces X.Y.Z-beta.(N+1)
 #   2. If packages/cli/package.json is not already at the target, bump it
 #      and record a chore commit (local only — push happens at the end)
 #   3. npm ci + install Playwright
 #   4. Run the prepublish gate (build, audit, gitleaks, manifest, install,
 #      e2e smoke). Escape hatches rejected under CI=true.
-#   5. Publish to npm with OIDC Trusted Publishing + provenance attestation
-#      (no NPM_TOKEN secret — the repo's Trusted Publisher config handles auth)
-#   6. Tag vX.Y.Z and push the bump commit + tag to main
+#   5. Publish to npm under the "beta" dist-tag using NPM_TOKEN
+#   6. Tag vX.Y.Z-beta.N and push the bump commit + tag to main
 #   7. Create a GitHub Release with auto-generated notes
 #
 # Recovery from a failed run:
-#   - Fails at gate / publish  → nothing pushed anywhere, re-run with same version
+#   - Fails at gate / publish  → nothing pushed anywhere, re-run to get N+1
 #   - Fails at git push         → npm already has the tarball, push the tag manually
 #                                 and create the GitHub Release by hand
-#   - Fails at GH Release       → tag exists, re-run with same version is a no-op
-#                                 at bump/publish and will recreate the release
+#   - Fails at GH Release       → tag exists, re-run is a no-op at bump/publish
+#                                 and will recreate the release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (e.g. 0.0.1-beta.1 or 0.1.0). Omit the leading v.'
-        required: true
-        type: string
+  workflow_dispatch: {}
 
 permissions:
   contents: write    # push the bump commit + tag, create GH Release
@@ -54,17 +49,15 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Validate version
+      - name: Compute next beta version
+        id: version
         run: |
-          v='${{ inputs.version }}'
-          if ! echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$'; then
-            echo "::error::invalid version '$v' — expected semver like 0.1.0 or 0.0.1-beta.1"
-            exit 1
-          fi
-          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
-            echo "::error::tag v$v already exists"
-            exit 1
-          fi
+          base=$(node -p "require('./packages/cli/package.json').version.replace(/-.*$/, '')")
+          latest_n=$(git tag -l "v${base}-beta.*" | sed "s/v${base}-beta\.//" | sort -n | tail -1)
+          next_n=$([ -z "$latest_n" ] && echo 1 || echo $((latest_n + 1)))
+          next="${base}-beta.${next_n}"
+          echo "Computed next beta version: $next"
+          echo "version=${next}" >> "$GITHUB_OUTPUT"
 
       - name: Configure git
         run: |
@@ -73,7 +66,7 @@ jobs:
 
       - name: Bump CLI package version (if needed)
         run: |
-          target='${{ inputs.version }}'
+          target='${{ steps.version.outputs.version }}'
           current=$(node -p "require('./packages/cli/package.json').version")
           if [ "$current" = "$target" ]; then
             echo "packages/cli/package.json already at $target — skipping bump"
@@ -103,26 +96,26 @@ jobs:
           # (GRANCLAW_GATE_SKIP_*) are rejected under CI=true by the gate script.
 
       - name: Publish to npm
-        run: npm publish --tag latest --access public -w granclaw
+        run: npm publish --tag beta --access public -w granclaw
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Tag and push
         run: |
-          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin HEAD --follow-tags
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v${{ inputs.version }}"
+          tag_name: "v${{ steps.version.outputs.version }}"
           generate_release_notes: true
 
       - name: Summary
         run: |
           {
-            echo "### granclaw@${{ inputs.version }} released"
+            echo "### granclaw@${{ steps.version.outputs.version }} released"
             echo ""
-            echo "- npm: https://www.npmjs.com/package/granclaw/v/${{ inputs.version }}"
-            echo "- tag: https://github.com/${{ github.repository }}/releases/tag/v${{ inputs.version }}"
+            echo "- npm: https://www.npmjs.com/package/granclaw/v/${{ steps.version.outputs.version }}"
+            echo "- tag: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"
           } >> "$GITHUB_STEP_SUMMARY"

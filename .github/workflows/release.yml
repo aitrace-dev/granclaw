@@ -31,7 +31,6 @@ on:
 
 permissions:
   contents: write    # push the bump commit + tag, create GH Release
-  id-token: write    # OIDC for npm Trusted Publishing
 
 concurrency:
   group: release
@@ -104,7 +103,9 @@ jobs:
           # (GRANCLAW_GATE_SKIP_*) are rejected under CI=true by the gate script.
 
       - name: Publish to npm
-        run: npm publish --tag latest --provenance --access public -w granclaw
+        run: npm publish --tag latest --access public -w granclaw
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Tag and push
         run: |

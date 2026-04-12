@@ -50,6 +50,11 @@ paths = [
   # Git worktree workspaces — isolated branch copies, never shipped
   '''^\.worktrees/''',
 
+  # Enterprise (GranClaw Self-Hosted) — separate git repo, gitignored,
+  # never shipped with the OSS runtime. Contains its own Next.js build
+  # cache with framework-internal keys.
+  '''^enterprise/''',
+
   # Local developer credentials — gitignored, never shipped. dist/ is
   # scanned separately so this only affects the working-tree scan.
   '''^providers\.config\.json$''',

@@ -177,37 +177,46 @@ else
 
   log 5 "$($GRANCLAW_BIN --version)"
 
-  log 5 "starting server on port 18787 with temp home"
-  GRANCLAW_HOME="$VERIFY_HOME" "$GRANCLAW_BIN" start --port 18787 > /tmp/gate-server.log 2>&1 &
-  SERVER_PID=$!
+  # Server startup requires the claude CLI. Skip the health-check in CI when
+  # claude is unavailable — same policy as Step 6. The binary + version check
+  # above is still a meaningful packaging regression guard.
+  if ! command -v claude >/dev/null 2>&1 && [ "${CI:-}" = "true" ]; then
+    log 5 "⚠ skipping server health-check: claude CLI unavailable in CI runner"
+    echo "::warning::Step 5 server check skipped: claude CLI unavailable in CI runner"
+    log 5 "✓ tarball install verified (binary only)"
+  else
+    log 5 "starting server on port 18787 with temp home"
+    GRANCLAW_HOME="$VERIFY_HOME" "$GRANCLAW_BIN" start --port 18787 > /tmp/gate-server.log 2>&1 &
+    SERVER_PID=$!
 
-  # Poll /health for up to 12 seconds to allow cold-start + claude-cli check
-  HEALTH_OK=0
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-    sleep 1
-    if curl -sf http://localhost:18787/health >/dev/null 2>&1; then
-      HEALTH_OK=1
-      break
+    # Poll /health for up to 12 seconds to allow cold-start + claude-cli check
+    HEALTH_OK=0
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+      sleep 1
+      if curl -sf http://localhost:18787/health >/dev/null 2>&1; then
+        HEALTH_OK=1
+        break
+      fi
+    done
+
+    if [ "$HEALTH_OK" -ne 1 ]; then
+      tail -30 /tmp/gate-server.log >&2
+      fail 5 "health endpoint unreachable after 12s"
     fi
-  done
+    log 5 "✓ health OK"
 
-  if [ "$HEALTH_OK" -ne 1 ]; then
-    tail -30 /tmp/gate-server.log >&2
-    fail 5 "health endpoint unreachable after 12s"
+    log 5 "verifying home was seeded"
+    for sub in agents.config.json data workspaces logs; do
+      [ -e "$VERIFY_HOME/$sub" ] || fail 5 "home missing $sub"
+    done
+    log 5 "✓ home seeded"
+
+    kill "$SERVER_PID" 2>/dev/null || true
+    wait "$SERVER_PID" 2>/dev/null || true
+    SERVER_PID=""
+
+    log 5 "✓ tarball install verified"
   fi
-  log 5 "✓ health OK"
-
-  log 5 "verifying home was seeded"
-  for sub in agents.config.json data workspaces logs; do
-    [ -e "$VERIFY_HOME/$sub" ] || fail 5 "home missing $sub"
-  done
-  log 5 "✓ home seeded"
-
-  kill "$SERVER_PID" 2>/dev/null || true
-  wait "$SERVER_PID" 2>/dev/null || true
-  SERVER_PID=""
-
-  log 5 "✓ tarball install verified"
 fi
 
 # ── Step 6: E2E smoke test ───────────────────────────────────────────────────

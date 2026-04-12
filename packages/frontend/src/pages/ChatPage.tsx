@@ -228,6 +228,27 @@ export function ChatPage() {
         grouped.push({ id: crypto.randomUUID(), role: 'agent', text: '', toolCalls: pendingToolCalls });
       }
       setMessages(grouped);
+
+      // If the agent is mid-turn, mark the last agent message as
+      // streaming so the "..." indicator pulses and the Stop button
+      // renders. Without this, returning to a busy agent after a
+      // /dashboard round trip showed tool calls (thanks to the A fix)
+      // but no streaming indicator — the chat looked idle even though
+      // the agent was still working.
+      fetchAgent(agentId).then((a) => {
+        if (!a.busy) return;
+        setIsSending(true);
+        setMessages((prev) => {
+          let idx = -1;
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].role === 'agent') { idx = i; break; }
+          }
+          if (idx === -1) return prev;
+          return prev.map((m, i) =>
+            i === idx ? { ...m, isStreaming: true } : m,
+          );
+        });
+      }).catch(() => {});
     }).catch(console.error);
     fetchMessages(agentId, 'bb').then((msgs) =>
       setBbMessages(msgs.map((m) => ({ id: m.id, role: m.role === 'user' ? 'user' : 'agent', text: m.content })))

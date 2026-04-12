@@ -220,6 +220,13 @@ export function createServer() {
     const agentName = readAgentName(workspaceDir);
     const installedTools = readInstalledTools(workspaceDir);
 
+    let busy = false;
+    try {
+      busy = getActiveJobs(workspaceDir, managed.config.id).some(
+        (j) => j.status === 'processing',
+      );
+    } catch { /* non-fatal */ }
+
     const { bigBrother: _bb, ...restConfig } = managed.config;
     res.json({
       ...restConfig,
@@ -229,6 +236,7 @@ export function createServer() {
       pid: managed.pid,
       sessionId,
       status: sessionId ? 'active' : 'idle',
+      busy,
       installedTools: installedTools ?? {},
       guardrails: null,
     });

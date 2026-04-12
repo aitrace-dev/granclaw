@@ -9,6 +9,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // Listen on all interfaces so the takeover URL (http://<lan-ip>:5173/...)
+    // is reachable from the user's phone or another device on the LAN.
+    host: true,
     proxy: {
       // Proxy only exact API paths — not SPA routes like /agents/:id/chat
       '^/agents$': backendUrl,

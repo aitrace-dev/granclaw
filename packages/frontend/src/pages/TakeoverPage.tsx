@@ -3,10 +3,49 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { browserLiveWsUrl } from '../lib/api.ts';
 
-const VIEWPORT_W = 1280;
-const VIEWPORT_H = 800;
+// Fallback viewport — only used before the first frame arrives. After that
+// we read the actual frame dimensions from img.naturalWidth/Height so the
+// coordinate mapping is always correct, even if agent-browser resizes.
+const FALLBACK_VIEWPORT_W = 1280;
+const FALLBACK_VIEWPORT_H = 800;
 const DOUBLE_CLICK_MS = 500;
 const DOUBLE_CLICK_PX = 5;
+
+/**
+ * Windows virtual key codes for common non-printable keys. Chromium's CDP
+ * requires this field on Input.dispatchKeyEvent for keys like Backspace,
+ * Delete, and the arrow keys to be processed as special keys — otherwise
+ * the page sees an opaque "key event" but doesn't actually delete or move
+ * the caret.
+ *
+ * Puppeteer ships a full us-keyboard-layout table; we only need the
+ * non-printable ones because printable characters go through Input.insertText.
+ */
+const SPECIAL_KEYS: Record<string, number> = {
+  Backspace: 8,
+  Tab: 9,
+  Enter: 13,
+  Shift: 16,
+  Control: 17,
+  Alt: 18,
+  Pause: 19,
+  CapsLock: 20,
+  Escape: 27,
+  PageUp: 33,
+  PageDown: 34,
+  End: 35,
+  Home: 36,
+  ArrowLeft: 37,
+  ArrowUp: 38,
+  ArrowRight: 39,
+  ArrowDown: 40,
+  Insert: 45,
+  Delete: 46,
+  Meta: 91,
+  ContextMenu: 93,
+  F1: 112, F2: 113, F3: 114, F4: 115, F5: 116, F6: 117,
+  F7: 118, F8: 119, F9: 120, F10: 121, F11: 122, F12: 123,
+};
 
 interface TakeoverInfo {
   agentId: string;
@@ -86,11 +125,22 @@ export function TakeoverPage() {
   }, []);
 
   const toViewport = useCallback((clientX: number, clientY: number) => {
-    const rect = imgRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
+    const img = imgRef.current;
+    if (!img) return { x: 0, y: 0 };
+    const rect = img.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    // Use the actual decoded frame size. This is the source of truth for
+    // where CDP expects clicks — regardless of how object-contain scales
+    // the image on screen.
+    const vw = img.naturalWidth || FALLBACK_VIEWPORT_W;
+    const vh = img.naturalHeight || FALLBACK_VIEWPORT_H;
+    // Clamp to the image bounds so clicks in the letterboxing don't map
+    // to negative or out-of-range CDP coordinates.
+    const px = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const py = Math.max(0, Math.min(rect.height, clientY - rect.top));
     return {
-      x: Math.round(((clientX - rect.left) / rect.width) * VIEWPORT_W),
-      y: Math.round(((clientY - rect.top) / rect.height) * VIEWPORT_H),
+      x: Math.round((px / rect.width) * vw),
+      y: Math.round((py / rect.height) * vh),
     };
   }, []);
 
@@ -170,23 +220,49 @@ export function TakeoverPage() {
     // Let the user type in the note field without swallowing their input
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
     e.preventDefault();
+    const vkc = SPECIAL_KEYS[e.key];
     if (e.key.length === 1) {
       // Printable char: use insertText so contenteditable (LinkedIn, Gmail,
       // etc.) captures it. Still dispatch a rawKeyDown so sites that listen
       // for keydown see the event.
-      send({ type: 'key', eventType: 'rawKeyDown', key: e.key, code: e.code, modifiers: modifiers(e.nativeEvent) });
+      send({
+        type: 'key',
+        eventType: 'rawKeyDown',
+        key: e.key,
+        code: e.code,
+        modifiers: modifiers(e.nativeEvent),
+        windowsVirtualKeyCode: e.key.toUpperCase().charCodeAt(0),
+      });
       send({ type: 'insertText', text: e.key });
     } else {
       // Special keys (Enter, Backspace, Delete, Arrow*, Tab, Escape, etc.):
-      // use keyDown — keyDown also fires char events for keys that produce
-      // text, which is what real browsers do.
-      send({ type: 'key', eventType: 'keyDown', key: e.key, code: e.code, modifiers: modifiers(e.nativeEvent) });
+      // CDP needs the Windows virtual key code for Chromium to treat the
+      // event as an actual special key. Without it Backspace is silently
+      // ignored by input handlers.
+      send({
+        type: 'key',
+        eventType: 'rawKeyDown',
+        key: e.key,
+        code: e.code,
+        modifiers: modifiers(e.nativeEvent),
+        windowsVirtualKeyCode: vkc ?? 0,
+      });
     }
   };
 
   const onKeyUp = (e: React.KeyboardEvent) => {
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
-    send({ type: 'key', eventType: 'keyUp', key: e.key, code: e.code, modifiers: modifiers(e.nativeEvent) });
+    const vkc = e.key.length === 1
+      ? e.key.toUpperCase().charCodeAt(0)
+      : (SPECIAL_KEYS[e.key] ?? 0);
+    send({
+      type: 'key',
+      eventType: 'keyUp',
+      key: e.key,
+      code: e.code,
+      modifiers: modifiers(e.nativeEvent),
+      windowsVirtualKeyCode: vkc,
+    });
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
@@ -289,7 +365,7 @@ export function TakeoverPage() {
       <div
         ref={stageRef}
         tabIndex={0}
-        className="flex-1 flex items-center justify-center overflow-hidden outline-none cursor-crosshair bg-[#0b0d12]"
+        className="flex-1 flex items-center justify-center overflow-hidden outline-none cursor-default bg-[#0b0d12]"
         onMouseMove={onMouseMove}
         onMouseDown={onMouseDown}
         onMouseUp={onMouseUp}

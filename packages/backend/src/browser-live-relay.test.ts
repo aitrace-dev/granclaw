@@ -126,6 +126,44 @@ describe('relayInputToChrome — CDP input relay for takeover page', () => {
     });
   });
 
+  it('forwards windowsVirtualKeyCode for Backspace so Chrome actually deletes', () => {
+    // Without the VK code, Chromium's input handlers silently drop
+    // Backspace / Delete / Arrow keys. The takeover page sends a key-code
+    // map entry for these; the relay must pass it through (and mirror it
+    // as nativeVirtualKeyCode for cross-platform compatibility).
+    relayInputToChrome(mockWs, nextId, JSON.stringify({
+      type: 'key',
+      eventType: 'rawKeyDown',
+      key: 'Backspace',
+      code: 'Backspace',
+      modifiers: 0,
+      windowsVirtualKeyCode: 8,
+    }));
+
+    expect(sent[0].params).toEqual({
+      type: 'rawKeyDown',
+      key: 'Backspace',
+      code: 'Backspace',
+      modifiers: 0,
+      windowsVirtualKeyCode: 8,
+      nativeVirtualKeyCode: 8,
+    });
+  });
+
+  it('omits VK codes when the takeover page does not send them', () => {
+    // Backwards compat — older clients or generic rawKeyDown events
+    // shouldn't get a zero VK code attached (which could confuse CDP).
+    relayInputToChrome(mockWs, nextId, JSON.stringify({
+      type: 'key',
+      eventType: 'rawKeyDown',
+      key: 'Enter',
+      code: 'Enter',
+    }));
+
+    expect(sent[0].params).not.toHaveProperty('windowsVirtualKeyCode');
+    expect(sent[0].params).not.toHaveProperty('nativeVirtualKeyCode');
+  });
+
   it('drops key events with an empty key (CDP rejects them anyway)', () => {
     relayInputToChrome(mockWs, nextId, JSON.stringify({
       type: 'key',

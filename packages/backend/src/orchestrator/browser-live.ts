@@ -134,15 +134,23 @@ export function relayInputToChrome(
     const key = String(msg.key ?? '');
     const code = String(msg.code ?? '');
     if (!key) return; // key is required
+    // windowsVirtualKeyCode is important for special keys: without it,
+    // Chromium's input handlers silently drop Backspace/Delete/Arrow keys.
+    // The takeover page computes it from a key-code map.
+    const params: Record<string, unknown> = {
+      type: eventType,
+      key,
+      code,
+      modifiers: toNum(msg.modifiers, 0),
+    };
+    if (msg.windowsVirtualKeyCode !== undefined) {
+      params.windowsVirtualKeyCode = toNum(msg.windowsVirtualKeyCode, 0);
+      params.nativeVirtualKeyCode = toNum(msg.windowsVirtualKeyCode, 0);
+    }
     chromeWs.send(JSON.stringify({
       id: nextId(),
       method: 'Input.dispatchKeyEvent',
-      params: {
-        type: eventType,
-        key,
-        code,
-        modifiers: toNum(msg.modifiers, 0),
-      },
+      params,
     }));
   } else if (msg.type === 'insertText') {
     const text = String(msg.text ?? '').slice(0, 4096); // cap at 4 KB

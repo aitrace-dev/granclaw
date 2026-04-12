@@ -292,13 +292,26 @@ export function TakeoverPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // ── Render: Scholarly Sanctuary ───────────────────────────────────────────
+  //
+  // "Ink on paper": warm paper background, deep charcoal ink, serif body,
+  // mono for machine text (URL, labels). Sections are separated by
+  // surface-container tiers — no 1px sectioning borders (the design forbids
+  // them). Rounded-sm corners per the tailwind config.
+
   if (expired) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0b0d12] text-center px-6">
-        <div>
-          <div className="mb-3 text-4xl">⏳</div>
-          <p className="text-[18px] font-medium text-white/90 mb-1">Session expired</p>
-          <p className="text-[13px] text-white/40">This takeover link has already been used or timed out.</p>
+      <div className="flex h-screen items-center justify-center bg-background font-body text-on-surface px-6">
+        <div className="text-center max-w-md">
+          <p className="text-[11px] font-label uppercase tracking-[0.15em] text-secondary/70 mb-2">
+            takeover
+          </p>
+          <h1 className="font-headline text-[32px] leading-tight text-on-surface mb-3">
+            Session expired
+          </h1>
+          <p className="text-[15px] leading-relaxed text-on-surface-variant italic">
+            This takeover link has already been used or timed out.
+          </p>
         </div>
       </div>
     );
@@ -306,11 +319,17 @@ export function TakeoverPage() {
 
   if (done) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0b0d12] text-center px-6">
-        <div>
-          <div className="mb-3 text-4xl">✓</div>
-          <p className="text-[18px] font-medium text-white/90 mb-1">Returned control to the agent</p>
-          <p className="text-[13px] text-white/40">You can close this tab.</p>
+      <div className="flex h-screen items-center justify-center bg-background font-body text-on-surface px-6">
+        <div className="text-center max-w-md">
+          <p className="text-[11px] font-label uppercase tracking-[0.15em] text-primary/70 mb-2">
+            complete
+          </p>
+          <h1 className="font-headline text-[32px] leading-tight text-on-surface mb-3">
+            Returned control to the agent
+          </h1>
+          <p className="text-[15px] leading-relaxed text-on-surface-variant italic">
+            You can close this tab.
+          </p>
         </div>
       </div>
     );
@@ -318,54 +337,72 @@ export function TakeoverPage() {
 
   if (!info) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#0b0d12]">
-        <p className="font-mono text-[11px] text-white/30 animate-pulse">connecting…</p>
+      <div className="flex h-screen items-center justify-center bg-background font-body">
+        <p className="font-mono text-[11px] text-on-surface-variant/60 animate-pulse">
+          connecting…
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#0b0d12] overflow-hidden">
-      {/* ── Instruction banner ─────────────────────────────────────────────── */}
-      <div className="flex items-start gap-3 px-5 py-3 bg-amber-500/10 border-b border-amber-500/20 flex-shrink-0">
-        <div className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-300 text-[13px]">
-          !
+    <div className="flex flex-col h-screen bg-background font-body text-on-surface overflow-hidden">
+      {/* ── Instruction "In-set Plate" ─────────────────────────────────────── */}
+      {/* Per DESIGN.md §5: callouts use a subtle primary-container tonal shift
+          with no borders. This is the agent speaking to the user. */}
+      <div className="flex items-start gap-4 px-8 py-5 bg-surface-container-low flex-shrink-0">
+        <div className="flex-shrink-0 mt-1 w-7 h-7 rounded-full bg-primary-fixed flex items-center justify-center">
+          <span className="font-headline italic text-[15px] text-primary">!</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-300/80 mb-0.5">
+          <p className="text-[10px] font-label uppercase tracking-[0.15em] text-primary/70 mb-1">
             The agent needs your help
           </p>
-          <p className="text-[14px] text-amber-50 leading-snug">{info.reason}</p>
+          <p className="font-headline text-[17px] leading-snug text-on-surface">
+            {info.reason}
+          </p>
         </div>
       </div>
 
       {/* ── Browser chrome ────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-3 py-2 bg-[#1a1d24] border-b border-white/5 flex-shrink-0">
+      {/* Stacked on surface-container (one tier up from the plate above) so
+          the chrome "floats" above it without needing a line. */}
+      <div className="flex items-center gap-3 px-6 py-3 bg-surface-container flex-shrink-0">
         <div className="flex gap-1.5 flex-shrink-0">
-          <span className="w-3 h-3 rounded-full bg-red-500/50" />
-          <span className="w-3 h-3 rounded-full bg-yellow-500/50" />
-          <span className="w-3 h-3 rounded-full bg-green-500/50" />
+          <span className="w-3 h-3 rounded-full bg-secondary/60" />
+          <span className="w-3 h-3 rounded-full bg-tertiary-fixed" />
+          <span className="w-3 h-3 rounded-full bg-primary/40" />
         </div>
-        <div className="flex-1 flex items-center gap-2 bg-[#0b0d12] border border-white/5 rounded-md px-3 py-1.5 min-w-0">
-          <span className="text-[11px] text-green-400 flex-shrink-0">🔒</span>
-          <span className="text-[12px] font-mono text-white/80 truncate">
+        {/* URL "float" — surface-container-lowest on surface-container, the
+            classic no-border depth trick from DESIGN.md §2. */}
+        <div className="flex-1 flex items-center gap-2 bg-surface-container-lowest rounded-md px-3 py-1.5 min-w-0">
+          <span className="text-[11px] text-primary flex-shrink-0" aria-hidden>
+            ∎
+          </span>
+          <span className="text-[12px] font-mono text-on-surface truncate">
             {currentUrl || info.url || 'about:blank'}
           </span>
           {currentTitle && (
-            <span className="text-[11px] text-white/30 flex-shrink-0 hidden md:inline">— {currentTitle}</span>
+            <span className="text-[11px] font-body italic text-on-surface-variant/70 flex-shrink-0 hidden md:inline">
+              — {currentTitle}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-[10px] font-mono uppercase tracking-wider text-red-400/80">live</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+          <span className="text-[10px] font-label uppercase tracking-[0.15em] text-secondary">
+            live
+          </span>
         </div>
       </div>
 
       {/* ── Interactive live view ─────────────────────────────────────────── */}
+      {/* Lives on surface-container-highest — the deepest tier — so the
+          browser image feels "pressed into" the page like a manuscript plate. */}
       <div
         ref={stageRef}
         tabIndex={0}
-        className="flex-1 flex items-center justify-center overflow-hidden outline-none cursor-default bg-[#0b0d12]"
+        className="flex-1 flex items-center justify-center overflow-hidden outline-none cursor-default bg-surface-container-highest"
         onMouseMove={onMouseMove}
         onMouseDown={onMouseDown}
         onMouseUp={onMouseUp}
@@ -386,35 +423,43 @@ export function TakeoverPage() {
             style={{ pointerEvents: 'none' }}
           />
         ) : (
-          <p className="font-mono text-[10px] text-white/30 animate-pulse">
+          <p className="font-mono text-[10px] text-on-surface-variant/50 animate-pulse">
             waiting for browser stream…
           </p>
         )}
       </div>
 
-      {/* ── Footer: feedback + Completed ──────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-[#1a1d24] border-t border-white/5 flex-shrink-0">
-        <input
-          type="text"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          onKeyDown={(e) => {
-            // Submit on Enter inside the note field
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              void handleComplete();
-            }
-          }}
-          placeholder="What did you do? (optional)"
-          disabled={submitting}
-          className="flex-1 bg-[#0b0d12] border border-white/10 rounded-md px-3 py-2 text-[13px] text-white/90 placeholder:text-white/30 focus:outline-none focus:border-white/20 disabled:opacity-50"
-        />
+      {/* ── Footer: Minimalist Ledger input + Primary CTA ──────────────────── */}
+      {/* Per DESIGN.md §5: text inputs are "minimalist ledger" (bottom border
+          only, outline-variant at 30%). The Completed button is the primary
+          action — sharp-edged violet block, label font, on-primary text. */}
+      <div className="flex items-end gap-4 px-8 py-5 bg-surface-container-low flex-shrink-0">
+        <div className="flex-1 flex flex-col">
+          <label className="text-[10px] font-label uppercase tracking-[0.15em] text-on-surface-variant/70 mb-1">
+            What did you do? <span className="italic text-on-surface-variant/50">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => {
+              // Submit on Enter inside the note field
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                void handleComplete();
+              }
+            }}
+            placeholder="Describe your action for the agent…"
+            disabled={submitting}
+            className="bg-transparent border-0 border-b border-outline-variant/30 focus:border-primary focus:outline-none font-body text-[15px] text-on-surface placeholder:text-on-surface-variant/40 placeholder:italic px-0 py-2 disabled:opacity-50"
+          />
+        </div>
         <button
           onClick={handleComplete}
           disabled={submitting}
-          className="flex-shrink-0 rounded-md bg-green-500/20 border border-green-500/40 px-4 py-2 text-[13px] font-medium text-green-300 hover:bg-green-500/30 transition-colors disabled:opacity-40"
+          className="flex-shrink-0 rounded-sm bg-primary text-on-primary font-label text-[11px] uppercase tracking-[0.15em] px-5 py-3 hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Returning…' : '✓ Completed'}
+          {submitting ? 'Returning…' : 'Completed'}
         </button>
       </div>
     </div>

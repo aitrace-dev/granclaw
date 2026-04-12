@@ -96,7 +96,7 @@ jobs:
           # (GRANCLAW_GATE_SKIP_*) are rejected under CI=true by the gate script.
 
       - name: Publish to npm
-        run: npm publish --tag beta --access public -w granclaw
+        run: npm publish --tag beta --access public --no-provenance -w granclaw
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

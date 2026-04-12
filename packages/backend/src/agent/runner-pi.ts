@@ -816,7 +816,7 @@ export async function runAgent(
           }
 
           const token = randomUUID();
-          const frontendPort = process.env.FRONTEND_PORT ?? '5173';
+          const frontendPort = process.env.FRONTEND_PORT ?? process.env.PORT ?? '5173';
           const takeoverUrl = `http://${getLanIp()}:${frontendPort}/takeover/${token}`;
 
           setTakeover(agent.id, {

@@ -84,6 +84,89 @@ function streamKey(agentId: string, sessionId: string): string {
   return `${agentId}::${sessionId}`;
 }
 
+/**
+ * Minimal interface for the WebSocket we send CDP commands to. Lets tests
+ * pass a fake `send` function without depending on the real `ws` module.
+ */
+interface CdpSender {
+  send(data: string): void;
+}
+
+/**
+ * Translate an input event from the takeover page into a CDP command and
+ * forward it to Chrome. Extracted so it can be unit tested with a mock
+ * chromeWs.
+ *
+ * Input fields are validated: numeric coordinates are safely cast with a
+ * fallback, string fields default to safe values, `insertText` is capped at
+ * 4 KB, and `dispatchKeyEvent` requires a `key` field.
+ */
+export function relayInputToChrome(
+  chromeWs: CdpSender,
+  nextId: () => number,
+  rawData: string,
+): void {
+  let msg: Record<string, unknown>;
+  try { msg = JSON.parse(rawData); } catch { return; }
+
+  const toNum = (v: unknown, fallback: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  if (msg.type === 'mouse') {
+    const eventType = String(msg.eventType ?? 'mouseMoved');
+    const button = String(msg.button ?? 'none');
+    chromeWs.send(JSON.stringify({
+      id: nextId(),
+      method: 'Input.dispatchMouseEvent',
+      params: {
+        type: eventType,
+        x: toNum(msg.x, 0),
+        y: toNum(msg.y, 0),
+        button,
+        clickCount: toNum(msg.clickCount, 0),
+        modifiers: toNum(msg.modifiers, 0),
+      },
+    }));
+  } else if (msg.type === 'key') {
+    const eventType = String(msg.eventType ?? 'rawKeyDown');
+    const key = String(msg.key ?? '');
+    const code = String(msg.code ?? '');
+    if (!key) return; // key is required
+    chromeWs.send(JSON.stringify({
+      id: nextId(),
+      method: 'Input.dispatchKeyEvent',
+      params: {
+        type: eventType,
+        key,
+        code,
+        modifiers: toNum(msg.modifiers, 0),
+      },
+    }));
+  } else if (msg.type === 'insertText') {
+    const text = String(msg.text ?? '').slice(0, 4096); // cap at 4 KB
+    if (!text) return;
+    chromeWs.send(JSON.stringify({
+      id: nextId(),
+      method: 'Input.insertText',
+      params: { text },
+    }));
+  } else if (msg.type === 'scroll') {
+    chromeWs.send(JSON.stringify({
+      id: nextId(),
+      method: 'Input.dispatchMouseEvent',
+      params: {
+        type: 'mouseWheel',
+        x: toNum(msg.x, 0),
+        y: toNum(msg.y, 0),
+        deltaX: 0,
+        deltaY: toNum(msg.deltaY, 0),
+      },
+    }));
+  }
+}
+
 function sendToSubscribers(stream: Stream, payload: object): void {
   const msg = JSON.stringify(payload);
   for (const sub of stream.subscribers) {
@@ -457,67 +540,7 @@ export function handleBrowserLiveUpgrade(
     ws.on('message', (data) => {
       const s = streams.get(key);
       if (!s?.chromeWs || s.chromeWs.readyState !== WebSocket.OPEN) return;
-
-      let msg: Record<string, unknown>;
-      try { msg = JSON.parse(data.toString()); } catch { return; }
-
-      const nextId = () => ++s.cdpMessageId;
-      const toNum = (v: unknown, fallback: number): number => {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : fallback;
-      };
-
-      if (msg.type === 'mouse') {
-        const eventType = String(msg.eventType ?? 'mouseMoved');
-        const button = String(msg.button ?? 'none');
-        s.chromeWs.send(JSON.stringify({
-          id: nextId(),
-          method: 'Input.dispatchMouseEvent',
-          params: {
-            type: eventType,
-            x: toNum(msg.x, 0),
-            y: toNum(msg.y, 0),
-            button,
-            clickCount: toNum(msg.clickCount, 0),
-            modifiers: toNum(msg.modifiers, 0),
-          },
-        }));
-      } else if (msg.type === 'key') {
-        const eventType = String(msg.eventType ?? 'rawKeyDown');
-        const key = String(msg.key ?? '');
-        const code = String(msg.code ?? '');
-        if (!key) return; // key is required
-        s.chromeWs.send(JSON.stringify({
-          id: nextId(),
-          method: 'Input.dispatchKeyEvent',
-          params: {
-            type: eventType,
-            key,
-            code,
-            modifiers: toNum(msg.modifiers, 0),
-          },
-        }));
-      } else if (msg.type === 'insertText') {
-        const text = String(msg.text ?? '').slice(0, 4096); // cap at 4 KB
-        if (!text) return;
-        s.chromeWs.send(JSON.stringify({
-          id: nextId(),
-          method: 'Input.insertText',
-          params: { text },
-        }));
-      } else if (msg.type === 'scroll') {
-        s.chromeWs.send(JSON.stringify({
-          id: nextId(),
-          method: 'Input.dispatchMouseEvent',
-          params: {
-            type: 'mouseWheel',
-            x: toNum(msg.x, 0),
-            y: toNum(msg.y, 0),
-            deltaX: 0,
-            deltaY: toNum(msg.deltaY, 0),
-          },
-        }));
-      }
+      relayInputToChrome(s.chromeWs, () => ++s.cdpMessageId, data.toString());
     });
 
     ws.on('close', () => {

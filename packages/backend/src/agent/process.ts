@@ -27,13 +27,11 @@ import { TelegramAdapter } from './telegram-adapter.js';
 import { forceCloseActiveSession } from '../browser-sessions.js';
 import {
   hasTakeover,
-  getTakeover,
   cancelTakeoverTimer,
-  clearTakeover,
   updateTakeoverTimer,
   TAKEOVER_TIMEOUT_MS,
 } from '../takeover-state.js';
-import { finalizeSession } from '../browser/session-manager.js';
+import { handleTakeoverTimeout } from '../takeover-timeout.js';
 
 const agentId = process.env.AGENT_ID;
 const port = Number(process.env.AGENT_PORT);
@@ -224,20 +222,10 @@ function main() {
 
       // Arm 10-minute timeout if the agent registered a takeover during this run
       if (hasTakeover(agentId as string)) {
-        const entry = getTakeover(agentId as string)!;
-        const timer = setTimeout(async () => {
-          try {
-            const current = getTakeover(agentId as string);
-            if (!current) return; // already resolved by user reply
-            clearTakeover(agentId as string);
-            try { await finalizeSession(current.handle, 'closed'); } catch { /* best effort */ }
-            const timeoutMsg =
-              '[System] The user did not take any browser action within 10 minutes. ' +
-              'The browser session has been closed. Please proceed to the next step or finish gracefully.';
-            enqueue(workspaceDir, agentId as string, timeoutMsg, current.channelId);
-          } catch (err) {
+        const timer = setTimeout(() => {
+          handleTakeoverTimeout(agentId as string, workspaceDir).catch((err) => {
             console.error(`[agent:${agentId}] takeover timeout callback failed`, err);
-          }
+          });
         }, TAKEOVER_TIMEOUT_MS);
         updateTakeoverTimer(agentId as string, timer);
       }

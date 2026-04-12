@@ -22,7 +22,7 @@
  * re-sent every 4 s while the job is running.
  */
 
-import TelegramBot from 'node-telegram-bot-api';
+import { TelegramHttpClient } from './telegram-http-client.js';
 import { enqueue } from '../agent-db.js';
 import {
   detectLanguage,
@@ -51,7 +51,7 @@ interface ChatState {
 }
 
 export class TelegramAdapter {
-  private bot: TelegramBot;
+  private bot: TelegramHttpClient;
   private agentId: string;
   private workspaceDir: string;
   // channelId ('telegram:<chatId>') → mutable state for the in-flight turn
@@ -60,7 +60,7 @@ export class TelegramAdapter {
   constructor(agentId: string, botToken: string, workspaceDir: string) {
     this.agentId = agentId;
     this.workspaceDir = workspaceDir;
-    this.bot = new TelegramBot(botToken, { polling: true });
+    this.bot = new TelegramHttpClient(botToken, { polling: true });
     this.setupHandlers();
     console.log(`[agent:${agentId}] Telegram adapter started`);
   }

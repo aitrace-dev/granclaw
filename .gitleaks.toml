@@ -40,4 +40,19 @@ paths = [
   # Claude Code slash-command test fixtures — contain intentional dummy
   # secrets like "stolen-key-123" used to exercise the secrets UI
   '''^\.claude/commands/''',
+
+  # Vendored research checkouts — third-party repos cloned for reference,
+  # contain their own test fixtures with intentional dummy secrets, never
+  # shipped in the granclaw tarball. Also excluded from vitest and root
+  # package.json.
+  '''^\.research/''',
+
+  # Git worktree workspaces — isolated branch copies, never shipped
+  '''^\.worktrees/''',
+
+  # Local developer credentials — gitignored, never shipped. dist/ is
+  # scanned separately so this only affects the working-tree scan.
+  '''^providers\.config\.json$''',
+  '''^\.env$''',
+  '''^\.env\..*''',
 ]

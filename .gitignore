@@ -58,3 +58,6 @@ packages/cli/granclaw-*.tgz
 
 # Git worktrees — isolated branch workspaces, not shipped
 .worktrees/
+
+# Provider credentials — local-only, never commit (real API keys live here)
+providers.config.json

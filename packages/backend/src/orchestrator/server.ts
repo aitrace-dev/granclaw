@@ -53,7 +53,7 @@ import { handleBrowserLiveUpgrade } from './browser-live.js';
 import { stealthArgv } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
-import { getTakeoverByToken, clearTakeover } from '../takeover-state.js';
+import { getTakeoverByTokenFromDb, clearTakeoverFromDb } from '../takeover-state.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -90,34 +90,34 @@ export function createServer() {
   // ── Human browser takeover ────────────────────────────────────────────────────
 
   app.get('/api/takeover/:token', (req, res) => {
-    const entry = getTakeoverByToken(req.params.token);
-    if (!entry) {
+    const row = getTakeoverByTokenFromDb(req.params.token);
+    if (!row) {
       res.status(404).json({ error: 'expired or invalid' });
       return;
     }
     res.json({
-      agentId: entry.agentId,
-      sessionId: entry.handle.sessionId,
-      reason: entry.reason,
-      url: entry.url ?? null,
+      agentId: row.agent_id,
+      sessionId: row.session_id,
+      reason: row.reason,
+      url: row.url ?? null,
     });
   });
 
   app.post('/api/takeover/:token/resolve', (req, res) => {
-    const entry = getTakeoverByToken(req.params.token);
-    if (!entry) {
+    const row = getTakeoverByTokenFromDb(req.params.token);
+    if (!row) {
       res.status(404).json({ error: 'expired or invalid' });
       return;
     }
-    const managed = getManagedAgent(entry.agentId);
+    const managed = getManagedAgent(row.agent_id);
     if (!managed) {
       res.status(503).json({ error: 'agent not running' });
       return;
     }
     // Atomically consume the token before enqueuing — prevents double-POST from double-enqueuing
-    clearTakeover(entry.agentId);
+    clearTakeoverFromDb(row.agent_id);
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
-    enqueue(workspaceDir, entry.agentId, '[User clicked Done on takeover page]', entry.channelId);
+    enqueue(workspaceDir, row.agent_id, '[User clicked Done on takeover page]', row.channel_id);
     res.json({ ok: true });
   });
 

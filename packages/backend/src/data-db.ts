@@ -74,6 +74,19 @@ export function getDataDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_actions_lookup
       ON actions (agent_id, created_at);
 
+    -- ── takeovers table ────────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS takeovers (
+      token       TEXT PRIMARY KEY,
+      agent_id    TEXT NOT NULL,
+      channel_id  TEXT NOT NULL,
+      session_id  TEXT NOT NULL,
+      reason      TEXT NOT NULL,
+      url         TEXT,
+      requested_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_takeovers_agent
+      ON takeovers (agent_id);
+
     -- ── secrets table ──────────────────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS secrets (
       agent_id    TEXT NOT NULL,

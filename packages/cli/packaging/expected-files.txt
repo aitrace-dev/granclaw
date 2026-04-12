@@ -4,7 +4,6 @@ bin/granclaw.js
 dist/backend/agent-db.js
 dist/backend/agent/process.js
 dist/backend/agent/runner-pi.js
-dist/backend/agent/runner.js
 dist/backend/agent/telegram-adapter.js
 dist/backend/agent/telegram-http-client.js
 dist/backend/assets/stealth-extension/manifest.json
@@ -38,7 +37,6 @@ dist/backend/workspace-pool.js
 dist/frontend/assets/index-CZcU3XNC.js
 dist/frontend/assets/index-CkgRytfR.css
 dist/frontend/browser-onboarding.png
-dist/frontend/chat-history-options.html
 dist/frontend/granclaw-logo.png
 dist/frontend/index.html
 dist/home.js

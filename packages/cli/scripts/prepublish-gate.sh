@@ -105,7 +105,25 @@ else
   ' > "$ACTUAL"
 
   EXPECTED="$CLI_ROOT/packaging/expected-files.txt"
-  if ! diff -u "$EXPECTED" "$ACTUAL"; then
+  if ! node -e "
+    const fs = require('fs');
+    const expected = fs.readFileSync('$EXPECTED', 'utf-8').trim().split('\n').filter(Boolean);
+    const actual   = fs.readFileSync('$ACTUAL',   'utf-8').trim().split('\n').filter(Boolean);
+    const toRe = p => new RegExp('^' + p.replace(/[.+^${}()|[\]\\\\]/g, '\\\\&').replace(/\*/g, '[^/]*') + '$');
+    let ok = true;
+    for (const pat of expected) {
+      const re = toRe(pat);
+      if (!actual.some(f => re.test(f))) {
+        console.error('Missing: ' + pat); ok = false;
+      }
+    }
+    for (const file of actual) {
+      if (!expected.some(pat => toRe(pat).test(file))) {
+        console.error('Unexpected: ' + file); ok = false;
+      }
+    }
+    process.exit(ok ? 0 : 1);
+  "; then
     log 4 "manifest differs from $EXPECTED"
     log 4 "if the diff is intentional, update expected-files.txt and commit"
     rm -f "$ACTUAL"

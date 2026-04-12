@@ -34,8 +34,8 @@ dist/backend/usage-scanner.js
 dist/backend/workflows-db.js
 dist/backend/workflows/runner.js
 dist/backend/workspace-pool.js
-dist/frontend/assets/index-CZcU3XNC.js
-dist/frontend/assets/index-CkgRytfR.css
+dist/frontend/assets/index-*.css
+dist/frontend/assets/index-*.js
 dist/frontend/browser-onboarding.png
 dist/frontend/granclaw-logo.png
 dist/frontend/index.html

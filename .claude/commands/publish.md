@@ -42,6 +42,13 @@ npm run build -w granclaw
 
 If the build fails, show the error and stop.
 
+> **Manifest check:** The prepublish gate compares the packed file list against
+> `packages/cli/packaging/expected-files.txt`. Entries support `*` wildcards
+> (e.g. `dist/frontend/assets/index-*.js`) to handle content-hashed filenames
+> that change on every build. If the gate reports a manifest mismatch for a
+> file that genuinely belongs in the package, update `expected-files.txt` using
+> a wildcard and commit before retrying.
+
 6. **Publish to npm**
 
 ```bash

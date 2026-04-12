@@ -18,6 +18,13 @@ import path from 'path';
 import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { networkInterfaces } from 'os';
+import { randomUUID } from 'crypto';
+import {
+  setTakeover,
+  getTakeover,
+  clearTakeover,
+} from '../takeover-state.js';
 import { AgentConfig, REPO_ROOT } from '../config.js';
 import { esmImport } from '../esm-import.js';
 import { saveSession, getSessionFile } from '../agent-db.js';
@@ -259,6 +266,16 @@ function extractAgentName(workspaceDir: string): string | null {
 
 // ── Runner ───────────────────────────────────────────────────────────────────
 
+function getLanIp(): string {
+  const ifaces = networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    for (const iface of list ?? []) {
+      if (!iface.internal && iface.family === 'IPv4') return iface.address;
+    }
+  }
+  return 'localhost';
+}
+
 export async function runAgent(
   agent: AgentConfig,
   message: string,
@@ -269,6 +286,18 @@ export async function runAgent(
   const channelId = options?.channelId ?? 'ui';
 
   bootstrapWorkspace(workspaceDir);
+
+  // Browser session state — captured by closure in the `browser` tool and
+  // finalized in the finally block. Null means the agent never touched the
+  // browser this turn, so there's nothing to clean up.
+  const browserState: { handle: BrowserSessionHandle | null } = { handle: null };
+
+  // Restore browser handle if agent paused for human takeover last turn
+  const pendingTakeover = getTakeover(agent.id);
+  if (pendingTakeover) {
+    browserState.handle = pendingTakeover.handle;
+    clearTakeover(agent.id); // timer already cancelled by process.ts
+  }
 
   // ── Provider / API key ──────────────────────────────────────────────────
   // Use agent.provider if set; otherwise fall back to the first configured provider.
@@ -298,11 +327,6 @@ export async function runAgent(
   // undefined means injection hasn't happened yet (e.g. model-not-found early return).
   let envKey: string | undefined;
   let prevValue: string | undefined;
-
-  // Browser session state — captured by closure in the `browser` tool and
-  // finalized in the finally block. Null means the agent never touched the
-  // browser this turn, so there's nothing to clean up.
-  const browserState: { handle: BrowserSessionHandle | null } = { handle: null };
 
   try {
     // ── Load pi packages (ESM-only, must bypass tsc's require rewrite) ──
@@ -750,6 +774,76 @@ export async function runAgent(
             const msg = (e.stderr || e.stdout || e.message || String(err)).trim();
             return { content: [{ type: 'text' as const, text: `browser ${command} failed: ${msg}` }] };
           }
+        },
+      });
+    });
+
+    // request_human_browser_takeover tool: pauses the agent loop and lets the
+    // user interact with the browser directly (captcha, 2FA, review, etc.).
+    // Sets takeover state, nulls out browserState.handle so the finally block
+    // does not finalize the session, and emits a takeover_requested chunk so
+    // the frontend can show the takeover UI.
+    extensionFactories.push((pi: any) => {
+      pi.registerTool({
+        name: 'request_human_browser_takeover',
+        label: 'Hand off browser to user',
+        description:
+          'Stop the agent loop and let the user interact with the browser directly. ' +
+          'Use when you hit a captcha, 2FA prompt, login wall, or need the user to ' +
+          'review/edit content before submitting. Tell the user what URL to open and ' +
+          'what to do. Include the takeover URL from the tool result in your message. ' +
+          'The agent resumes automatically when the user replies in chat.',
+        promptSnippet: 'Request human browser control for captcha, review, or auth prompts',
+        parameters: {
+          type: 'object',
+          properties: {
+            reason: {
+              type: 'string',
+              description: 'What the user needs to do — shown on the takeover page. E.g. "solve the captcha", "review this post before I submit it"',
+            },
+            url: {
+              type: 'string',
+              description: 'The URL the user should look at (optional — the browser is already there)',
+            },
+          },
+          required: ['reason'],
+        },
+        async execute(_toolCallId: string, params: { reason?: string; url?: string }) {
+          if (!browserState.handle) {
+            return {
+              content: [{ type: 'text' as const, text: 'No active browser session to hand over. Open a browser first.' }],
+            };
+          }
+
+          const token = randomUUID();
+          const frontendPort = process.env.FRONTEND_PORT ?? '5173';
+          const takeoverUrl = `http://${getLanIp()}:${frontendPort}/takeover/${token}`;
+
+          setTakeover(agent.id, {
+            agentId: agent.id,
+            channelId,
+            reason: params.reason ?? 'Human assistance needed',
+            url: params.url,
+            handle: browserState.handle,
+            token,
+            requestedAt: Date.now(),
+          });
+
+          browserState.handle = null; // prevents finally from finalizing the session
+
+          onChunk({
+            type: 'takeover_requested' as any,
+            reason: params.reason,
+            url: params.url,
+            takeoverUrl,
+          } as any);
+
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Browser handed to user. Takeover URL: ${takeoverUrl}\nI will resume automatically when they reply in chat.`,
+            }],
+          };
         },
       });
     });

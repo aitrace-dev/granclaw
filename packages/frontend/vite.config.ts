@@ -31,6 +31,7 @@ export default defineConfig({
       '^/agents/[^/]+/reset': backendUrl,
       '^/agents/[^/]+/export': backendUrl,
       '^/agents/import$': backendUrl,
+      '^/api/takeover': backendUrl,
       '^/logs': backendUrl,
       '^/settings/': backendUrl,
       '^/search': backendUrl,

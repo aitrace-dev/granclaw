@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
-import { execSync, spawn } from 'child_process';
+import { execSync, exec, spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { resolveHome, seedHomeIfNeeded } from './home.js';
 
@@ -10,6 +11,66 @@ import { resolveHome, seedHomeIfNeeded } from './home.js';
 const pkg = require('../package.json') as { name: string; version: string };
 
 const DEFAULT_PORT = 8787;
+
+// ANSI colour helpers — no external deps
+const c = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  magenta: '\x1b[35m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  white: '\x1b[97m',
+  gray: '\x1b[90m',
+};
+
+function col(code: string, text: string): string {
+  return `${code}${text}${c.reset}`;
+}
+
+function printBanner(version: string, port: number, homeDir: string): void {
+  const art = [
+    '   ____                  ____ _               ',
+    '  / ___|_ __ __ _ _ __  / ___| | __ ___      __',
+    " | |  _| '__/ _` | '_ \\| |   | |/ _` \\ \\ /\\ / /",
+    ' | |_| | | | (_| | | | | |___| | (_| |\\ V  V / ',
+    '  \\____|_|  \\__,_|_| |_|\\____|_|\\__,_| \\_/\\_/  ',
+  ];
+
+  console.log('');
+  for (const line of art) {
+    console.log(col(c.magenta + c.bold, line));
+  }
+  console.log('');
+  console.log(
+    col(c.gray, '  Multi-agent AI framework') +
+      col(c.gray, '  ·  ') +
+      col(c.dim, `v${version}`),
+  );
+  console.log('');
+  console.log(
+    col(c.cyan, '  Dashboard  ') + col(c.white + c.bold, `http://localhost:${port}`),
+  );
+  console.log(col(c.cyan, '  Home       ') + col(c.white, homeDir));
+  console.log(
+    col(c.cyan, '  Workspaces ') + col(c.white, path.join(homeDir, 'workspaces')),
+  );
+  console.log(col(c.cyan, '  Config     ') + col(c.white, path.join(homeDir, 'agents.config.json')));
+  console.log(col(c.cyan, '  Logs       ') + col(c.white, path.join(homeDir, 'data')));
+  console.log('');
+  console.log(col(c.green, '  Opening browser…'));
+  console.log('');
+}
+
+function openBrowser(url: string): void {
+  const platform = os.platform();
+  const cmd =
+    platform === 'darwin' ? `open "${url}"` :
+    platform === 'win32'  ? `start "" "${url}"` :
+                            `xdg-open "${url}"`;
+  exec(cmd, () => { /* ignore errors — browser open is best-effort */ });
+}
 
 export interface ParsedArgs {
   command: 'start' | 'version' | 'help';
@@ -121,11 +182,11 @@ function startServer(parsed: ParsedArgs): void {
     PORT: String(port),
   };
 
-  console.log(`GranClaw ${pkg.version}`);
-  console.log(`Data:  ${homeDir}`);
-  console.log(`Port:  ${port}`);
-  console.log(`Ready: http://localhost:${port}`);
-  console.log('');
+  printBanner(pkg.version, port, homeDir);
+
+  // Open the browser shortly after the server process starts.
+  // 1.5 s is enough for the backend to bind its port on most machines.
+  setTimeout(() => openBrowser(`http://localhost:${port}`), 1500);
 
   // Spawn the compiled backend entrypoint. Bundled at dist/backend/index.js
   // by the CLI build script (see scripts/build.js).

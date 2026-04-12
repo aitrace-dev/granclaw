@@ -13,7 +13,7 @@
   },
   "main": "./dist/index.js",
   "bin": {
-    "granclaw": "./bin/granclaw.js"
+    "granclaw": "bin/granclaw.js"
   },
   "files": [
     "bin/",

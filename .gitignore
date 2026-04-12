@@ -39,6 +39,9 @@ packages/agent/
 # Landing page — built separately, not shipped with the repo
 landing/
 
+# Enterprise (GranClaw Self-Hosted) — separate git repo, not shipped with the runtime
+enterprise/
+
 # Screenshots / temp images
 img_*.png
 

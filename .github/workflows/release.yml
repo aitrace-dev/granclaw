@@ -1,12 +1,25 @@
 name: release
 
-# On-demand release cutter. Bumps the version in packages/cli/package.json,
-# commits, tags vX.Y.Z (or a beta variant), and pushes — which in turn fires
-# publish.yml (tag-triggered) to run the gate and push the tarball to npm.
+# Single release pipeline: bump → gate → publish → tag → GitHub Release.
 #
-# Separation of concerns:
-#   release.yml  — bump + tag + push       (this file, workflow_dispatch)
-#   publish.yml  — build + gate + publish  (triggered by the tag)
+# Flow (workflow_dispatch, manual button):
+#   1. Validate the version input is semver and unused
+#   2. If packages/cli/package.json is not already at the target, bump it
+#      and record a chore commit (local only — push happens at the end)
+#   3. npm ci + install Playwright
+#   4. Run the prepublish gate (build, audit, gitleaks, manifest, install,
+#      e2e smoke). Escape hatches rejected under CI=true.
+#   5. Publish to npm with OIDC Trusted Publishing + provenance attestation
+#      (no NPM_TOKEN secret — the repo's Trusted Publisher config handles auth)
+#   6. Tag vX.Y.Z and push the bump commit + tag to main
+#   7. Create a GitHub Release with auto-generated notes
+#
+# Recovery from a failed run:
+#   - Fails at gate / publish  → nothing pushed anywhere, re-run with same version
+#   - Fails at git push         → npm already has the tarball, push the tag manually
+#                                 and create the GitHub Release by hand
+#   - Fails at GH Release       → tag exists, re-run with same version is a no-op
+#                                 at bump/publish and will recreate the release
 
 on:
   workflow_dispatch:
@@ -17,15 +30,18 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: write    # push the bump commit + tag, create GH Release
+  id-token: write    # OIDC for npm Trusted Publishing
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  tag:
+  release:
     runs-on: ubuntu-latest
+    # Required-reviewer gate. Configure in repo Settings → Environments.
+    environment: npm-publish
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,8 +53,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
 
-      - name: Validate version string
+      - name: Validate version
         run: |
           v='${{ inputs.version }}'
           if ! echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$'; then
@@ -55,26 +72,56 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
 
-      - name: Bump CLI package version
+      - name: Bump CLI package version (if needed)
         run: |
-          node -e "
-            const fs = require('fs');
-            const p = JSON.parse(fs.readFileSync('packages/cli/package.json', 'utf8'));
-            p.version = '${{ inputs.version }}';
-            fs.writeFileSync('packages/cli/package.json', JSON.stringify(p, null, 2) + '\n');
-          "
-          echo '--- packages/cli/package.json ---'
-          head -5 packages/cli/package.json
+          target='${{ inputs.version }}'
+          current=$(node -p "require('./packages/cli/package.json').version")
+          if [ "$current" = "$target" ]; then
+            echo "packages/cli/package.json already at $target — skipping bump"
+          else
+            node -e "
+              const fs = require('fs');
+              const p = JSON.parse(fs.readFileSync('packages/cli/package.json', 'utf8'));
+              p.version = '$target';
+              fs.writeFileSync('packages/cli/package.json', JSON.stringify(p, null, 2) + '\n');
+            "
+            git add packages/cli/package.json
+            git commit -m "chore(release): v$target"
+          fi
 
-      - name: Commit, tag, push
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run prepublish gate
+        run: npm run gate -w granclaw
+        env:
+          CI: 'true'
+          # Step 6 (Playwright e2e) auto-skips when the claude CLI is unavailable
+          # in the runner. Steps 1-5 are hard blocks. Escape hatches
+          # (GRANCLAW_GATE_SKIP_*) are rejected under CI=true by the gate script.
+
+      - name: Publish to npm
+        run: npm publish --tag latest --provenance --access public -w granclaw
+
+      - name: Tag and push
         run: |
-          git add packages/cli/package.json
-          git commit -m "chore(release): v${{ inputs.version }}"
           git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
           git push origin HEAD --follow-tags
 
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ inputs.version }}"
+          generate_release_notes: true
+
       - name: Summary
         run: |
-          echo "### Release v${{ inputs.version }} tagged" >> "$GITHUB_STEP_SUMMARY"
-          echo "Tag \`v${{ inputs.version }}\` pushed to \`${{ github.ref_name }}\`." >> "$GITHUB_STEP_SUMMARY"
-          echo "Watch [publish.yml](../../actions/workflows/publish.yml) for the npm release." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### granclaw@${{ inputs.version }} released"
+            echo ""
+            echo "- npm: https://www.npmjs.com/package/granclaw/v/${{ inputs.version }}"
+            echo "- tag: https://github.com/${{ github.repository }}/releases/tag/v${{ inputs.version }}"
+          } >> "$GITHUB_STEP_SUMMARY"

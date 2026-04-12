@@ -54,6 +54,7 @@ import { stealthArgv } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
 import { getTakeoverByTokenFromDb, clearTakeoverFromDb } from '../takeover-state.js';
+import { formatTakeoverResumeMessage } from '../takeover-messages.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -118,11 +119,7 @@ export function createServer() {
     clearTakeoverFromDb(row.agent_id);
     // Optional note from the user describing what they did — helps the agent
     // resume with context instead of re-snapshotting blindly.
-    const rawNote = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
-    const note = rawNote.slice(0, 2000); // cap to prevent abuse
-    const resumeMsg = note
-      ? `[User completed browser takeover. Note: ${JSON.stringify(note)}]`
-      : '[User completed browser takeover with no note]';
+    const resumeMsg = formatTakeoverResumeMessage(req.body?.note);
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
     enqueue(workspaceDir, row.agent_id, resumeMsg, row.channel_id);
     res.json({ ok: true });

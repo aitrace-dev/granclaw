@@ -26,7 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV CHROME_BIN=/usr/bin/chromium
 
-RUN npm install -g granclaw@beta agent-browser
+ARG GRANCLAW_VERSION=beta
+RUN npm install -g granclaw@${GRANCLAW_VERSION} agent-browser
 
 VOLUME /data
 ENV GRANCLAW_HOME=/data

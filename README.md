@@ -16,6 +16,14 @@
 
 ---
 
+```bash
+npx granclaw@beta
+```
+
+Open `http://localhost:8787` → **Settings** → paste an API key → **+ New Agent** → done.
+
+---
+
 GranClaw is a personal AI assistant you run on your own machine. Give it a browser, saved logins, persistent memory, and a real-time dashboard — then tell it what to do. It drafts your posts, runs your errands on the web, tracks your work in a kanban, and writes back to you on Telegram in your own language. Everything happens locally, on your hardware, where you can see it.
 
 No black boxes. No gated features. No vendor lock-in. **Bring your own LLM** — OpenAI, Anthropic, Gemini, Groq, or OpenRouter. Swap providers per agent from the settings panel without restarting anything.
@@ -67,22 +75,6 @@ Every token, every session, every day. Per-model breakdown, cost estimates, cach
 ![Monitor panel — agent activity stats and session info](docs/images/browser-session-player.png)
 
 ![Usage dashboard — token counts, cache hit rate, and per-session cost breakdown](docs/images/usage.png)
-
----
-
-## Quick Start
-
-One command. No clone, no build, no global install.
-
-```bash
-npx granclaw@beta
-```
-
-Open `http://localhost:8787` → **Settings** → paste an API key for your provider → **+ New Agent** → done.
-
-**That's it.** Runtime state lives in `~/.granclaw/` (override with `--home <path>` or `GRANCLAW_HOME`). Your workspaces, databases, and agent configs all stay on your machine.
-
-**Prerequisites:** Node 20+ and an API key from any of [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com/), [Google Gemini](https://aistudio.google.com/app/apikey), [Groq](https://console.groq.com/keys), or [OpenRouter](https://openrouter.ai/keys). You only need one.
 
 ---
 

@@ -273,7 +273,7 @@ export function DashboardPage() {
               onChange={e => handleProviderChange(e.target.value)}
             >
               {configuredProviders.map(p => (
-                <option key={p.provider} value={p.provider}>{p.provider}</option>
+                <option key={p.provider} value={p.provider}>{p.label ?? p.provider}</option>
               ))}
             </select>
             <select

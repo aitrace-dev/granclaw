@@ -201,7 +201,10 @@ export function SettingsPage() {
 
   // Only user-configured providers occupy a "slot" that blocks the Add form
   const configuredIds = new Set(userProviders.map(p => p.provider));
-  const availableToAdd = PROVIDERS.filter(p => !configuredIds.has(p.value));
+  const managedIds = new Set(managedProviders.map(p => p.provider));
+  const availableToAdd = PROVIDERS.filter(
+    p => !configuredIds.has(p.value) && !managedIds.has(p.value)
+  );
 
   // Reset add-form provider/model when available list changes
   useEffect(() => {
@@ -237,7 +240,9 @@ export function SettingsPage() {
 
   async function handleReplaceKey(provider: string, model: string, apiKey: string) {
     await saveProviderSettings(provider, model, apiKey);
-    setConfiguredProviders(prev => prev.map(p => p.provider === provider ? { provider, model } : p));
+    setConfiguredProviders(prev =>
+      prev.map(p => p.provider === provider && !p.managed ? { provider, model } : p)
+    );
   }
 
   async function handleRemove(provider: string) {

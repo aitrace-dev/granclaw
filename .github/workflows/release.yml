@@ -125,3 +125,12 @@ jobs:
             echo "- npm: https://www.npmjs.com/package/granclaw/v/${{ steps.version.outputs.version }}"
             echo "- tag: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version }}"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trigger enterprise Docker build
+        run: |
+          gh api repos/aitrace-dev/granclaw-enterprise/dispatches \
+            --method POST \
+            --field event_type=granclaw-released \
+            --field client_payload[version]="${{ steps.version.outputs.version }}"
+        env:
+          GH_TOKEN: ${{ secrets.ENTERPRISE_DISPATCH_TOKEN }}

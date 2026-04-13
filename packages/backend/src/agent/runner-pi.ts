@@ -29,7 +29,7 @@ import { AgentConfig, REPO_ROOT } from '../config.js';
 import { esmImport } from '../esm-import.js';
 import { saveSession, getSessionFile } from '../agent-db.js';
 import { logAction } from '../logs-db.js';
-import { getProvider, getProviderApiKey, getSearchApiKey } from '../providers-config.js';
+import { getProvider, getProviderApiKey, getProviderBaseUrl, getSearchApiKey } from '../providers-config.js';
 import { createSchedule, listSchedules } from '../schedules-db.js';
 import { parseExpression } from 'cron-parser';
 import {
@@ -246,8 +246,17 @@ function providerEnvKey(provider: string): string {
     mistral: 'MISTRAL_API_KEY',
     cerebras: 'CEREBRAS_API_KEY',
     openrouter: 'OPENROUTER_API_KEY',
+    // freetier routes through the enterprise proxy (OpenAI-compatible) using the same env var
+    freetier: 'OPENROUTER_API_KEY',
   };
   return keys[provider] ?? `${provider.toUpperCase()}_API_KEY`;
+}
+
+// "freetier" is an enterprise-managed provider that proxies through our internal LLM gateway.
+// Pi-ai doesn't know "freetier", so we resolve it to "openrouter" for model lookup,
+// then override the baseUrl to point at the proxy.
+function resolvePiProvider(provider: string): string {
+  return provider === 'freetier' ? 'openrouter' : provider;
 }
 
 // ── Agent name extraction ────────────────────────────────────────────────────
@@ -338,17 +347,24 @@ export async function runAgent(
     // getModel() expects KnownProvider literals at the type level, but our
     // provider string comes from runtime config. The cast is safe — getModel()
     // returns undefined for unknown provider/model combos, which we handle below.
-    const model = (getModel as (p: string, m: string) => unknown)(
-      providerCfg.provider,
+    // resolvePiProvider maps display-only providers (e.g. "freetier") to their
+    // underlying pi-ai provider ("openrouter") for model lookup.
+    const piProvider = resolvePiProvider(providerCfg.provider);
+    const rawModel = (getModel as unknown as (p: string, m: string) => Record<string, unknown> | undefined)(
+      piProvider,
       modelId,
     );
-    if (!model) {
+    if (!rawModel) {
       onChunk({
         type: 'error',
         message: `Model "${modelId}" not found for provider "${providerCfg.provider}". Check Settings.`,
       });
       return;
     }
+    // For managed providers (e.g. "freetier"), override the baseUrl so requests
+    // are routed through the enterprise LLM proxy instead of the upstream directly.
+    const baseUrlOverride = getProviderBaseUrl(providerCfg.provider);
+    const model: unknown = baseUrlOverride ? { ...rawModel, baseUrl: baseUrlOverride } : rawModel;
 
     // Inject the API key into the env so pi-ai's credential chain picks it up.
     // Done here (after model guard) so the finally block always restores it.

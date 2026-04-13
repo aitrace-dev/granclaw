@@ -124,10 +124,18 @@ export function getProvider(provider?: string): { provider: string; model: strin
   const map = getProvidersMap(cfg);
   if (provider) {
     const entry = map[provider];
-    return entry ? { provider, model: entry.model } : null;
+    if (entry) return { provider, model: entry.model };
+    // Fall back to managed config (e.g. "freetier" provider seeded by enterprise control)
+    const managed = readManagedConfig();
+    if (managed.llm?.provider === provider) return { provider, model: managed.llm.defaultModel };
+    return null;
   }
+  // No provider specified: prefer user-configured, fall back to managed
   const first = Object.entries(map)[0];
-  return first ? { provider: first[0], model: first[1].model } : null;
+  if (first) return { provider: first[0], model: first[1].model };
+  const managed = readManagedConfig();
+  if (managed.llm) return { provider: managed.llm.provider, model: managed.llm.defaultModel };
+  return null;
 }
 
 /** Server-side only — returns the raw API key for a specific provider (or first). */

@@ -32,6 +32,22 @@ interface ChatMessage {
   toolCalls?: string[];
 }
 
+// ── Typing indicator ──────────────────────────────────────────────────────
+
+function TypingDots() {
+  return (
+    <span className="inline-flex items-end gap-[3px] h-4">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="block w-1.5 h-1.5 rounded-full bg-current"
+          style={{ animation: `heartbeat-dot 1.2s ease-in-out ${i * 0.2}s infinite` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 // ── Shield icon ───────────────────────────────────────────────────────────
 
 function ShieldIcon({ className = '' }: { className?: string }) {
@@ -444,7 +460,7 @@ export function ChatPage() {
                           prose-td:border prose-td:border-outline-variant/40 prose-td:px-2 prose-td:py-1">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{m.text}</ReactMarkdown>
                         </div>
-                      : '…'
+                      : <TypingDots />
                 }
               </div>
               )}

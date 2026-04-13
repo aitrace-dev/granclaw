@@ -3,6 +3,33 @@ import fs from 'fs';
 import path from 'path';
 import { GRANCLAW_HOME } from './config.js';
 
+const MANAGED_CONFIG_PATH = path.join(GRANCLAW_HOME, 'config-provider.json');
+
+interface ManagedProviderConfig {
+  llm?: {
+    provider: string;
+    apiKey: string;
+    baseUrl?: string;
+    defaultModel: string;
+    label: string;
+  };
+  search?: {
+    provider: string;
+    apiKey?: string;
+    label: string;
+  };
+}
+
+function readManagedConfig(): ManagedProviderConfig {
+  try {
+    const envPath = process.env.MANAGED_CONFIG_PATH?.trim();
+    const p = envPath ? path.resolve(envPath) : MANAGED_CONFIG_PATH;
+    return JSON.parse(fs.readFileSync(p, 'utf8')) as ManagedProviderConfig;
+  } catch {
+    return {};
+  }
+}
+
 /** Resolved on every call so PROVIDERS_CONFIG_PATH can be set per-test. */
 function configPath(): string {
   const envPath = process.env.PROVIDERS_CONFIG_PATH?.trim();
@@ -11,6 +38,14 @@ function configPath(): string {
 }
 
 // ── Data model ────────────────────────────────────────────────────────────────
+
+export interface PublicProviderEntry {
+  provider: string;
+  model: string;
+  managed?: boolean;
+  label?: string;
+  baseUrl?: string;
+}
 
 interface ProviderEntry {
   model: string;
@@ -56,11 +91,28 @@ function writeConfig(cfg: ProvidersConfig, providers: Record<string, ProviderEnt
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/** List all configured providers. Never includes apiKey. */
-export function listProviders(): { provider: string; model: string }[] {
+/** List all configured providers (managed from config-provider.json + user-configured). Never includes apiKey. */
+export function listProviders(): PublicProviderEntry[] {
   const cfg = readConfig();
   const map = getProvidersMap(cfg);
-  return Object.entries(map).map(([provider, entry]) => ({ provider, model: entry.model }));
+  const userProviders: PublicProviderEntry[] = Object.entries(map).map(([provider, entry]) => ({
+    provider,
+    model: entry.model,
+  }));
+
+  const managed = readManagedConfig();
+  const managedProviders: PublicProviderEntry[] = [];
+  if (managed.llm) {
+    managedProviders.push({
+      provider: managed.llm.provider,
+      model: managed.llm.defaultModel,
+      managed: true,
+      label: managed.llm.label,
+      ...(managed.llm.baseUrl ? { baseUrl: managed.llm.baseUrl } : {}),
+    });
+  }
+
+  return [...managedProviders, ...userProviders];
 }
 
 /**
@@ -82,8 +134,18 @@ export function getProvider(provider?: string): { provider: string; model: strin
 export function getProviderApiKey(provider?: string): string | null {
   const cfg = readConfig();
   const map = getProvidersMap(cfg);
-  if (provider) return map[provider]?.apiKey ?? null;
-  return Object.values(map)[0]?.apiKey ?? null;
+  if (provider) {
+    if (map[provider]) return map[provider].apiKey;
+    // Fall back to managed config
+    const managed = readManagedConfig();
+    if (managed.llm?.provider === provider) return managed.llm.apiKey;
+    return null;
+  }
+  // No provider specified: prefer user-configured, fall back to managed
+  const first = Object.values(map)[0];
+  if (first) return first.apiKey;
+  const managed = readManagedConfig();
+  return managed.llm?.apiKey ?? null;
 }
 
 /** Upsert a provider entry. */
@@ -106,6 +168,14 @@ export function removeProvider(provider: string): void {
 export function clearProvider(): void {
   const cfg = readConfig();
   writeConfig(cfg, {});
+}
+
+/** Returns the baseUrl override for a provider if set in the managed config (e.g. enterprise proxy URL). */
+export function getProviderBaseUrl(provider?: string): string | null {
+  const managed = readManagedConfig();
+  if (!managed.llm) return null;
+  if (provider && managed.llm.provider !== provider) return null;
+  return managed.llm.baseUrl ?? null;
 }
 
 // ── Search config ─────────────────────────────────────────────────────────────

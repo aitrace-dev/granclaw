@@ -20,7 +20,7 @@ GranClaw is a personal AI assistant you run on your own machine. Give it a brows
 
 No black boxes. No gated features. No vendor lock-in. **Bring your own LLM** — OpenAI, Anthropic, Gemini, Groq, or OpenRouter. Swap providers per agent from the settings panel without restarting anything.
 
-![GranClaw chat](docs/images/chat-streaming.png)
+![GranClaw chat — LinkedIn manager asking the agent to open LinkedIn and hand over browser control](docs/images/chat-streaming.png)
 
 ---
 
@@ -52,19 +52,21 @@ No black boxes. No gated features. No vendor lock-in. **Bring your own LLM** —
 
 Kanban tasks created by the agent itself. Drag-drop, live updates, per-agent isolation.
 
-![Mission Control](docs/images/mission-control.png)
+![Mission Control — LinkedIn content manager tasks across Backlog, In Progress, Scheduled, To Review, Done](docs/images/mission-control.png)
 
-### Browser session replay
+### Browser takeover — log in once, reuse forever
 
-Every browser turn is recorded as a real WebM video plus a chapter marker for every command the agent ran. Active sessions stream live over CDP — open the tab and you see the agent's screen update in real time, with the current tab title labeled at the top.
+Agent opens the site, hands you the live browser to log in, then saves the session automatically for every future run.
 
-![Browser session replay](docs/images/browser-session-player.png)
+![Browser takeover — agent opened LinkedIn login and is asking the user to enter credentials](docs/images/browser-onboarding.png)
 
-### Usage tracking
+### Monitor & Usage tracking
 
 Every token, every session, every day. Per-model breakdown, cost estimates, cache hit rates.
 
-![Usage dashboard](docs/images/usage.png)
+![Monitor panel — agent activity stats and session info](docs/images/browser-session-player.png)
+
+![Usage dashboard — token counts, cache hit rate, and per-session cost breakdown](docs/images/usage.png)
 
 ---
 

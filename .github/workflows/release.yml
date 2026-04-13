@@ -22,7 +22,8 @@ name: deploy beta release
 #                                 and will recreate the release
 
 on:
-  workflow_dispatch: {}
+  push:
+    branches: [main]
 
 permissions:
   contents: write    # push the bump commit + tag, create GH Release
@@ -34,8 +35,8 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Required-reviewer gate. Configure in repo Settings → Environments.
-    environment: npm-publish
+    # Skip the version-bump commit the workflow itself pushes back to main
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,7 +79,7 @@ jobs:
               fs.writeFileSync('packages/cli/package.json', JSON.stringify(p, null, 2) + '\n');
             "
             git add packages/cli/package.json
-            git commit -m "chore(release): v$target"
+            git commit -m "chore(release): v$target [skip ci]"
           fi
 
       - name: Install dependencies

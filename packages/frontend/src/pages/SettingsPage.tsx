@@ -20,6 +20,32 @@ const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
   PROVIDERS.map(p => [p.value, p.label])
 );
 
+// ── ManagedProviderRow ────────────────────────────────────────────────────────
+
+function ManagedProviderRow({ entry }: { entry: ProviderEntry }) {
+  return (
+    <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[13px] text-on-surface font-semibold">
+            {entry.label ?? entry.provider}
+          </span>
+          <span className="font-mono text-[10px] text-on-surface-variant/70">
+            {entry.model}
+          </span>
+          <span className="text-success text-[10px] font-mono">✓</span>
+        </div>
+        <span className="rounded px-2 py-0.5 text-[10px] font-mono bg-primary/10 text-primary">
+          managed
+        </span>
+      </div>
+      <p className="font-mono text-[10px] text-on-surface-variant/60 mt-2">
+        Pre-configured · includes free credits · read-only
+      </p>
+    </div>
+  );
+}
+
 // ── ConfiguredProviderRow ──────────────────────────────────────────────────────
 
 function ConfiguredProviderRow({
@@ -169,8 +195,12 @@ export function SettingsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Providers not yet configured — those are available to add
-  const configuredIds = new Set(configuredProviders.map(p => p.provider));
+  // Split into managed (read-only) and user (editable) providers
+  const managedProviders = configuredProviders.filter(p => p.managed);
+  const userProviders = configuredProviders.filter(p => !p.managed);
+
+  // Only user-configured providers occupy a "slot" that blocks the Add form
+  const configuredIds = new Set(userProviders.map(p => p.provider));
   const availableToAdd = PROVIDERS.filter(p => !configuredIds.has(p.value));
 
   // Reset add-form provider/model when available list changes
@@ -272,14 +302,23 @@ export function SettingsPage() {
         </p>
       </div>
 
-      {/* Configured providers list */}
-      {configuredProviders.length === 0 ? (
+      {/* Managed providers (read-only, always shown first) */}
+      {managedProviders.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {managedProviders.map(entry => (
+            <ManagedProviderRow key={`managed-${entry.provider}`} entry={entry} />
+          ))}
+        </div>
+      )}
+
+      {/* User-configured providers */}
+      {userProviders.length === 0 && managedProviders.length === 0 ? (
         <p className="font-mono text-[11px] text-warning/80 mb-4">
           No providers configured — agents will not respond until you add one.
         </p>
-      ) : (
+      ) : userProviders.length > 0 ? (
         <div className="space-y-2 mb-6">
-          {configuredProviders.map(entry => (
+          {userProviders.map(entry => (
             <ConfiguredProviderRow
               key={entry.provider}
               entry={entry}
@@ -288,7 +327,7 @@ export function SettingsPage() {
             />
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Add provider form */}
       {availableToAdd.length > 0 && (

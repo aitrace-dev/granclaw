@@ -32,11 +32,12 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
     { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B — fastest/cheapest' },
   ],
   openrouter: [
-    { value: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2 — fast chat' },
-    { value: 'deepseek/deepseek-chat-v3.1', label: 'DeepSeek Chat V3.1' },
-    { value: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick' },
-    { value: 'qwen/qwen3-235b-a22b', label: 'Qwen3 235B' },
-    { value: 'x-ai/grok-4', label: 'Grok 4' },
+    { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash — fast, 1M ctx (free tier)' },
+    { value: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2 — fast, efficient' },
+    { value: 'xiaomi/mimo-v2-pro', label: 'MiMo V2 Pro — agentic, 1T params' },
+    { value: 'qwen/qwen3.6-plus', label: 'Qwen 3.6 Plus — throughput leader' },
+    { value: 'minimax/minimax-m2.7', label: 'MiniMax M2.7 — agentic' },
+    { value: 'x-ai/grok-4', label: 'Grok 4 — reasoning, 256k ctx' },
   ],
 };
 

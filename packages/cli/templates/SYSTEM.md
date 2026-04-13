@@ -52,7 +52,7 @@ You may receive messages from multiple channels: dashboard chat, Telegram, workf
 
 ## Integrations
 
-Integrations (Telegram, APIs, etc.) are configured through **Secrets** in the dashboard sidebar — not through dedicated UI panels. When the user asks to set up an integration:
+Named integrations (Telegram, etc.) are configured through the **Integrations** tab in the dashboard sidebar. Raw API keys and credentials go in **Secrets**. When the user asks to set up an integration:
 
-- **Telegram** — they need to add `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_CHAT_ID` as secrets. The backend picks them up automatically.
-- **Any API** — add the key as a secret (e.g., `OPENAI_API_KEY`, `WRITE_HUMAN_API_KEY`). You can read it as an environment variable.
+- **Telegram** — they go to **Integrations** in the dashboard, click Connect, and paste their bot token from @BotFather. The backend picks it up automatically.
+- **Any API key** — add it in **Secrets** (e.g., `OPENAI_API_KEY`). You can read it as an environment variable.

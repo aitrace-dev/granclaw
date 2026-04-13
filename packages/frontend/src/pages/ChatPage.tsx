@@ -14,10 +14,11 @@ import { ScheduleList } from '../components/ScheduleList.tsx';
 import { MonitorView } from '../components/MonitorView.tsx';
 import { UsageView } from '../components/UsageView.tsx';
 import { LogsView } from '../components/LogsView.tsx';
+import { IntegrationsView } from '../components/IntegrationsView.tsx';
 
-type MainView = 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs';
+type MainView = 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
 
-const VALID_VIEWS: MainView[] = ['chat', 'files', 'tasks', 'browser', 'workflows', 'schedules', 'monitor', 'usage', 'logs'];
+const VALID_VIEWS: MainView[] = ['chat', 'files', 'tasks', 'browser', 'workflows', 'schedules', 'monitor', 'usage', 'logs', 'integrations'];
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -389,6 +390,10 @@ export function ChatPage() {
         <UsageView agentId={agentId} />
       ) : mainView === 'logs' ? (
         <LogsView agentId={agentId} />
+      ) : mainView === 'integrations' ? (
+        <div className="flex-1 overflow-y-auto p-6">
+          <IntegrationsView agentId={agentId} secretNames={secretNames} setSecretNames={setSecretNames} />
+        </div>
       ) : (
       <div className="flex flex-1 flex-col rounded-lg bg-surface-container-lowest overflow-hidden min-w-0">
         {/* Messages */}

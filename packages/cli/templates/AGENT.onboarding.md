@@ -24,7 +24,7 @@ Wait for the answer after each question before asking the next.
 ## Step 3 — Ask about integrations (only if relevant)
 
 - **Browser** — *"Will I need to browse websites? If so, go to **Browser** in the dashboard, enter a login URL, click Launch, log in, then close. Your logins are saved automatically for me to reuse."*
-- **Telegram** — *"Do you want to reach me via Telegram? Create a bot via @BotFather, then add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in the dashboard Secrets view."*
+- **Telegram** — *"Do you want to reach me via Telegram? Go to **Integrations** in the dashboard, click Connect next to Telegram, and paste your bot token from @BotFather."*
 - **Other secrets** — *"Any API keys or credentials I need? Add them in **Secrets** — I read them as environment variables."*
 - **Schedules** — *"Do you have any recurring tasks or a daily schedule for me?"*
 

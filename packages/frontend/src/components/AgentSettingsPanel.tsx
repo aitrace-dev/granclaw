@@ -132,8 +132,8 @@ export function AgentSettingsPanel({
   isWiping: boolean;
   isSending: boolean;
   onWipe: () => void;
-  mainView: 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs';
-  onViewChange: (view: 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs') => void;
+  mainView: 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
+  onViewChange: (view: 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations') => void;
 }) {
   const [secretForm, setSecretForm] = useState({ name: '', value: '' });
 
@@ -226,6 +226,12 @@ export function AgentSettingsPanel({
         label="Logs"
         active={mainView === 'logs'}
         onClick={() => onViewChange('logs')}
+      />
+      <ViewButton
+        icon="🔌"
+        label="Integrations"
+        active={mainView === 'integrations'}
+        onClick={() => onViewChange('integrations')}
       />
       {/* Guardian — Coming Soon (disabled) */}
       <div

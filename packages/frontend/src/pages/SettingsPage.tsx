@@ -1,5 +1,6 @@
 // packages/frontend/src/pages/SettingsPage.tsx
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   fetchProviderSettings,
   saveProviderSettings,
@@ -138,6 +139,7 @@ function ConfiguredProviderRow({
 // ── SettingsPage ───────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [configuredProviders, setConfiguredProviders] = useState<ProviderEntry[]>([]);
 
@@ -249,6 +251,16 @@ export function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
+
+      {/* ── Back button ── */}
+      <button
+        type="button"
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-1.5 mb-6 font-mono text-[12px] text-on-surface-variant hover:text-on-surface transition-colors"
+      >
+        <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+        Go back to agent
+      </button>
 
       {/* ── Provider Settings ── */}
       <div className="mb-8">

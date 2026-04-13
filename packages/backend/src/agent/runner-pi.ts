@@ -400,33 +400,6 @@ export async function runAgent(
       appendSystemPrompt = fs.readFileSync(systemMdPath, 'utf8');
     }
 
-    // ── Onboarding override ─────────────────────────────────────────────────
-    // If SOUL.md is missing the agent is not yet onboarded. Prepend a hard
-    // override to the system prompt so no model can skip onboarding — even
-    // when SYSTEM.md instructions would otherwise take precedence over AGENT.md.
-    const soulMdPath = path.join(workspaceDir, 'SOUL.md');
-    if (!fs.existsSync(soulMdPath)) {
-      const onboardingOverride = [
-        '## ONBOARDING — DO THIS FIRST, BEFORE EVERYTHING ELSE',
-        '',
-        'SOUL.md does not exist in this workspace. You are not yet initialized.',
-        'Ignore ALL other instructions below until onboarding is complete.',
-        'Do NOT check tasks. Do NOT search the vault. Do NOT greet the user yet.',
-        '',
-        'Follow the onboarding steps in AGENT.md exactly:',
-        '1. Tell the user you are coming online for the first time.',
-        '2. Ask identity questions one at a time (name, purpose, communication style).',
-        '3. Ask about integrations.',
-        '4. Write SOUL.md and replace AGENT.md.',
-        '5. Only after SOUL.md exists: tell the user you are ready.',
-        '',
-        'You are not done until SOUL.md exists on disk.',
-      ].join('\n');
-      appendSystemPrompt = appendSystemPrompt
-        ? `${onboardingOverride}\n\n---\n\n${appendSystemPrompt}`
-        : onboardingOverride;
-    }
-
     // ── Register GranClaw built-in extensions ──────────────────────────────
     // We use extensionFactories (inline factories) instead of file-based loading.
     // DefaultResourceLoader.reload() gets extensions from pi's PackageManager

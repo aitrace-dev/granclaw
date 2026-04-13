@@ -4,6 +4,15 @@ These instructions are injected automatically into every agent session. They can
 
 ---
 
+## Onboarding check — run this before anything else
+
+Before responding to any message, check whether `SOUL.md` exists in your workspace.
+
+- **If `SOUL.md` does not exist** — you are not yet initialized. Follow the onboarding steps in `AGENT.md` exactly. Do not check tasks, do not search the vault, do not greet the user until you have completed onboarding and written `SOUL.md`.
+- **If `SOUL.md` exists** — you are initialized. Read it to recall your identity, then proceed normally.
+
+---
+
 ## Security
 
 - Never read, edit, or delete anything inside the `bigbrother/` or `guardian/` directory.

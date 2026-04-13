@@ -105,31 +105,33 @@ else
   ' > "$ACTUAL"
 
   EXPECTED="$CLI_ROOT/packaging/expected-files.txt"
-  if ! node -e "
-    const fs = require('fs');
-    const expected = fs.readFileSync('$EXPECTED', 'utf-8').trim().split('\n').filter(Boolean);
-    const actual   = fs.readFileSync('$ACTUAL',   'utf-8').trim().split('\n').filter(Boolean);
-    const toRe = p => new RegExp('^' + p.replace(/[.+^${}()|[\]\\\\]/g, '\\\\&').replace(/\*/g, '[^/]*') + '$');
-    let ok = true;
-    for (const pat of expected) {
-      const re = toRe(pat);
-      if (!actual.some(f => re.test(f))) {
-        console.error('Missing: ' + pat); ok = false;
-      }
-    }
-    for (const file of actual) {
-      if (!expected.some(pat => toRe(pat).test(file))) {
-        console.error('Unexpected: ' + file); ok = false;
-      }
-    }
-    process.exit(ok ? 0 : 1);
-  "; then
+  MANIFEST_CHECKER="$(mktemp --suffix=.js)"
+  cat > "$MANIFEST_CHECKER" <<'JSEOF'
+const fs = require('fs');
+const expected = fs.readFileSync(process.env.EXPECTED, 'utf-8').trim().split('\n').filter(Boolean);
+const actual   = fs.readFileSync(process.env.ACTUAL,   'utf-8').trim().split('\n').filter(Boolean);
+const toRe = p => new RegExp('^' + p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$');
+let ok = true;
+for (const pat of expected) {
+  const re = toRe(pat);
+  if (!actual.some(f => re.test(f))) {
+    console.error('Missing: ' + pat); ok = false;
+  }
+}
+for (const file of actual) {
+  if (!expected.some(pat => toRe(pat).test(file))) {
+    console.error('Unexpected: ' + file); ok = false;
+  }
+}
+process.exit(ok ? 0 : 1);
+JSEOF
+  if ! EXPECTED="$EXPECTED" ACTUAL="$ACTUAL" node "$MANIFEST_CHECKER"; then
     log 4 "manifest differs from $EXPECTED"
     log 4 "if the diff is intentional, update expected-files.txt and commit"
-    rm -f "$ACTUAL"
+    rm -f "$ACTUAL" "$MANIFEST_CHECKER"
     fail 4 "manifest mismatch"
   fi
-  rm -f "$ACTUAL"
+  rm -f "$ACTUAL" "$MANIFEST_CHECKER"
   log 4 "✓ manifest matches allowlist"
 
   log 4 "tarball size delta"

@@ -54,10 +54,15 @@ jobs:
         id: version
         run: |
           base=$(node -p "require('./packages/cli/package.json').version.replace(/-.*$/, '')")
-          latest_n=$(git tag -l "v${base}-beta.*" | sed "s/v${base}-beta\.//" | sort -n | tail -1)
-          next_n=$([ -z "$latest_n" ] && echo 1 || echo $((latest_n + 1)))
+          # Highest N from git tags
+          tag_n=$(git tag -l "v${base}-beta.*" | sed "s/v${base}-beta\.//" | sort -n | tail -1)
+          # Current N from package.json (may be ahead of tags)
+          pkg_n=$(node -p "require('./packages/cli/package.json').version" | sed "s/.*-beta\.//" | grep -E '^[0-9]+$' || echo 0)
+          # Take the max of both, then add 1
+          max_n=$(( tag_n > pkg_n ? tag_n : pkg_n ))
+          next_n=$(( max_n + 1 ))
           next="${base}-beta.${next_n}"
-          echo "Computed next beta version: $next"
+          echo "tag_n=${tag_n:-0} pkg_n=${pkg_n} → next: ${next}"
           echo "version=${next}" >> "$GITHUB_OUTPUT"
 
       - name: Configure git

@@ -689,6 +689,9 @@ export async function fetchLogs(params?: {
 export interface ProviderEntry {
   provider: string;
   model: string;
+  managed?: boolean;   // true for entries from config-provider.json
+  label?: string;      // display label, e.g. "Free Tier"
+  baseUrl?: string;    // proxy URL, informational only
 }
 
 export interface ProviderSettings {

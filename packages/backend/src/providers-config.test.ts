@@ -16,6 +16,7 @@ import {
   listProviders,
   getProvider,
   getProviderApiKey,
+  getProviderBaseUrl,
   saveProvider,
   removeProvider,
   clearProvider,
@@ -279,5 +280,106 @@ describe('legacy active format migration', () => {
     expect(raw.active).toBeUndefined();
     expect(raw.providers.openrouter).toBeDefined();
     expect(raw.providers.google).toBeDefined();
+  });
+});
+
+// ── managed provider config ───────────────────────────────────────────────────
+
+describe('managed provider config', () => {
+  let managedConfigPath: string;
+
+  beforeEach(() => {
+    managedConfigPath = path.join(tmp, 'config-provider.json');
+    // Remove managed config if present from a previous test
+    try { fs.unlinkSync(managedConfigPath); } catch { /* ok */ }
+    process.env.MANAGED_CONFIG_PATH = managedConfigPath;
+  });
+
+  afterEach(() => {
+    delete process.env.MANAGED_CONFIG_PATH;
+    try { fs.unlinkSync(managedConfigPath); } catch { /* ok */ }
+  });
+
+  it('returns no managed providers when config file is absent', () => {
+    const providers = listProviders();
+    // File doesn't exist — should not throw, returns only user providers (none configured)
+    expect(providers.filter(p => p.managed)).toHaveLength(0);
+  });
+
+  it('prepends managed provider first when config-provider.json is present', () => {
+    fs.writeFileSync(managedConfigPath, JSON.stringify({
+      llm: {
+        provider: 'openrouter',
+        apiKey: 'gck_usr_testuser',
+        baseUrl: 'http://proxy:4002/v1',
+        defaultModel: 'google/gemini-3-flash-preview',
+        label: 'Free Tier',
+      },
+    }));
+    const providers = listProviders();
+    expect(providers[0]).toMatchObject({
+      provider: 'openrouter',
+      model: 'google/gemini-3-flash-preview',
+      managed: true,
+      label: 'Free Tier',
+      baseUrl: 'http://proxy:4002/v1',
+    });
+  });
+
+  it('getProviderApiKey falls back to managed key when no user provider matches', () => {
+    fs.writeFileSync(managedConfigPath, JSON.stringify({
+      llm: {
+        provider: 'openrouter',
+        apiKey: 'gck_usr_testuser',
+        baseUrl: 'http://proxy:4002/v1',
+        defaultModel: 'google/gemini-3-flash-preview',
+        label: 'Free Tier',
+      },
+    }));
+    const key = getProviderApiKey('openrouter');
+    expect(key).toBe('gck_usr_testuser');
+  });
+
+  it('getProviderApiKey returns managed key when no user providers exist', () => {
+    fs.writeFileSync(managedConfigPath, JSON.stringify({
+      llm: {
+        provider: 'openrouter',
+        apiKey: 'gck_usr_fallback',
+        defaultModel: 'google/gemini-3-flash-preview',
+        label: 'Free Tier',
+      },
+    }));
+    const key = getProviderApiKey(); // no arg — should fall back to managed
+    expect(key).toBe('gck_usr_fallback');
+  });
+
+  it('getProviderBaseUrl returns null when no managed config', () => {
+    expect(getProviderBaseUrl()).toBeNull();
+  });
+
+  it('getProviderBaseUrl returns baseUrl from managed config', () => {
+    fs.writeFileSync(managedConfigPath, JSON.stringify({
+      llm: {
+        provider: 'openrouter',
+        apiKey: 'gck_usr_testuser',
+        baseUrl: 'http://proxy:4002/v1',
+        defaultModel: 'google/gemini-3-flash-preview',
+        label: 'Free Tier',
+      },
+    }));
+    expect(getProviderBaseUrl()).toBe('http://proxy:4002/v1');
+  });
+
+  it('getProviderBaseUrl returns null when provider arg does not match managed provider', () => {
+    fs.writeFileSync(managedConfigPath, JSON.stringify({
+      llm: {
+        provider: 'openrouter',
+        apiKey: 'gck_usr_testuser',
+        baseUrl: 'http://proxy:4002/v1',
+        defaultModel: 'google/gemini-3-flash-preview',
+        label: 'Free Tier',
+      },
+    }));
+    expect(getProviderBaseUrl('anthropic')).toBeNull();
   });
 });

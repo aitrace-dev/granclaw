@@ -112,7 +112,8 @@ function spawnAgent(agent: AgentConfig, wsPort: number): ChildProcess {
   const ext = isTs ? '.ts' : '.js';
   const agentScript = path.resolve(__dirname, `../agent/process${ext}`);
 
-  const secrets = getSecrets(agent.id);
+  const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
+  const secrets = getSecrets(workspaceDir);
   const secretKeys = Object.keys(secrets);
   if (secretKeys.length > 0) {
     console.log(`[orchestrator] injecting ${secretKeys.length} secrets into agent "${agent.id}": ${secretKeys.join(', ')}`);

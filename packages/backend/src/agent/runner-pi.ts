@@ -816,8 +816,14 @@ export async function runAgent(
           }
 
           const token = randomUUID();
-          const frontendPort = process.env.FRONTEND_PORT ?? process.env.PORT ?? '5173';
-          const takeoverUrl = `http://${getLanIp()}:${frontendPort}/takeover/${token}`;
+          // GRANCLAW_PUBLIC_URL overrides LAN-IP detection for cloud/enterprise deployments
+          // (e.g. https://myslug.host.granclaw.com). Falls back to LAN IP for local use.
+          const takeoverUrl = process.env.GRANCLAW_PUBLIC_URL
+            ? `${process.env.GRANCLAW_PUBLIC_URL.replace(/\/$/, '')}/takeover/${token}`
+            : (() => {
+                const frontendPort = process.env.FRONTEND_PORT ?? process.env.PORT ?? '5173';
+                return `http://${getLanIp()}:${frontendPort}/takeover/${token}`;
+              })();
 
           setTakeover(agent.id, {
             agentId: agent.id,

@@ -154,6 +154,15 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     console.log('[workspace-pool] migrated steps table (added agent type)');
   }
 
+  // ── secrets ───────────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS secrets (
+      name        TEXT NOT NULL PRIMARY KEY,
+      value       TEXT NOT NULL,
+      created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+  `);
+
   // ── schedules (from schedules-db) ─────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS schedules (

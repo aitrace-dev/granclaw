@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { BrowserSessionSummary, BrowserSessionDetail } from '../lib/api.ts';
-import { fetchBrowserSessions, fetchBrowserSession, launchBrowser, closeBrowser, fetchBrowserProfile, deleteBrowserProfile } from '../lib/api.ts';
+import { fetchBrowserSessions, fetchBrowserSession } from '../lib/api.ts';
 import { SessionPlayer } from './SessionPlayer.tsx';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -105,125 +105,6 @@ function SessionCard({
   );
 }
 
-function BrowserLauncher({ agentId }: { agentId: string }) {
-  const [url, setUrl] = useState('');
-  const [launching, setLaunching] = useState(false);
-  const [activeUrl, setActiveUrl] = useState<string | null>(null);
-  const [closing, setClosing] = useState(false);
-  const [hasProfile, setHasProfile] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadProfile = () => {
-    fetchBrowserProfile(agentId).then(data => {
-      setHasProfile(data.hasProfile);
-      setActiveUrl(data.activeBrowser?.url ?? null);
-    }).catch(console.error);
-  };
-
-  useEffect(() => { loadProfile(); }, [agentId]);
-
-  async function handleLaunch() {
-    if (!url.trim()) return;
-    setLaunching(true);
-    setError(null);
-    try {
-      await launchBrowser(agentId, url.trim());
-      setActiveUrl(url.trim());
-      setUrl('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to launch');
-    } finally {
-      setLaunching(false);
-    }
-  }
-
-  async function handleClose() {
-    setClosing(true);
-    setError(null);
-    try {
-      await closeBrowser(agentId);
-      setActiveUrl(null);
-      setHasProfile(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to close');
-    } finally {
-      setClosing(false);
-    }
-  }
-
-  async function handleDeleteProfile() {
-    if (!confirm('Delete browser profile? All saved logins will be lost.')) return;
-    await deleteBrowserProfile(agentId);
-    setHasProfile(false);
-    loadProfile();
-  }
-
-  const inputCls = 'rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow';
-
-  return (
-    <div className="px-4 py-3 border-b border-outline-variant/30 space-y-3">
-      <div className="flex items-center gap-2">
-        <span className="text-[13px] opacity-60">🔑</span>
-        <span className="text-[11px] uppercase tracking-[0.14em] font-medium text-on-surface-variant">
-          Browser Login
-        </span>
-        {hasProfile && (
-          <span className="ml-auto text-[9px] font-mono text-secondary/50">profile saved</span>
-        )}
-      </div>
-
-      {activeUrl ? (
-        <div className="space-y-2">
-          <p className="font-mono text-[10px] text-secondary/60">
-            Browser open — log in, then close when done. Profile saves automatically.
-          </p>
-          <button
-            onClick={handleClose}
-            disabled={closing}
-            className="w-full rounded bg-secondary/20 px-3 py-2 font-mono text-[11px] text-secondary transition-all hover:bg-secondary/30 disabled:opacity-30"
-          >
-            {closing ? 'Closing…' : 'Close Browser'}
-          </button>
-        </div>
-      ) : (
-        <div className="flex gap-1.5">
-          <input
-            className={`${inputCls} flex-1 min-w-0`}
-            placeholder="https://linkedin.com/login"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLaunch()}
-          />
-          <button
-            onClick={handleLaunch}
-            disabled={launching || !url.trim()}
-            className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface-variant transition-all disabled:opacity-20 hover:bg-surface-container hover:text-on-surface flex-shrink-0"
-          >
-            {launching ? '…' : 'Launch'}
-          </button>
-        </div>
-      )}
-
-      {error && (
-        <p className="font-mono text-[9px] text-error/70">{error}</p>
-      )}
-
-      {hasProfile && !activeUrl && (
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] text-on-surface-variant/70">
-            Persistent profile — all logins retained
-          </span>
-          <button
-            onClick={handleDeleteProfile}
-            className="text-[9px] text-on-surface-variant/60 hover:text-error transition-colors"
-          >
-            Reset
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function BrowserView({ agentId }: { agentId: string }) {
   const [sessions, setSessions] = useState<BrowserSessionSummary[]>([]);
@@ -295,9 +176,6 @@ export function BrowserView({ agentId }: { agentId: string }) {
         </span>
       </div>
 
-      {/* Manual login launcher */}
-      <BrowserLauncher agentId={agentId} />
-
       {/* Loading overlay */}
       {loading && (
         <div className="flex items-center justify-center py-8">
@@ -319,31 +197,31 @@ export function BrowserView({ agentId }: { agentId: string }) {
                   className="w-44 h-44 mx-auto mb-6 opacity-90"
                 />
                 <h2 className="font-headline text-xl font-semibold text-on-surface mb-3">
-                  Set up browser access
+                  Browser sessions
                 </h2>
                 <p className="text-[13px] text-on-surface-variant leading-relaxed mb-8 max-w-sm mx-auto">
-                  Your agent needs a browser profile to access websites with your saved logins.
+                  When the agent needs your credentials or hits a captcha, it will hand off control to you.
                 </p>
                 <div className="flex flex-col gap-4 max-w-xs mx-auto text-left mb-8">
                   <div className="flex items-start gap-4">
                     <span className="w-7 h-7 rounded-full bg-primary/15 text-primary text-[12px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
                     <div>
-                      <p className="text-[13px] text-on-surface/80 font-medium">Launch a browser</p>
-                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">Enter a login URL above and click Launch</p>
+                      <p className="text-[13px] text-on-surface/80 font-medium">Agent requests takeover</p>
+                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">You'll receive a link in chat when the agent needs you</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
                     <span className="w-7 h-7 rounded-full bg-primary/15 text-primary text-[12px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
                     <div>
-                      <p className="text-[13px] text-on-surface/80 font-medium">Log in to your accounts</p>
-                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">Sign in to any website the agent needs access to</p>
+                      <p className="text-[13px] text-on-surface/80 font-medium">Open the link and take control</p>
+                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">Log in, solve the captcha, or complete whatever action is needed</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-4">
                     <span className="w-7 h-7 rounded-full bg-primary/15 text-primary text-[12px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
                     <div>
-                      <p className="text-[13px] text-on-surface/80 font-medium">Close the browser</p>
-                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">Your logins are saved automatically for the agent to reuse</p>
+                      <p className="text-[13px] text-on-surface/80 font-medium">Click Completed</p>
+                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">Session and logins are saved — the agent resumes automatically</p>
                     </div>
                   </div>
                 </div>

@@ -22,6 +22,90 @@
         "browser",
         "task-manager"
       ]
+    },
+    {
+      "id": "test2",
+      "name": "est",
+      "model": "deepseek/deepseek-v3.2",
+      "provider": "openrouter",
+      "workspaceDir": "./workspaces/test2",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
+    },
+    {
+      "id": "ggggg",
+      "name": "asd",
+      "model": "deepseek/deepseek-v3.2",
+      "provider": "openrouter",
+      "workspaceDir": "./workspaces/ggggg",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
+    },
+    {
+      "id": "tess",
+      "name": "testsa",
+      "model": "deepseek/deepseek-v3.2",
+      "provider": "openrouter",
+      "workspaceDir": "./workspaces/tess",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
+    },
+    {
+      "id": "adsadasda",
+      "name": "asdasdas",
+      "model": "deepseek/deepseek-v3.2",
+      "provider": "openrouter",
+      "workspaceDir": "./workspaces/adsadasda",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
+    },
+    {
+      "id": "federico",
+      "name": "Feredico",
+      "model": "deepseek/deepseek-v3.2",
+      "provider": "openrouter",
+      "workspaceDir": "./workspaces/federico",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
+    },
+    {
+      "id": "claudia",
+      "name": "Claudia",
+      "model": "deepseek/deepseek-v3.2",
+      "provider": "openrouter",
+      "workspaceDir": "./workspaces/claudia",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
+    },
+    {
+      "id": "vasco",
+      "name": "Vasco de Balboa",
+      "model": "deepseek/deepseek-v3.2",
+      "provider": "openrouter",
+      "workspaceDir": "./workspaces/vasco",
+      "allowedTools": [
+        "filesystem",
+        "browser",
+        "task-manager"
+      ]
     }
   ]
 }

@@ -87,14 +87,6 @@ export function getDataDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_takeovers_agent
       ON takeovers (agent_id);
 
-    -- ── secrets table ──────────────────────────────────────────────────────
-    CREATE TABLE IF NOT EXISTS secrets (
-      agent_id    TEXT NOT NULL,
-      name        TEXT NOT NULL,
-      value       TEXT NOT NULL,
-      created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
-      PRIMARY KEY (agent_id, name)
-    );
   `);
 
   _db = db;

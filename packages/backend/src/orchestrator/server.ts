@@ -566,29 +566,40 @@ export function createServer() {
   // ── Secrets ────────────────────────────────────────────────────────────────
 
   app.get('/agents/:id/secrets', (req, res) => {
-    res.json({ names: listSecretNames(req.params.id) });
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+    res.json({ names: listSecretNames(workspaceDir) });
   });
 
   app.post('/agents/:id/secrets', (req, res) => {
-    const { id } = req.params;
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
     const { name, value } = req.body as { name?: string; value?: string };
     if (!name || !value) { res.status(400).json({ error: 'name and value required' }); return; }
-    setSecret(id, name, value);
+    const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+    setSecret(workspaceDir, name, value);
     restartAgent(req.params.id);
     res.status(201).json({ ok: true });
   });
 
   app.put('/agents/:id/secrets/:name', (req, res) => {
-    const { id, name } = req.params;
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const { name } = req.params;
     const { value } = req.body as { value?: string };
     if (!value) { res.status(400).json({ error: 'value required' }); return; }
-    setSecret(id, name, value);
+    const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+    setSecret(workspaceDir, name, value);
     restartAgent(req.params.id);
     res.json({ ok: true });
   });
 
   app.delete('/agents/:id/secrets/:name', (req, res) => {
-    deleteSecret(req.params.id, req.params.name);
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+    deleteSecret(workspaceDir, req.params.name);
     restartAgent(req.params.id);
     res.json({ ok: true });
   });

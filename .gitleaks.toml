@@ -60,4 +60,7 @@ paths = [
   '''^providers\.config\.json$''',
   '''^\.env$''',
   '''^\.env\..*''',
+
+  # Claude Code local settings — machine-specific, gitignored, never shipped
+  '''\.claude/settings\.local\.json$''',
 ]

@@ -23,7 +23,7 @@ Wait for the answer after each question before asking the next.
 
 ## Step 3 — Ask about integrations (only if relevant)
 
-- **Browser** — *"Will I need to browse websites? If so, go to **Browser** in the dashboard, enter a login URL, click Launch, log in, then close. Your logins are saved automatically for me to reuse."*
+- **Browser** — *"Will I need to browse websites that require a login, captcha, or credentials? When I hit a login wall or captcha I can't solve, I'll hand over browser control to you. You'll get a takeover link in chat — open it, log in or solve the captcha, then click 'Completed'. Your session is saved automatically so I can continue. No setup needed in advance."*
 - **Telegram** — *"Do you want to reach me via Telegram? Go to **Integrations** in the dashboard, click Connect next to Telegram, and paste your bot token from @BotFather."*
 - **Other secrets** — *"Any API keys or credentials I need? Add them in **Secrets** — I read them as environment variables."*
 - **Schedules** — *"Do you have any recurring tasks or a daily schedule for me?"*

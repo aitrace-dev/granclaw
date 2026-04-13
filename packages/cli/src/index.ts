@@ -159,6 +159,97 @@ Install from https://claude.ai/download, then rerun.
   }
 }
 
+/**
+ * Return the path to a real system Chrome/Chromium install, or null if none
+ * is found. Deliberately excludes ~/.agent-browser/browsers/ (Chrome for
+ * Testing) — GranClaw requires a real browser installed on the system.
+ *
+ * Respects AGENT_BROWSER_EXECUTABLE_PATH for users who want a custom binary.
+ */
+function detectSystemChrome(): string | null {
+  const override = process.env.AGENT_BROWSER_EXECUTABLE_PATH;
+  if (override) return fs.existsSync(override) ? override : null;
+
+  const platform = os.platform();
+
+  if (platform === 'darwin') {
+    const candidates = [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+      path.join(os.homedir(), 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+    ];
+    return candidates.find((p) => fs.existsSync(p)) ?? null;
+  }
+
+  if (platform === 'linux') {
+    const candidates = [
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/snap/bin/chromium',
+      '/usr/bin/brave-browser',
+      '/usr/bin/microsoft-edge',
+    ];
+    return candidates.find((p) => fs.existsSync(p)) ?? null;
+  }
+
+  if (platform === 'win32') {
+    const local = process.env.LOCALAPPDATA ?? '';
+    const pf = process.env.ProgramFiles ?? 'C:\\Program Files';
+    const pf86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)';
+    const candidates = [
+      path.join(local, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      path.join(pf, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      path.join(pf86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      path.join(local, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+      path.join(pf, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
+      path.join(local, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      path.join(pf, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    ];
+    return candidates.find((p) => fs.existsSync(p)) ?? null;
+  }
+
+  return null;
+}
+
+function requireAgentBrowser(): void {
+  try {
+    execSync('agent-browser --version', { stdio: 'ignore' });
+  } catch {
+    console.error(`
+error: agent-browser not found.
+
+GranClaw requires \`agent-browser\` for browser automation.
+
+  npm install -g agent-browser
+`);
+    process.exit(1);
+  }
+
+  const chrome = detectSystemChrome();
+  if (!chrome) {
+    const platform = os.platform();
+    const installLink = 'https://google.com/chrome';
+    const linuxExtra = platform === 'linux'
+      ? '\n  sudo apt install google-chrome-stable  # Debian/Ubuntu'
+      : '';
+    console.error(`
+error: Chrome not found.
+
+GranClaw requires Google Chrome (or Chromium / Brave / Edge) installed on
+your system. Install it from:
+
+  ${installLink}${linuxExtra}
+
+To use a custom binary, set AGENT_BROWSER_EXECUTABLE_PATH before running.
+`);
+    process.exit(1);
+  }
+}
+
 function cliPackageDir(): string {
   // dist/index.js runs at <cli-pkg>/dist/, so the package root is one up.
   return path.resolve(__dirname, '..');
@@ -170,6 +261,7 @@ function startServer(parsed: ParsedArgs): void {
   const staticDir = path.join(cliPackageDir(), 'dist', 'frontend');
 
   requireClaudeCli();
+  requireAgentBrowser();
   seedHomeIfNeeded(homeDir, templatesDir);
 
   const port = parsed.port ?? (Number(process.env.PORT) || DEFAULT_PORT);

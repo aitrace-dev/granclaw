@@ -140,24 +140,9 @@ Home directory:
   Runtime state (agents.config.json, data/, workspaces/) lives in the home
   directory. GranClaw creates it on first run and seeds an empty config.
 
-Prerequisites:
-  The Claude Code CLI must be on PATH. Install from https://claude.ai/download.
 `);
 }
 
-function requireClaudeCli(): void {
-  try {
-    execSync('claude --version', { stdio: 'ignore' });
-  } catch {
-    console.error(`
-error: Claude Code CLI not found.
-
-GranClaw requires the \`claude\` CLI.
-Install from https://claude.ai/download, then rerun.
-`);
-    process.exit(1);
-  }
-}
 
 /**
  * Return the path to a real system Chrome/Chromium install, or null if none
@@ -260,7 +245,6 @@ function startServer(parsed: ParsedArgs): void {
   const templatesDir = path.join(cliPackageDir(), 'templates');
   const staticDir = path.join(cliPackageDir(), 'dist', 'frontend');
 
-  requireClaudeCli();
   requireAgentBrowser();
   seedHomeIfNeeded(homeDir, templatesDir);
 

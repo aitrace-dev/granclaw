@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  fetchAgents, createAgent, deleteAgent, fetchProviderSettings, importAgent,
-  type Agent, type ProviderSettings,
+  fetchAgents, createAgent, deleteAgent, fetchProviderSettings, fetchAppConfig, importAgent,
+  type Agent, type ProviderSettings, type AppConfig,
 } from '../lib/api.ts';
 import { getModelsForProvider, getDefaultModel } from '../lib/models.ts';
 import {
@@ -72,6 +72,7 @@ export function DashboardPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [providerSettings, setProviderSettings] = useState<ProviderSettings | null>(null);
+  const [appConfig, setAppConfig] = useState<AppConfig>({ showWorkspaceDirConfig: true });
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState('');
   const [newName, setNewName] = useState('');
@@ -117,10 +118,11 @@ export function DashboardPage() {
   }
 
   const loadAll = () => {
-    Promise.all([fetchAgents(), fetchProviderSettings()])
-      .then(([agentList, ps]) => {
+    Promise.all([fetchAgents(), fetchProviderSettings(), fetchAppConfig()])
+      .then(([agentList, ps, ac]) => {
         setAgents(agentList);
         setProviderSettings(ps);
+        setAppConfig(ac);
         const firstProvider = ps.providers?.[0];
         if (firstProvider) {
           setNewProvider(firstProvider.provider);
@@ -286,12 +288,14 @@ export function DashboardPage() {
               ))}
             </select>
           </div>
-          <input
-            className={inputMono}
-            placeholder={`Workspace path (optional, defaults to ./workspaces/${newId || 'agent-id'})`}
-            value={newWorkspace}
-            onChange={e => setNewWorkspace(e.target.value)}
-          />
+          {appConfig.showWorkspaceDirConfig && (
+            <input
+              className={inputMono}
+              placeholder={`Workspace path (optional, defaults to ./workspaces/${newId || 'agent-id'})`}
+              value={newWorkspace}
+              onChange={e => setNewWorkspace(e.target.value)}
+            />
+          )}
           <div className="flex items-center gap-3">
             <button
               onClick={handleCreate}

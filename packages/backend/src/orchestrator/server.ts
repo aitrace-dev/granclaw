@@ -53,6 +53,7 @@ import { handleBrowserLiveUpgrade } from './browser-live.js';
 import { stealthArgv } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
+import { getAppConfig } from '../app-config.js';
 import { getTakeoverByTokenFromDb, clearTakeoverFromDb } from '../takeover-state.js';
 import { formatTakeoverResumeMessage } from '../takeover-messages.js';
 
@@ -123,6 +124,12 @@ export function createServer() {
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
     enqueue(workspaceDir, row.agent_id, resumeMsg, row.channel_id);
     res.json({ ok: true });
+  });
+
+  // ── App config (enterprise UI overrides) ──────────────────────────────────────
+
+  app.get('/settings/app', (_req, res) => {
+    res.json(getAppConfig());
   });
 
   // ── Provider settings ─────────────────────────────────────────────────────────

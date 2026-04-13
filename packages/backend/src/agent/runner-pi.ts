@@ -68,7 +68,7 @@ export function resolveTemplatesDir(): string {
 // Pi-specific workspace bootstrap: uses AGENT.md and .agent/skills/ instead of
 // the Claude-specific CLAUDE.md and .claude/skills/ paths.
 
-export function bootstrapWorkspace(workspaceDir: string): void {
+export function bootstrapWorkspace(workspaceDir: string, agentId?: string): void {
   fs.mkdirSync(workspaceDir, { recursive: true });
 
   // AGENT.md — prefer AGENT.md, fall back to CLAUDE.md for existing workspaces
@@ -78,13 +78,13 @@ export function bootstrapWorkspace(workspaceDir: string): void {
     const template = path.join(resolveTemplatesDir(), 'AGENT.onboarding.md');
     if (fs.existsSync(template)) {
       // Stamp agent ID and system timezone so the agent never needs to ask
-      const agentId = path.basename(workspaceDir);
+      const workspaceName = path.basename(workspaceDir);
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const content = fs.readFileSync(template, 'utf8')
-        .replace(/YOUR_AGENT_ID/g, agentId)
+        .replace(/YOUR_AGENT_ID/g, workspaceName)
         .replace(/GRANCLAW_TIMEZONE/g, timezone);
       fs.writeFileSync(agentMd, content);
-      console.log(`[runner-pi] wrote AGENT.md to ${workspaceDir} (agentId=${agentId})`);
+      console.log(`[runner-pi] wrote AGENT.md to ${workspaceDir} (agentId=${agentId ?? workspaceName})`);
     }
   }
 
@@ -143,13 +143,13 @@ export function bootstrapWorkspace(workspaceDir: string): void {
   fs.mkdirSync(path.join(workspaceDir, '.pi-sessions'), { recursive: true });
 
   // Default vault housekeeping schedule
-  const agentId = path.basename(workspaceDir);
+  const scheduleAgentId = agentId ?? path.basename(workspaceDir);
   try {
-    const existing = listSchedules(agentId);
+    const existing = listSchedules(scheduleAgentId);
     if (!existing.some(s => s.name === 'Vault housekeeping')) {
       const cron = '30 23 * * *';
       const nextRun = parseExpression(cron, { tz: 'Asia/Singapore' }).next().getTime();
-      createSchedule(agentId, {
+      createSchedule(scheduleAgentId, {
         name: 'Vault housekeeping',
         message: [
           'Daily vault housekeeping. Use your built-in tools only — no scripts, no bash commands.',
@@ -196,7 +196,7 @@ export function bootstrapWorkspace(workspaceDir: string): void {
         timezone: 'Asia/Singapore',
         nextRun,
       });
-      console.log(`[runner-pi] created default vault housekeeping schedule for ${agentId}`);
+      console.log(`[runner-pi] created default vault housekeeping schedule for ${scheduleAgentId}`);
     }
   } catch { /* schedules DB may not be ready yet */ }
 }
@@ -294,7 +294,7 @@ export async function runAgent(
   const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
   const channelId = options?.channelId ?? 'ui';
 
-  bootstrapWorkspace(workspaceDir);
+  bootstrapWorkspace(workspaceDir, agent.id);
 
   // Browser session state — captured by closure in the `browser` tool and
   // finalized in the finally block. Null means the agent never touched the
@@ -398,6 +398,33 @@ export async function runAgent(
     const systemMdPath = path.join(resolveTemplatesDir(), 'SYSTEM.md');
     if (fs.existsSync(systemMdPath)) {
       appendSystemPrompt = fs.readFileSync(systemMdPath, 'utf8');
+    }
+
+    // ── Onboarding override ─────────────────────────────────────────────────
+    // If SOUL.md is missing the agent is not yet onboarded. Prepend a hard
+    // override to the system prompt so no model can skip onboarding — even
+    // when SYSTEM.md instructions would otherwise take precedence over AGENT.md.
+    const soulMdPath = path.join(workspaceDir, 'SOUL.md');
+    if (!fs.existsSync(soulMdPath)) {
+      const onboardingOverride = [
+        '## ONBOARDING — DO THIS FIRST, BEFORE EVERYTHING ELSE',
+        '',
+        'SOUL.md does not exist in this workspace. You are not yet initialized.',
+        'Ignore ALL other instructions below until onboarding is complete.',
+        'Do NOT check tasks. Do NOT search the vault. Do NOT greet the user yet.',
+        '',
+        'Follow the onboarding steps in AGENT.md exactly:',
+        '1. Tell the user you are coming online for the first time.',
+        '2. Ask identity questions one at a time (name, purpose, communication style).',
+        '3. Ask about integrations.',
+        '4. Write SOUL.md and replace AGENT.md.',
+        '5. Only after SOUL.md exists: tell the user you are ready.',
+        '',
+        'You are not done until SOUL.md exists on disk.',
+      ].join('\n');
+      appendSystemPrompt = appendSystemPrompt
+        ? `${onboardingOverride}\n\n---\n\n${appendSystemPrompt}`
+        : onboardingOverride;
     }
 
     // ── Register GranClaw built-in extensions ──────────────────────────────

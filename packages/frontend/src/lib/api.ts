@@ -708,6 +708,20 @@ export async function fetchProviderSettings(): Promise<ProviderSettings> {
   return res.json() as Promise<ProviderSettings>;
 }
 
+export interface AppConfig {
+  showWorkspaceDirConfig: boolean;
+}
+
+export async function fetchAppConfig(): Promise<AppConfig> {
+  try {
+    const res = await fetch(`${BASE}/settings/app`);
+    if (!res.ok) return { showWorkspaceDirConfig: true };
+    return res.json() as Promise<AppConfig>;
+  } catch {
+    return { showWorkspaceDirConfig: true };
+  }
+}
+
 export async function saveProviderSettings(provider: string, model: string, apiKey: string): Promise<void> {
   const res = await fetch(`${BASE}/settings/provider`, {
     method: 'PUT',

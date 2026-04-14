@@ -107,13 +107,22 @@ function detectChromePath(): string | null {
 
 /**
  * Return the argv fragment for the `agent-browser` command that boots the
- * daemon. Only --executable-path is emitted here; the stealth JS patches are
- * applied separately via injectStealthViaCdp() after the session is up.
+ * daemon.
+ *
+ *  --executable-path   Use real Chrome when available (less flagged than
+ *                      Playwright's bundled build).
+ *  --args              Chrome-level launch flags:
+ *                        --disable-blink-features=AutomationControlled
+ *                          Removes navigator.webdriver = true, which is the
+ *                          #1 bot-detection signal set by Playwright/CDP.
+ *
+ * The User-Agent is handled separately in prewarmStealthDaemon via a
+ * two-phase boot (discover real UA → restart with --user-agent <patched>).
  */
 export function stealthArgv(): string[] {
   if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return [];
 
-  const argv: string[] = [];
+  const argv: string[] = ['--args', '--disable-blink-features=AutomationControlled'];
 
   const chrome = detectChromePath();
   if (chrome) {
@@ -189,6 +198,9 @@ async function fetchPageTargets(
  *      Page.addScriptToEvaluateOnNewDocument.
  *   2. Run it immediately on the current document via Runtime.evaluate so
  *      patches are live without a reload.
+ *
+ * User-Agent patching is handled at the Chrome level via --user-agent in
+ * prewarmStealthDaemon, so it applies to every page target automatically.
  */
 function injectIntoPage(wsUrl: string, script: string): Promise<void> {
   return new Promise((resolve) => {
@@ -207,7 +219,6 @@ function injectIntoPage(wsUrl: string, script: string): Promise<void> {
         method: 'Runtime.evaluate',
         params: { expression: script, returnByValue: false },
       }));
-      // Allow a short window for Chrome to ack, then close.
       setTimeout(() => { clearTimeout(timer); cleanup(ws); }, 400);
     });
 
@@ -249,20 +260,48 @@ export async function injectStealthViaCdp(
 // ── Daemon pre-warm ───────────────────────────────────────────────────────────
 
 /**
+ * Fetch the raw User-Agent string from the browser's CDP /json/version endpoint.
+ * This reads the actual Chrome UA before any JS patches touch navigator.userAgent.
+ */
+async function fetchRawBrowserUA(cdpUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    const match = /^wss?:\/\/([^/]+)\//.exec(cdpUrl);
+    if (!match) { resolve(''); return; }
+    const host = match[1];
+    const req = http.get(`http://${host}/json/version`, { timeout: 3000 }, (res) => {
+      let body = '';
+      res.on('data', (c: Buffer) => { body += c.toString(); });
+      res.on('end', () => {
+        try {
+          const ua = (JSON.parse(body) as Record<string, string>)['User-Agent'] ?? '';
+          resolve(ua);
+        } catch { resolve(''); }
+      });
+    });
+    req.on('error', () => resolve(''));
+    req.on('timeout', () => { req.destroy(); resolve(''); });
+  });
+}
+
+/**
  * Pre-warm the agent's browser daemon and register stealth before any
  * agent navigation. Call this once at agent process startup for agents
  * that have the browser tool enabled.
  *
- * Steps:
- *   1. Start the daemon with `agent-browser open about:blank` (no-op if
- *      already running — agent-browser reuses the existing daemon).
- *   2. Inject Page.addScriptToEvaluateOnNewDocument via CDP so every
- *      subsequent navigation the agent makes will have stealth running
- *      before the page's own scripts.
+ * Two-phase boot:
+ *   Phase 1 — Boot the daemon without a UA override to discover the real
+ *              browser UA from /json/version (reading navigator.userAgent
+ *              would give the JS-patched value, not the raw one).
+ *   Phase 2 — Kill the daemon and restart it with:
+ *                --user-agent <Chrome/X.Y.Z>  strips "HeadlessChrome"
+ *                --args --disable-blink-features=AutomationControlled
+ *                  removes navigator.webdriver = true for every page target
+ *              Then inject Page.addScriptToEvaluateOnNewDocument so the
+ *              JS stealth patches (WebGL, plugins, permissions…) apply to
+ *              all subsequent navigations on the initial page target.
  *
- * This is a one-time setup. If the agent later kills its daemon via
- * `browser close --all`, the next daemon start won't have stealth until
- * the live view relay re-attaches (which also injects stealth).
+ * Chrome-level flags apply globally to every page target the daemon creates,
+ * so they survive agent-browser open commands that spawn new targets.
  */
 export async function prewarmStealthDaemon(
   sessionId: string,
@@ -270,22 +309,48 @@ export async function prewarmStealthDaemon(
 ): Promise<void> {
   if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return;
 
+  const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+
+  // ── Phase 1: boot daemon to discover the real browser UA ─────────────────
   try {
-    const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
-    // Boot the daemon (or no-op if already running) and land on about:blank.
-    // Use execFileAsync with a short timeout — we don't care about the result,
-    // only that the daemon is now up.
     await execFileAsync(
       bin,
-      ['--session', sessionId, ...stealthArgv(), 'open', 'about:blank'],
+      ['--session', sessionId, 'open', 'about:blank'],
       { cwd: workspaceDir, timeout: 15000 },
     );
   } catch {
-    // Daemon failed to start (no Chrome, wrong env, etc.) — skip silently.
+    return; // No Chrome / wrong env — skip silently.
+  }
+
+  let patchedUA = '';
+  const cdpUrl = await discoverCdpUrl(sessionId, workspaceDir);
+  if (cdpUrl) {
+    const rawUA = await fetchRawBrowserUA(cdpUrl);
+    if (rawUA.includes('HeadlessChrome/')) {
+      patchedUA = rawUA.replace('HeadlessChrome/', 'Chrome/');
+    }
+  }
+
+  // Kill the daemon so we can restart it with corrected launch flags.
+  try {
+    await execFileAsync(bin, ['--session', sessionId, 'close', '--all'],
+      { cwd: workspaceDir, timeout: 5000 });
+  } catch { /* ignore — daemon may already be gone */ }
+
+  // ── Phase 2: restart with stealth Chrome flags ────────────────────────────
+  // stealthArgv() includes --args --disable-blink-features=AutomationControlled
+  // (fixes navigator.webdriver) and --executable-path when real Chrome is found.
+  const launchArgs = ['--session', sessionId, ...stealthArgv()];
+  if (patchedUA) launchArgs.push('--user-agent', patchedUA);
+  launchArgs.push('open', 'about:blank');
+
+  try {
+    await execFileAsync(bin, launchArgs, { cwd: workspaceDir, timeout: 15000 });
+  } catch {
     return;
   }
 
-  // Daemon is up. Register stealth for all future navigations.
+  // Daemon is up with correct flags. Register stealth JS for future navigations.
   await injectStealthViaCdp(sessionId, workspaceDir);
 }
 

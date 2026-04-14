@@ -35,7 +35,8 @@ RUN npm run build
 # ── Stage 2: runtime ──────────────────────────────────────────────────────
 FROM node:20-slim AS runtime
 
-# OS deps — Chromium powers the agent-browser skill used by the agents.
+# OS deps — Chromium powers the agent-browser skill; ffmpeg is required
+# by agent-browser's `record` command to encode WebM session recordings.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
@@ -47,6 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libasound2 \
       libgbm1 \
       libxshmfence1 \
+      ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Global CLIs: claude CLI (the thing the agents actually run) and

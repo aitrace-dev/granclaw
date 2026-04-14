@@ -62,7 +62,7 @@ function ToolCallsBlock({ toolCalls, isStreaming }: { toolCalls: string[]; isStr
     <div className="w-full max-w-xl">
       <button
         onClick={() => setExpanded(e => !e)}
-        className="flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-lowest/50 transition-colors w-full text-left"
+        className="flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-container-lowest/50 transition-colors w-full text-left"
       >
         {isStreaming ? (
           <span className="h-3 w-3 rounded-full border-2 border-primary/40 border-t-primary animate-spin flex-shrink-0" />
@@ -84,7 +84,7 @@ function ToolCallsBlock({ toolCalls, isStreaming }: { toolCalls: string[]; isStr
 
       {expanded && (
         <div
-          className="mt-1 rounded bg-surface-lowest/50 overflow-y-auto scrollbar-thin"
+          className="mt-1 rounded bg-surface-container-lowest/50 overflow-y-auto scrollbar-thin"
           style={{ maxHeight: '10rem' }}
         >
           {toolCalls.map((tc, i) => (
@@ -108,7 +108,10 @@ function ToolCallsBlock({ toolCalls, isStreaming }: { toolCalls: string[]; isStr
 // ── Component ─────────────────────────────────────────────────────────────
 
 export function ChatPage() {
-  const { id: agentId = '', view: viewParam } = useParams<{ id: string; view: string }>();
+  const { id: agentId = '' } = useParams<{ id: string }>();
+  // Route is `agents/:id/*` — the splat is either "chat" or "view/:view"
+  const splat = (useParams() as Record<string, string>)['*'] ?? '';
+  const viewParam = splat === 'chat' ? 'chat' : splat.startsWith('view/') ? splat.slice(5) : undefined;
   const navigate = useNavigate();
   const mainView: MainView = viewParam && VALID_VIEWS.includes(viewParam as MainView) ? (viewParam as MainView) : 'chat';
   const setMainView = (view: MainView) => {
@@ -333,7 +336,7 @@ export function ChatPage() {
       )}
 
       {/* Left panel — agent settings (overlay on mobile, inline on desktop) */}
-      <div className={`fixed md:static top-11 bottom-0 left-0 z-40 w-72 flex-shrink-0 flex flex-col bg-surface md:bg-transparent transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}>
+      <div className={`fixed md:static top-11 bottom-0 left-0 z-40 w-72 flex-shrink-0 flex flex-col bg-surface-container-lowest md:bg-transparent transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}>
         {agent ? (
           <AgentSettingsPanel
             agentId={agentId}
@@ -349,7 +352,7 @@ export function ChatPage() {
             onViewChange={(view) => { setMainView(view); setSidebarOpen(false); }}
           />
         ) : (
-          <aside className="w-full h-full rounded-md bg-[#1e1f26] p-4">
+          <aside className="w-full h-full rounded-md bg-surface-container-lowest p-4">
             <p className="font-mono text-xs text-on-surface-variant">loading…</p>
           </aside>
         )}
@@ -359,7 +362,7 @@ export function ChatPage() {
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
         {/* Mobile sidebar toggle bar */}
-        <div className="md:hidden flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-surface-low border-b border-outline-variant/20">
+        <div className="md:hidden flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-surface-container-low border-b border-outline-variant/20">
           <button type="button" onClick={() => setSidebarOpen(o => !o)} className="flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors">
             <span className="material-symbols-outlined text-[18px]">menu</span>
             <span className="font-mono text-[11px] truncate max-w-[160px]">{agentDisplayName ?? agent?.name ?? agentId}</span>
@@ -432,12 +435,12 @@ export function ChatPage() {
                     : m.text
                       ? <div className="prose prose-invert prose-sm max-w-none
                           prose-p:my-1 prose-headings:mt-3 prose-headings:mb-1
-                          prose-code:bg-surface-lowest prose-code:px-1 prose-code:rounded prose-code:text-xs
-                          prose-pre:bg-surface-lowest prose-pre:text-xs
+                          prose-code:bg-surface-container-lowest prose-code:px-1 prose-code:rounded prose-code:text-xs
+                          prose-pre:bg-surface-container-lowest prose-pre:text-xs
                           prose-ul:my-1 prose-ol:my-1 prose-li:my-0
                           prose-a:text-secondary prose-strong:text-on-surface
                           prose-table:border-collapse prose-table:text-xs prose-table:w-full
-                          prose-th:border prose-th:border-white/10 prose-th:px-2 prose-th:py-1 prose-th:bg-surface-lowest prose-th:text-left prose-th:font-medium
+                          prose-th:border prose-th:border-white/10 prose-th:px-2 prose-th:py-1 prose-th:bg-surface-container-lowest prose-th:text-left prose-th:font-medium
                           prose-td:border prose-td:border-white/10 prose-td:px-2 prose-td:py-1">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{m.text}</ReactMarkdown>
                         </div>

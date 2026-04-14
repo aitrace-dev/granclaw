@@ -54,12 +54,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Global CLIs: claude CLI (the thing the agents actually run) and
-# agent-browser (called by the browser skill).
+# agent-browser is called by the browser skill.
 RUN npm install -g --no-audit --no-fund \
-      @anthropic-ai/claude-code \
       agent-browser \
-    && claude --version \
     && agent-browser --version
 
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \

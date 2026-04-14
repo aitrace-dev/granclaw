@@ -64,3 +64,9 @@ paths = [
   # Claude Code local settings — machine-specific, gitignored, never shipped
   '''\.claude/settings\.local\.json$''',
 ]
+
+# PostHog project API key — intentionally bundled in client-side telemetry
+# (same model as Google Analytics tracking IDs). Not a secret.
+[[allowlist.regexes]]
+description = "PostHog client-side project key"
+regex = '''phc_[A-Za-z0-9_\-]{43}'''

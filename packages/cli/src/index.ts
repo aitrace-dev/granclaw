@@ -3,7 +3,8 @@ import { execSync, exec, spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { resolveHome, seedHomeIfNeeded } from './home.js';
+import { resolveHome, seedHomeIfNeeded, getOrCreateInstallId } from './home.js';
+import { initCliTelemetry, captureCliEvent, getInstallId } from './telemetry.js';
 
 // package.json is resolved at runtime; require() avoids rootDir complaints
 // from tsc when the JSON sits outside the TypeScript rootDir.
@@ -248,11 +249,22 @@ function startServer(parsed: ParsedArgs): void {
   requireAgentBrowser();
   seedHomeIfNeeded(homeDir, templatesDir);
 
+  const installId = getOrCreateInstallId(homeDir);
+  initCliTelemetry(installId);
+
   const port = parsed.port ?? (Number(process.env.PORT) || DEFAULT_PORT);
+
+  captureCliEvent('cli_started', {
+    version: pkg.version,
+    platform: os.platform(),
+    nodeVersion: process.version,
+    port,
+  });
 
   const env = {
     ...process.env,
     GRANCLAW_HOME: homeDir,
+    GRANCLAW_INSTALL_ID: getInstallId(),
     GRANCLAW_TEMPLATES_DIR: templatesDir,
     GRANCLAW_STATIC_DIR: staticDir,
     PORT: String(port),

@@ -3,6 +3,7 @@ import net from 'net';
 import { createServer } from './orchestrator/server.js';
 import { startAllAgents, plannedAgentPorts } from './orchestrator/agent-manager.js';
 import { startScheduler } from './scheduler.js';
+import { initTelemetry, capture, shutdownTelemetry } from './telemetry.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -41,6 +42,8 @@ async function preflight(): Promise<void> {
 
 preflight()
   .then(() => {
+    initTelemetry();
+    capture('server_started', { port: PORT, nodeVersion: process.version });
     startAllAgents();
     startScheduler();
     const server = createServer();
@@ -52,3 +55,6 @@ preflight()
     console.error(err.message);
     process.exit(1);
   });
+
+process.on('SIGTERM', () => { void shutdownTelemetry(); });
+process.on('SIGINT',  () => { void shutdownTelemetry(); });

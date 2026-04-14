@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { capture } from '../lib/telemetry.ts';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -111,6 +112,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const mainView: MainView = viewParam && VALID_VIEWS.includes(viewParam as MainView) ? (viewParam as MainView) : 'chat';
   const setMainView = (view: MainView) => {
+    capture('chat_view_changed', { agentId, view });
     if (view === 'chat') navigate(`/agents/${agentId}/chat`, { replace: true });
     else navigate(`/agents/${agentId}/view/${view}`, { replace: true });
   };
@@ -240,6 +242,7 @@ export function ChatPage() {
   function handleSend() {
     const text = input.trim();
     if (!text || isSending) return;
+    capture('chat_message_sent', { agentId });
 
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', text };
     const agentMsgId = crypto.randomUUID();

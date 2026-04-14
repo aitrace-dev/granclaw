@@ -1,6 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { randomUUID } from 'crypto';
 
 /**
  * Resolve the GranClaw home directory.
@@ -44,4 +45,21 @@ export function seedHomeIfNeeded(homeDir: string, templatesDir: string): void {
     const sourceConfig = path.join(templatesDir, 'agents.config.json');
     fs.copyFileSync(sourceConfig, targetConfig);
   }
+}
+
+/**
+ * Return a stable per-install UUID, creating it on first call.
+ * Stored in <homeDir>/telemetry.json so it survives upgrades.
+ */
+export function getOrCreateInstallId(homeDir: string): string {
+  const telemetryFile = path.join(homeDir, 'telemetry.json');
+  if (fs.existsSync(telemetryFile)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(telemetryFile, 'utf8')) as { installId?: string };
+      if (data.installId) return data.installId;
+    } catch { /* fall through and create a new one */ }
+  }
+  const installId = randomUUID();
+  fs.writeFileSync(telemetryFile, JSON.stringify({ installId }), 'utf8');
+  return installId;
 }

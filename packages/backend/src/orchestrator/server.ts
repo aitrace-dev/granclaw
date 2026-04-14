@@ -56,6 +56,7 @@ import { listProviders, getProvider, saveProvider, removeProvider, clearProvider
 import { getAppConfig } from '../app-config.js';
 import { getTakeoverByTokenFromDb, clearTakeoverFromDb } from '../takeover-state.js';
 import { formatTakeoverResumeMessage } from '../takeover-messages.js';
+import { capture } from '../telemetry.js';
 
 // ── Workspace file readers ──────────────────────────────────────────────────
 
@@ -154,6 +155,7 @@ export function createServer() {
     }
     saveProvider(provider, model, apiKey);
     res.status(200).json({ ok: true });
+    capture('provider_configured', { provider });
   });
 
   app.delete('/settings/provider', (_req, res) => {
@@ -317,6 +319,7 @@ export function createServer() {
     // Start the agent
     const managed = startNewAgent(agentConfig);
     res.status(201).json({ id: agentConfig.id, wsPort: managed.wsPort });
+    capture('agent_created', { agentId: agentConfig.id, model: agentConfig.model });
   });
 
   app.delete('/agents/:id', (req, res) => {
@@ -349,6 +352,7 @@ export function createServer() {
     deleteMessages(req.params.id);
 
     res.json({ ok: true, workspaceDeleted });
+    capture('agent_deleted', { agentId: req.params.id });
   });
 
   // ── Messages ───────────────────────────────────────────────────────────────
@@ -434,6 +438,7 @@ export function createServer() {
 
     console.log(`[orchestrator] agent "${req.params.id}" wiped`);
     res.json({ ok: true });
+    capture('agent_reset', { agentId: req.params.id });
   });
 
   app.post('/agents/:id/messages', (req, res) => {
@@ -444,6 +449,7 @@ export function createServer() {
     if (!role || !content) { res.status(400).json({ error: 'role and content required' }); return; }
     const msg = saveMessage({ id: randomUUID(), agentId: id, channelId, role, content, createdAt });
     res.status(201).json(msg);
+    if (role === 'user') capture('message_sent', { agentId: id, channelId });
   });
 
   // ── Agent .env ─────────────────────────────────────────────────────────────
@@ -1064,6 +1070,7 @@ export function createServer() {
     try {
       const runId = await executeWorkflow(req.params.id, req.params.wfId, 'manual');
       res.status(201).json({ runId });
+      capture('workflow_run', { agentId: req.params.id, workflowId: req.params.wfId });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });
@@ -1108,6 +1115,7 @@ export function createServer() {
 
     const schedule = createSchedule(req.params.id, { name, message, cron, timezone, nextRun });
     res.status(201).json(schedule);
+    capture('schedule_created', { agentId: req.params.id });
   });
 
   app.get('/agents/:id/schedules/:sid', (req, res) => {

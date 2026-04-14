@@ -10,14 +10,15 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.81.0",
-    "@mariozechner/pi-ai": "^0.65.2",
     "@mariozechner/pi-agent-core": "^0.65.2",
+    "@mariozechner/pi-ai": "^0.65.2",
     "@mariozechner/pi-coding-agent": "^0.65.2",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",
     "cron-parser": "^4.9.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "posthog-node": "^5.29.2",
     "ws": "^8.17.1"
   },
   "devDependencies": {

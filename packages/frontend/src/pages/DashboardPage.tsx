@@ -58,7 +58,7 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className={`${buttonDanger} sm:opacity-0 sm:group-hover:opacity-100`}
         >
-          Delete
+          Eliminar
         </button>
       </div>
     </div>
@@ -106,7 +106,7 @@ export function DashboardPage() {
       await loadAll();
       navigate(`/agents/${result.id}/chat`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed');
+      setError(err instanceof Error ? err.message : 'Importación fallida');
     } finally {
       setImporting(false);
       if (importInputRef.current) importInputRef.current.value = '';
@@ -157,20 +157,20 @@ export function DashboardPage() {
       await createAgent(id, newName.trim(), newModel, newProvider || undefined, newWorkspace.trim() || undefined);
       navigate(`/agents/${id}/chat`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create');
+      setError(err instanceof Error ? err.message : 'Error al crear');
       setCreating(false);
     }
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete agent "${name}" (${id})?\n\nThis will stop the agent and permanently delete its workspace, including all files, vault data, and conversation history.\n\nThis cannot be undone.`)) return;
+    if (!confirm(`¿Eliminar agente "${name}" (${id})?\n\nEsto detendrá el agente y eliminará permanentemente su espacio de trabajo, incluyendo todos los archivos, datos del vault e historial de conversaciones.\n\nEsta acción no se puede deshacer.`)) return;
     await deleteAgent(id);
     loadAll();
   }
 
   if (loading) {
     return (
-      <div className="font-mono text-xs text-on-surface-variant p-8">loading agents…</div>
+      <div className="font-mono text-xs text-on-surface-variant p-8">cargando agentes…</div>
     );
   }
 
@@ -180,13 +180,13 @@ export function DashboardPage() {
       <div className="max-w-3xl mx-auto py-16 px-4">
         <div className="text-center">
           <h1 className="font-headline text-4xl font-bold text-on-surface mb-4">
-            Get started with <span className="highlight-marker">GranClaw</span>
+            Comenzar con <span className="highlight-marker">GranClaw</span>
           </h1>
           <p className="font-mono text-xs text-on-surface-variant mb-8">
-            Configure a provider and API key before creating agents.
+            Configura un proveedor y clave API antes de crear agentes.
           </p>
           <Link to="/settings" className={buttonPrimary}>
-            Configure provider
+            Configurar proveedor
           </Link>
         </div>
       </div>
@@ -194,25 +194,25 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
+    <div className="max-w-4xl mx-auto py-6 sm:py-8 px-4">
       {/* Provider warning banner */}
       {providerSettings && !providerSettings.configured && (
         <div className="rounded-xl bg-warning/10 border border-warning/30 px-4 py-3 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <p className="font-mono text-[11px] text-warning">
-            No provider configured — agents cannot run until you set one up.
+            Sin proveedor configurado — los agentes no pueden ejecutarse hasta que configures uno.
           </p>
           <Link to="/settings" className="font-label text-[11px] font-semibold uppercase tracking-widest text-primary hover:text-surface-tint flex-shrink-0">
-            Configure →
+            Configurar →
           </Link>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="font-headline text-3xl sm:text-4xl font-bold text-on-surface">Agents</h1>
+          <h1 className="font-headline text-3xl sm:text-4xl font-bold text-on-surface">Agentes</h1>
           <p className="font-mono text-[11px] text-on-surface-variant mt-1">
-            {agents.length} agent{agents.length !== 1 ? 's' : ''} configured
+            {agents.length} agente{agents.length !== 1 ? 's' : ''} configurado{agents.length !== 1 ? 's' : ''}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -229,14 +229,14 @@ export function DashboardPage() {
             className={buttonSecondary}
             title="Import an agent from a granclaw export zip"
           >
-            {importing ? 'Importing…' : '↥ Import'}
+            {importing ? 'Importando…' : '↥ Importar'}
           </button>
           <button
             onClick={() => setShowCreate(s => !s)}
             disabled={!providerSettings?.configured}
             className={buttonPrimary}
           >
-            {showCreate ? 'Cancel' : '+ New Agent'}
+            {showCreate ? 'Cancelar' : '+ Nuevo Agente'}
           </button>
         </div>
       </div>
@@ -245,18 +245,18 @@ export function DashboardPage() {
       {showCreate && (
         <div className={`${cardCls} p-5 mb-6 space-y-3`}>
           <p className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
-            Create new agent
+            Crear nuevo agente
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               className={inputMono}
-              placeholder="agent-id (lowercase, no spaces)"
+              placeholder="id-agente (minúsculas, sin espacios)"
               value={newId}
               onChange={e => setNewId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
             />
             <input
               className={baseInputCls}
-              placeholder="Display name"
+              placeholder="Nombre de visualización"
               value={newName}
               onChange={e => setNewName(e.target.value)}
             />
@@ -284,7 +284,7 @@ export function DashboardPage() {
           {appConfig.showWorkspaceDirConfig && (
             <input
               className={inputMono}
-              placeholder={`Workspace path (optional, defaults to ./workspaces/${newId || 'agent-id'})`}
+              placeholder={`Ruta del espacio de trabajo (opcional, por defecto ./workspaces/${newId || 'id-agente'})`}
               value={newWorkspace}
               onChange={e => setNewWorkspace(e.target.value)}
             />
@@ -295,7 +295,7 @@ export function DashboardPage() {
               disabled={creating || !newId.trim() || !newName.trim() || !newModel}
               className={buttonPrimary}
             >
-              {creating ? 'Creating…' : 'Create'}
+              {creating ? 'Creando…' : 'Crear'}
             </button>
             {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
@@ -308,7 +308,7 @@ export function DashboardPage() {
           <div className="text-center py-16">
             <span className="text-3xl opacity-30">🤖</span>
             <p className="font-mono text-[11px] text-on-surface-variant mt-3">
-              No agents yet. Create one to get started.
+              Sin agentes aún. Crea uno para comenzar.
             </p>
           </div>
         ) : (

@@ -10,23 +10,23 @@ import type { TaskWithComments, TaskComment, TaskStatus } from '../lib/api.ts';
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'scheduled', label: 'Scheduled' },
-  { value: 'to_review', label: 'To Review' },
-  { value: 'done', label: 'Done' },
+  { value: 'backlog', label: 'Pendiente' },
+  { value: 'in_progress', label: 'En progreso' },
+  { value: 'scheduled', label: 'Programado' },
+  { value: 'to_review', label: 'En revisión' },
+  { value: 'done', label: 'Completado' },
 ];
 
 function relativeTime(unixSeconds: number): string {
   const diffMs = Date.now() - unixSeconds * 1000;
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'just now';
+  if (diffSec < 60) return 'ahora';
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return `hace ${diffMin}m`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) return `hace ${diffHr}h`;
   const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
+  return `hace ${diffDay}d`;
 }
 
 const inputCls =
@@ -133,7 +133,7 @@ export function TaskDetailPanel({
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Delete task "${task.title}"? This cannot be undone.`)) return;
+    if (!confirm(`¿Eliminar tarea "${task.title}"? Esta acción no se puede deshacer.`)) return;
     setDeleting(true);
     try { await onDelete(task.id); } finally { setDeleting(false); }
   };
@@ -165,14 +165,14 @@ export function TaskDetailPanel({
             <span className="font-mono text-[10px] text-primary/40 flex-shrink-0">{task.id}</span>
             {saving && (
               <span className="font-mono text-[9px] text-on-surface-variant/60 animate-pulse">
-                saving…
+                guardando…
               </span>
             )}
           </div>
           <button
             onClick={onClose}
             className="text-on-surface-variant/70 hover:text-on-surface transition-colors text-[18px] leading-none flex-shrink-0"
-            aria-label="Close"
+            aria-label="Cerrar"
           >
             ×
           </button>
@@ -210,7 +210,7 @@ export function TaskDetailPanel({
             {/* Status dropdown */}
             <div className="flex flex-col gap-1.5">
               <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
-                Status
+                Estado
               </p>
               <select
                 value={task.status}
@@ -229,14 +229,14 @@ export function TaskDetailPanel({
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/60">
-                  source
+                  fuente
                 </span>
                 <SourceBadge source={task.source} />
               </div>
               {showEditedBy && task.updatedBy && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/60">
-                    edited by
+                    editado por
                   </span>
                   <SourceBadge source={task.updatedBy} />
                 </div>
@@ -246,11 +246,11 @@ export function TaskDetailPanel({
             {/* Timestamps */}
             <div className="flex flex-col gap-1">
               <p className="font-mono text-[10px] text-on-surface-variant/60">
-                <span className="text-on-surface-variant/20">created</span>{' '}
+                <span className="text-on-surface-variant/20">creado</span>{' '}
                 {relativeTime(task.createdAt)}
               </p>
               <p className="font-mono text-[10px] text-on-surface-variant/60">
-                <span className="text-on-surface-variant/20">updated</span>{' '}
+                <span className="text-on-surface-variant/20">actualizado</span>{' '}
                 {relativeTime(task.updatedAt)}
               </p>
             </div>
@@ -258,7 +258,7 @@ export function TaskDetailPanel({
             {/* Description */}
             <div className="flex flex-col gap-1.5">
               <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
-                Description
+                Descripción
               </p>
               {editingDesc ? (
                 <div className="flex flex-col gap-1.5">
@@ -267,20 +267,20 @@ export function TaskDetailPanel({
                     className={`${inputCls} min-h-[120px] resize-y font-mono text-[11px] leading-relaxed`}
                     value={descDraft}
                     onChange={(e) => setDescDraft(e.target.value)}
-                    placeholder="Add a description…"
+                    placeholder="Agregar una descripción…"
                   />
                   <div className="flex gap-1.5">
                     <button
                       onClick={commitDesc}
                       className="flex-1 rounded bg-primary/15 px-2 py-1.5 text-[10px] text-primary/70 hover:bg-primary/25 transition-colors"
                     >
-                      Save
+                      Guardar
                     </button>
                     <button
                       onClick={() => { setEditingDesc(false); setDescDraft(task.description); }}
                       className="rounded bg-surface-container px-2 py-1.5 text-[10px] text-on-surface-variant/70 hover:text-on-surface-variant/70 transition-colors"
                     >
-                      Cancel
+                      Cancelar
                     </button>
                   </div>
                 </div>
@@ -296,7 +296,7 @@ export function TaskDetailPanel({
                     </div>
                   ) : (
                     <p className="font-mono text-[11px] text-on-surface-variant/25 italic group-hover:text-on-surface-variant/70 transition-colors">
-                      No description — click to add
+                      Sin descripción — clic para agregar
                     </p>
                   )}
                 </div>
@@ -306,11 +306,11 @@ export function TaskDetailPanel({
             {/* Comments */}
             <div className="flex flex-col gap-0">
               <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-1">
-                Comments ({task.comments.length})
+                Comentarios ({task.comments.length})
               </p>
               {task.comments.length === 0 && (
                 <p className="font-mono text-[10px] text-on-surface-variant/25 italic py-2">
-                  No comments yet
+                  Sin comentarios aún
                 </p>
               )}
               {task.comments.map((c) => (
@@ -321,11 +321,11 @@ export function TaskDetailPanel({
             {/* Add comment */}
             <div className="flex flex-col gap-1.5">
               <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
-                Add comment
+                Agregar comentario
               </p>
               <textarea
                 className={`${inputCls} min-h-[72px] resize-none font-mono text-[11px] leading-relaxed`}
-                placeholder="Write a comment… (markdown supported)"
+                placeholder="Escribe un comentario… (markdown soportado)"
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
               />
@@ -334,21 +334,21 @@ export function TaskDetailPanel({
                 onClick={submitComment}
                 className="self-end rounded bg-primary/15 px-3 py-1.5 text-[10px] text-primary/70 hover:bg-primary/25 transition-colors disabled:opacity-30"
               >
-                {submittingComment ? 'Posting…' : 'Post comment'}
+                {submittingComment ? 'Publicando…' : 'Publicar comentario'}
               </button>
             </div>
 
             {/* Danger zone */}
             <div className="mt-2 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
               <p className="text-[8px] uppercase tracking-[0.18em] text-error/30 font-semibold mb-2">
-                Danger zone
+                Zona peligrosa
               </p>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
                 className="w-full rounded bg-red-950/15 px-3 py-2 text-left font-mono text-[11px] text-error/60 transition-all hover:bg-red-950/30 hover:text-error disabled:opacity-20"
               >
-                {deleting ? 'deleting…' : '[DANGEROUS] Delete task'}
+                {deleting ? 'eliminando…' : '[PELIGROSO] Eliminar tarea'}
               </button>
             </div>
 

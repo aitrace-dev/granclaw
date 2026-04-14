@@ -71,18 +71,18 @@ function RunMessages({ agentId, run, onBack }: { agentId: string; run: ScheduleR
         onClick={onBack}
         className="text-[10px] text-on-surface-variant hover:text-on-surface transition-colors self-start"
       >
-        ← Back to runs
+        ← Volver a ejecuciones
       </button>
 
       <div className="text-[9px] font-mono text-on-surface-variant/60">
         {new Date(run.startedAt).toLocaleString()} · {run.channelId}
       </div>
 
-      {loading && <div className="text-xs text-on-surface-variant/70">Loading...</div>}
+      {loading && <div className="text-xs text-on-surface-variant/70">Cargando...</div>}
 
       {!loading && messages.length === 0 && (
         <div className="text-xs text-on-surface-variant/70 animate-pulse">
-          Waiting for response...
+          Esperando respuesta...
         </div>
       )}
 
@@ -161,17 +161,17 @@ function ScheduleRuns({
           disabled={triggering}
           className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-on-surface-variant/60 hover:text-on-surface transition-colors disabled:opacity-40"
         >
-          {triggering ? 'Starting...' : 'Run now'}
+          {triggering ? 'Iniciando...' : 'Ejecutar ahora'}
         </button>
       </div>
 
       <span className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/70 font-medium">
-        Run history
+        Historial de ejecuciones
       </span>
 
       {runs.length === 0 && (
         <p className="text-[10px] text-on-surface-variant/60">
-          No runs yet.
+          Sin ejecuciones aún.
         </p>
       )}
 
@@ -218,7 +218,7 @@ export function ScheduleList({ agentId }: { agentId: string }) {
   }
 
   async function handleDelete(s: Schedule) {
-    if (!confirm(`Delete schedule "${s.name}"?`)) return;
+    if (!confirm(`¿Eliminar programado "${s.name}"?`)) return;
     await deleteScheduleApi(agentId, s.id);
     load();
   }
@@ -234,7 +234,7 @@ export function ScheduleList({ agentId }: { agentId: string }) {
   }
 
   if (loading) {
-    return <div className="text-on-surface-variant/70 text-xs p-6">Loading schedules...</div>;
+    return <div className="text-on-surface-variant/70 text-xs p-6">Cargando programados...</div>;
   }
 
   if (schedules.length === 0) {
@@ -242,20 +242,20 @@ export function ScheduleList({ agentId }: { agentId: string }) {
       <div className="flex flex-col items-center justify-center h-full text-center p-6 gap-3">
         <span className="text-3xl opacity-30">⏰</span>
         <p className="text-on-surface-variant text-xs">
-          No schedules yet. Ask the agent to set up recurring tasks.
+          Sin programados aún. Pídele al agente que configure tareas recurrentes.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 space-y-2">
+    <div className="p-3 sm:p-4 space-y-2 min-w-0">
       <div className="flex items-center justify-between mb-3">
         <span className="text-[11px] uppercase tracking-[0.14em] text-on-surface-variant/60 font-medium">
-          Schedules
+          Programados
         </span>
         <span className="text-[9px] font-mono text-on-surface-variant/60">
-          {schedules.filter(s => s.status === 'active').length} active
+          {schedules.filter(s => s.status === 'active').length} activo{schedules.filter(s => s.status === 'active').length !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -279,11 +279,11 @@ export function ScheduleList({ agentId }: { agentId: string }) {
             <span title={s.cron}>{cronToHuman(s.cron)}</span>
             <span>{s.timezone}</span>
             <span title={s.nextRun ? new Date(s.nextRun).toISOString() : ''}>
-              Next: {relativeTime(s.nextRun)}
+              Próximo: {relativeTime(s.nextRun)}
             </span>
             {s.lastRun && (
               <span title={new Date(s.lastRun).toISOString()}>
-                Last: {relativeTime(s.lastRun)}
+                Último: {relativeTime(s.lastRun)}
               </span>
             )}
           </div>
@@ -293,13 +293,13 @@ export function ScheduleList({ agentId }: { agentId: string }) {
               onClick={() => toggleStatus(s)}
               className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-on-surface-variant/60 hover:text-on-surface transition-colors"
             >
-              {s.status === 'active' ? 'Pause' : 'Resume'}
+              {s.status === 'active' ? 'Pausar' : 'Reanudar'}
             </button>
             <button
               onClick={() => handleDelete(s)}
               className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-error/60 hover:text-error transition-colors ml-auto"
             >
-              Delete
+              Eliminar
             </button>
           </div>
         </div>

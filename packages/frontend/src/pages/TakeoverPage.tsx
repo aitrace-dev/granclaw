@@ -304,13 +304,13 @@ export function TakeoverPage() {
       <div className="flex h-screen items-center justify-center bg-background font-body text-on-surface px-6">
         <div className="text-center max-w-md">
           <p className="text-[11px] font-label uppercase tracking-[0.15em] text-secondary/70 mb-2">
-            takeover
+            toma de control
           </p>
           <h1 className="font-headline text-[32px] leading-tight text-on-surface mb-3">
-            Session expired
+            Sesión expirada
           </h1>
           <p className="text-[15px] leading-relaxed text-on-surface-variant italic">
-            This takeover link has already been used or timed out.
+            Este enlace de toma de control ya fue usado o expiró.
           </p>
         </div>
       </div>
@@ -322,13 +322,13 @@ export function TakeoverPage() {
       <div className="flex h-screen items-center justify-center bg-background font-body text-on-surface px-6">
         <div className="text-center max-w-md">
           <p className="text-[11px] font-label uppercase tracking-[0.15em] text-primary/70 mb-2">
-            complete
+            completo
           </p>
           <h1 className="font-headline text-[32px] leading-tight text-on-surface mb-3">
-            Returned control to the agent
+            Control devuelto al agente
           </h1>
           <p className="text-[15px] leading-relaxed text-on-surface-variant italic">
-            You can close this tab.
+            Puedes cerrar esta pestaña.
           </p>
         </div>
       </div>
@@ -339,7 +339,7 @@ export function TakeoverPage() {
     return (
       <div className="flex h-screen items-center justify-center bg-background font-body">
         <p className="font-mono text-[11px] text-on-surface-variant/60 animate-pulse">
-          connecting…
+          conectando…
         </p>
       </div>
     );
@@ -356,7 +356,7 @@ export function TakeoverPage() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-label uppercase tracking-[0.15em] text-primary/70 mb-1">
-            The agent needs your help
+            El agente necesita tu ayuda
           </p>
           <p className="font-headline text-[17px] leading-snug text-on-surface">
             {info.reason}
@@ -391,7 +391,7 @@ export function TakeoverPage() {
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
           <span className="text-[10px] font-label uppercase tracking-[0.15em] text-secondary">
-            live
+            en vivo
           </span>
         </div>
       </div>
@@ -424,7 +424,7 @@ export function TakeoverPage() {
           />
         ) : (
           <p className="font-mono text-[10px] text-on-surface-variant/50 animate-pulse">
-            waiting for browser stream…
+            esperando transmisión del navegador…
           </p>
         )}
       </div>
@@ -436,7 +436,7 @@ export function TakeoverPage() {
       <div className="flex items-end gap-4 px-8 py-5 bg-surface-container-low flex-shrink-0">
         <div className="flex-1 flex flex-col">
           <label className="text-[10px] font-label uppercase tracking-[0.15em] text-on-surface-variant/70 mb-1">
-            What did you do? <span className="italic text-on-surface-variant/50">(optional)</span>
+            ¿Qué hiciste? <span className="italic text-on-surface-variant/50">(opcional)</span>
           </label>
           <input
             type="text"
@@ -449,7 +449,7 @@ export function TakeoverPage() {
                 void handleComplete();
               }
             }}
-            placeholder="Describe your action for the agent…"
+            placeholder="Describe tu acción para el agente…"
             disabled={submitting}
             className="bg-transparent border-0 border-b border-outline-variant/30 focus:border-primary focus:outline-none font-body text-[15px] text-on-surface placeholder:text-on-surface-variant/40 placeholder:italic px-0 py-2 disabled:opacity-50"
           />
@@ -459,7 +459,7 @@ export function TakeoverPage() {
           disabled={submitting}
           className="flex-shrink-0 rounded-sm bg-primary text-on-primary font-label text-[11px] uppercase tracking-[0.15em] px-5 py-3 hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Returning…' : 'Completed'}
+          {submitting ? 'Devolviendo…' : 'Completado'}
         </button>
       </div>
     </div>

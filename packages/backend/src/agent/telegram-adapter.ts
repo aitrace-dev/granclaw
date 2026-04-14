@@ -214,6 +214,17 @@ export class TelegramAdapter {
     state.responseBuffer += text;
   }
 
+  /** Called from process.ts when the agent emits a takeover_requested chunk. */
+  notifyTakeover(channelId: string, takeoverUrl: string) {
+    const state = this.chats.get(channelId);
+    if (!state) return;
+    this.bot
+      .sendMessage(state.chatId, `Takeover link: ${takeoverUrl}`)
+      .catch((err: Error) => {
+        console.warn(`[agent:${this.agentId}] Telegram takeover notify failed:`, err.message);
+      });
+  }
+
   // ── Finalize + flush ─────────────────────────────────────────────────────
 
   /**
@@ -275,9 +286,7 @@ export class TelegramAdapter {
   private async sendReply(chatId: number, text: string): Promise<void> {
     const MAX = 4000;
     if (text.length <= MAX) {
-      await this.bot.sendMessage(chatId, text, { parse_mode: 'Markdown' }).catch(() =>
-        this.bot.sendMessage(chatId, text)
-      );
+      await this.bot.sendMessage(chatId, text).catch(() => {});
       return;
     }
     let remaining = text;

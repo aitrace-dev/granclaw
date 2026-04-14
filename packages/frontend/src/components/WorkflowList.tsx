@@ -75,12 +75,12 @@ export function WorkflowList({ agentId }: { agentId: string }) {
   };
 
   return (
-    <div className="p-4">
-      <h2 className="font-headline text-xl font-bold text-on-surface mb-4">Workflows</h2>
+    <div className="p-3 sm:p-4 min-w-0">
+      <h2 className="font-headline text-xl font-bold text-on-surface mb-4">Flujos de trabajo</h2>
 
       {workflows.length === 0 ? (
         <p className="font-mono text-xs text-on-surface-variant">
-          No workflows yet. Ask the agent to create one via chat.
+          Sin flujos de trabajo aún. Pídele al agente que cree uno via chat.
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -102,7 +102,7 @@ export function WorkflowList({ agentId }: { agentId: string }) {
                   disabled={running === wf.id || wf.status !== 'active'}
                   className={buttonPrimary}
                 >
-                  {running === wf.id ? 'Running…' : 'Run'}
+                  {running === wf.id ? 'Ejecutando…' : 'Ejecutar'}
                 </button>
               </div>
               {wf.description && (
@@ -111,7 +111,7 @@ export function WorkflowList({ agentId }: { agentId: string }) {
                 </p>
               )}
               <div className="mt-1 font-mono text-[10px] text-on-surface-variant/60">
-                {wf.id} · Created {new Date(wf.createdAt).toLocaleDateString()}
+                {wf.id} · Creado {new Date(wf.createdAt).toLocaleDateString()}
               </div>
             </div>
           ))}

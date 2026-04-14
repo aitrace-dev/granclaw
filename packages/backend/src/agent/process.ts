@@ -183,6 +183,9 @@ function main() {
             telegramAdapter!.appendChunk(job.channelId, chunk.text);
           }
         }
+        if ((chunk as any).type === 'takeover_requested' && isTelegramJob) {
+          telegramAdapter!.notifyTakeover(job.channelId, (chunk as any).takeoverUrl);
+        }
         if (chunk.type === 'tool_call') {
           const tcString = `${chunk.tool}(${JSON.stringify(chunk.input)})`;
           toolCallCount++;

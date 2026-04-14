@@ -126,21 +126,27 @@ export function stealthArgv(): string[] {
 // ── CDP stealth injection ─────────────────────────────────────────────────────
 
 /**
- * Poll for the browser-level CDP WebSocket URL. Returns null if the daemon
- * isn't running or doesn't become ready within ~2.4 s.
+ * Poll for the browser-level CDP WebSocket URL.
+ *
+ * @param retries How many attempts to make (default 8, ~2.4 s). Pass 1 for
+ *                a fast single-shot check used by the background watcher.
  */
-async function discoverCdpUrl(sessionId: string, workspaceDir: string): Promise<string | null> {
+async function discoverCdpUrl(
+  sessionId: string,
+  workspaceDir: string,
+  retries = 8,
+): Promise<string | null> {
   const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < retries; i++) {
     try {
       const { stdout } = await execFileAsync(bin, ['--session', sessionId, 'get', 'cdp-url'], {
         cwd: workspaceDir,
-        timeout: 3000,
+        timeout: 2000,
       });
       const url = stdout.trim();
       if (url.startsWith('ws://') || url.startsWith('wss://')) return url;
     } catch { /* daemon not ready yet */ }
-    await new Promise((r) => setTimeout(r, 300));
+    if (i < retries - 1) await new Promise((r) => setTimeout(r, 300));
   }
   return null;
 }
@@ -238,6 +244,49 @@ export async function injectStealthViaCdp(
   } catch (err) {
     console.warn(`[stealth] CDP injection failed for "${sessionId}":`, err);
   }
+}
+
+// ── Daemon pre-warm ───────────────────────────────────────────────────────────
+
+/**
+ * Pre-warm the agent's browser daemon and register stealth before any
+ * agent navigation. Call this once at agent process startup for agents
+ * that have the browser tool enabled.
+ *
+ * Steps:
+ *   1. Start the daemon with `agent-browser open about:blank` (no-op if
+ *      already running — agent-browser reuses the existing daemon).
+ *   2. Inject Page.addScriptToEvaluateOnNewDocument via CDP so every
+ *      subsequent navigation the agent makes will have stealth running
+ *      before the page's own scripts.
+ *
+ * This is a one-time setup. If the agent later kills its daemon via
+ * `browser close --all`, the next daemon start won't have stealth until
+ * the live view relay re-attaches (which also injects stealth).
+ */
+export async function prewarmStealthDaemon(
+  sessionId: string,
+  workspaceDir: string,
+): Promise<void> {
+  if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return;
+
+  try {
+    const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+    // Boot the daemon (or no-op if already running) and land on about:blank.
+    // Use execFileAsync with a short timeout — we don't care about the result,
+    // only that the daemon is now up.
+    await execFileAsync(
+      bin,
+      ['--session', sessionId, ...stealthArgv(), 'open', 'about:blank'],
+      { cwd: workspaceDir, timeout: 15000 },
+    );
+  } catch {
+    // Daemon failed to start (no Chrome, wrong env, etc.) — skip silently.
+    return;
+  }
+
+  // Daemon is up. Register stealth for all future navigations.
+  await injectStealthViaCdp(sessionId, workspaceDir);
 }
 
 // ── Test helpers ──────────────────────────────────────────────────────────────

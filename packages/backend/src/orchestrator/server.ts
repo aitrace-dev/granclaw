@@ -50,7 +50,7 @@ import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
 import { listSessions, getSession as getBrowserSession, getVideoPath } from '../browser-sessions.js';
 import { handleBrowserLiveUpgrade } from './browser-live.js';
-import { stealthArgv, injectStealthViaCdp } from '../browser/stealth.js';
+import { stealthArgv, injectStealthViaCdp, prewarmStealthDaemon } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
 import { getAppConfig } from '../app-config.js';

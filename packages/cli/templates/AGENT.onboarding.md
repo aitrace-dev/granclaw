@@ -36,7 +36,7 @@ This is the single most important step. **You are not onboarded until both files
 
 ### 4a. `write` SOUL.md
 
-Your complete identity in a single markdown file:
+Your complete identity in a single markdown file. **The very first line must be `# <Your Name>` — the exact name the user chose, as an H1 heading.** This is how the system knows your display name. Do not use "SOUL.md" or any other text as the heading.
 
 - **Name** — what the user chose in Step 2
 - **Purpose** — the mission from Step 2

@@ -28,6 +28,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 
 // ── Extension dir ─────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ function resolveExtensionDir(): string | null {
 
 export const STEALTH_EXTENSION_DIR = resolveExtensionDir();
 
-// ── Chrome binary detection ───────────────────────────────────────────────────
+// ── Chrome binary detection + UA derivation ───────────────────────────────────
 
 let cachedChromePath: string | null | undefined;
 function detectChromePath(): string | null {
@@ -98,6 +99,39 @@ function detectChromePath(): string | null {
   return null;
 }
 
+/**
+ * Detect the installed Chrome/Chromium version and return a non-headless UA string.
+ * e.g. "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+ *
+ * Returns null if Chrome can't be found or version can't be parsed.
+ */
+let cachedChromeUA: string | null | undefined;
+function detectChromeUA(): string | null {
+  if (cachedChromeUA !== undefined) return cachedChromeUA;
+
+  const override = process.env.GRANCLAW_STEALTH_UA;
+  if (override) { cachedChromeUA = override; return override; }
+
+  const chromePath = detectChromePath();
+  if (!chromePath) { cachedChromeUA = null; return null; }
+
+  try {
+    const output = execFileSync(chromePath, ['--version'], { encoding: 'utf8', timeout: 5000 });
+    // "Chromium 147.0.7280.66 built on Debian..." or "Google Chrome 120.0.6099.109"
+    const match = output.match(/(\d+)\.\d+\.\d+\.\d+/);
+    if (!match) { cachedChromeUA = null; return null; }
+    const major = match[1];
+    const platform = process.platform === 'darwin'
+      ? 'Macintosh; Intel Mac OS X 10_15_7'
+      : 'X11; Linux x86_64';
+    cachedChromeUA = `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+    return cachedChromeUA;
+  } catch {
+    cachedChromeUA = null;
+    return null;
+  }
+}
+
 // ── argv builder ──────────────────────────────────────────────────────────────
 
 /**
@@ -111,7 +145,17 @@ export function stealthArgv(): string[] {
   const argv: string[] = [
     '--args', '--disable-blink-features=AutomationControlled',
     '--args', '--enable-extensions',
+    // Enable the V8 heap memory API (performance.memory) — disabled by default in headless.
+    '--args', '--enable-precise-memory-info',
   ];
+
+  // Override the UA at the Chrome level. navigator.userAgent in Chrome 120+ has
+  // a non-configurable prototype property that JS Object.defineProperty cannot
+  // patch — the only reliable fix is to set it before the browser starts.
+  const ua = detectChromeUA();
+  if (ua) {
+    argv.push('--args', `--user-agent=${ua}`);
+  }
 
   if (STEALTH_EXTENSION_DIR) {
     argv.push('--args', `--load-extension=${STEALTH_EXTENSION_DIR}`);
@@ -131,4 +175,5 @@ export function stealthArgv(): string[] {
 /** @internal */
 export function __resetStealthCacheForTests(): void {
   cachedChromePath = undefined;
+  cachedChromeUA = undefined;
 }

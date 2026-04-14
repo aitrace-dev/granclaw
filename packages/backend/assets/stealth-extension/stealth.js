@@ -294,10 +294,12 @@
 
   // ── 12b. performance.memory (CHR_MEMORY) ───────────────────────────────
   // Sannysoft's CHR_MEMORY test reads performance.memory — the non-standard
-  // V8 heap API. In a constrained Docker container jsHeapSizeLimit is very
-  // low, which detectors flag. Spoof realistic desktop-tier values.
+  // V8 heap API. It is disabled by default in headless Chrome (returns undefined).
+  // We enable it at the Chrome level via --enable-precise-memory-info, but also
+  // define it here as a belt-and-braces fallback. Do NOT guard on !performance.memory
+  // — the whole point is to make it exist when it otherwise wouldn't.
   safe(() => {
-    if (typeof performance === 'undefined' || !performance.memory) return;
+    if (typeof performance === 'undefined') return;
     const fakeMem = {
       jsHeapSizeLimit:  2172649472, // ~2 GB — typical 64-bit Chrome desktop
       totalJSHeapSize:   67108864,  // 64 MB used
@@ -307,8 +309,9 @@
       Object.defineProperty(performance, 'memory', {
         get: () => fakeMem,
         configurable: true,
+        enumerable: true,
       });
-    } catch (_) { /* non-configurable on this Chrome build — leave as-is */ }
+    } catch (_) { /* already defined and non-configurable — --enable-precise-memory-info handles it */ }
   });
 
   // ── 13. screen dimensions ───────────────────────────────────────────────

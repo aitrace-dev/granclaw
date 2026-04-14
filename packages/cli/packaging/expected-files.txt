@@ -31,6 +31,7 @@ dist/backend/takeover-messages.js
 dist/backend/takeover-state.js
 dist/backend/takeover-timeout.js
 dist/backend/tasks-db.js
+dist/backend/telemetry.js
 dist/backend/usage-scanner.js
 dist/backend/workflows-db.js
 dist/backend/workflows/runner.js
@@ -42,6 +43,7 @@ dist/frontend/granclaw-logo.png
 dist/frontend/index.html
 dist/home.js
 dist/index.js
+dist/telemetry.js
 package.json
 templates/AGENT.onboarding.md
 templates/SYSTEM.md

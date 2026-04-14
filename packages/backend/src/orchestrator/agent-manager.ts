@@ -51,6 +51,13 @@ export function startAllAgents(): void {
     const child = spawnAgent(agent, wsPort);
     registry.set(agent.id, { config: agent, wsPort, bbPort: null, pid: child.pid });
     console.log(`[orchestrator] agent "${agent.id}" started on ws port ${wsPort} (pid ${child.pid})`);
+
+    // Pre-warm the browser daemon for browser-capable agents so stealth is
+    // registered before the first navigation. Fire-and-forget.
+    if (agent.allowedTools?.includes('browser')) {
+      const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
+      void prewarmStealthDaemon(agent.id, workspaceDir);
+    }
   });
 }
 
@@ -75,6 +82,11 @@ export function restartAgent(agentId: string): void {
   const child = spawnAgent(agent, managed.wsPort);
   registry.set(agentId, { config: agent, wsPort: managed.wsPort, bbPort: null, pid: child.pid });
   console.log(`[orchestrator] agent "${agentId}" restarted (pid ${child.pid})`);
+
+  if (agent.allowedTools?.includes('browser')) {
+    const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
+    void prewarmStealthDaemon(agent.id, workspaceDir);
+  }
 }
 
 /**

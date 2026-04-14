@@ -39,7 +39,7 @@ import {
   finalizeSession as finalizeBrowserSession,
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
-import { stealthArgv } from '../browser/stealth.js';
+import { stealthArgv, injectStealthViaCdp } from '../browser/stealth.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -761,6 +761,11 @@ export async function runAgent(
           }
           if (!browserState.handle.recordingStarted) {
             await startBrowserRecording(browserState.handle);
+            // Re-inject stealth into whatever daemon was just booted by
+            // startBrowserRecording. Page.addScriptToEvaluateOnNewDocument
+            // registered here will run before every subsequent navigation
+            // on this page target, so stealth patches survive open commands.
+            void injectStealthViaCdp(agent.id, workspaceDir);
           }
 
           // Build argv: --session <id> [--profile <path>] [--extension ...] [--executable-path ...] <command> <args...>
@@ -782,6 +787,10 @@ export async function runAgent(
               maxBuffer: 10 * 1024 * 1024,
             });
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
+            // Re-inject stealth after 'open' — agent-browser may create a new
+            // page target for the navigation, and new targets don't inherit
+            // Page.addScriptToEvaluateOnNewDocument from previous targets.
+            if (command === 'open') void injectStealthViaCdp(agent.id, workspaceDir);
             const out = stdout.trim() || stderr.trim() || 'ok';
             return { content: [{ type: 'text' as const, text: out }] };
           } catch (err) {

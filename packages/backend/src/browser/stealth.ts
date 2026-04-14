@@ -340,6 +340,11 @@ export async function prewarmStealthDaemon(
   // ── Phase 2: restart with stealth Chrome flags ────────────────────────────
   // stealthArgv() includes --args --disable-blink-features=AutomationControlled
   // (fixes navigator.webdriver) and --executable-path when real Chrome is found.
+  // Persist the patched UA as a process-level env var so that every subsequent
+  // agent-browser call in this process (including startBrowserRecording's
+  // `record start`) inherits the correct UA even if the daemon restarts.
+  if (patchedUA) process.env.AGENT_BROWSER_USER_AGENT = patchedUA;
+
   const launchArgs = ['--session', sessionId, ...stealthArgv()];
   if (patchedUA) launchArgs.push('--user-agent', patchedUA);
   launchArgs.push('open', 'about:blank');

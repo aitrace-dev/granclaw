@@ -265,4 +265,20 @@
       configurable: true,
     });
   });
+
+  // ── 13. screen dimensions ───────────────────────────────────────────────
+  // Headless Chrome defaults to 800×600 which is trivially detected.
+  // Spoof a common 1920×1080 desktop resolution.
+  safe(() => {
+    const W = 1920, H = 1080;
+    const props = {
+      width:       { get: () => W, configurable: true },
+      height:      { get: () => H, configurable: true },
+      availWidth:  { get: () => W, configurable: true },
+      availHeight: { get: () => H - 40, configurable: true }, // taskbar ~40px
+      colorDepth:  { get: () => 24, configurable: true },
+      pixelDepth:  { get: () => 24, configurable: true },
+    };
+    Object.defineProperties(Screen.prototype, props);
+  });
 })();

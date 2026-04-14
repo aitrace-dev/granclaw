@@ -42,6 +42,25 @@ npm run dev                   # backend :3001 + frontend :5173
 
 ---
 
+## Separate git repos: enterprise/ and landing/
+
+**`enterprise/` and `landing/` are NOT part of this repo.** They are gitignored and each has its own git history.
+
+When making changes in those directories:
+- `cd enterprise/` (or `cd landing/`) before running any `git` command
+- Commits and pushes must happen from inside that directory
+- They push to their own remotes (`granclaw-enterprise`, `granclaw-landing`), not this repo
+
+```bash
+# Example: commit and push a change in enterprise/
+cd /Users/juanroldan/develop/aitrace/agent-brother/enterprise
+git add app/app/dashboard/page.tsx
+git commit -m "fix: ..."
+git push origin main
+```
+
+---
+
 ## Architecture in one paragraph
 
 The **backend** (`packages/backend`) is an Express + WebSocket server. When a user sends a message through the dashboard, the backend spawns the `claude` CLI as a child process with `--output-format stream-json`, parses the streamed JSON output, and forwards each chunk back to the browser over WebSocket in real time. Session IDs are persisted in SQLite so conversations survive restarts. Every agent action (message in, tool call, tool result) is logged to SQLite. All agent configuration lives in `agents.config.json` at the root — no config in the database.

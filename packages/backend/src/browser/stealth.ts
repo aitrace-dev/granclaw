@@ -149,12 +149,15 @@ export function stealthArgv(): string[] {
     '--args', '--enable-precise-memory-info',
   ];
 
-  // Override the UA at the Chrome level. navigator.userAgent in Chrome 120+ has
-  // a non-configurable prototype property that JS Object.defineProperty cannot
-  // patch — the only reliable fix is to set it before the browser starts.
+  // Override the UA using agent-browser's dedicated --user-agent flag (not via
+  // --args). navigator.userAgent in Chrome 120+ has a non-configurable prototype
+  // property that JS Object.defineProperty cannot patch, so the only reliable
+  // fix is to set it at the browser level. We use the top-level flag rather than
+  // --args because --args values are comma-separated and a UA string contains
+  // commas/spaces that would be mis-parsed.
   const ua = detectChromeUA();
   if (ua) {
-    argv.push('--args', `--user-agent=${ua}`);
+    argv.push('--user-agent', ua);
   }
 
   if (STEALTH_EXTENSION_DIR) {

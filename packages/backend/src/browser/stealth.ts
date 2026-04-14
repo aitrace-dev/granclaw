@@ -194,28 +194,43 @@ async function fetchPageTargets(
 
 /**
  * Open a CDP WebSocket to a single page target and:
- *   1. Register the stealth script for all future navigations via
+ *   1. Override the User-Agent at the browser target level via
+ *      Emulation.setUserAgentOverride — patches both HTTP headers and
+ *      navigator.userAgent without relying on Chrome launch flags or JS
+ *      property overrides (more reliable than both).
+ *   2. Register the stealth script for all future navigations via
  *      Page.addScriptToEvaluateOnNewDocument.
- *   2. Run it immediately on the current document via Runtime.evaluate so
+ *   3. Run it immediately on the current document via Runtime.evaluate so
  *      patches are live without a reload.
- *
- * User-Agent patching is handled at the Chrome level via --user-agent in
- * prewarmStealthDaemon, so it applies to every page target automatically.
  */
-function injectIntoPage(wsUrl: string, script: string): Promise<void> {
+function injectIntoPage(wsUrl: string, script: string, userAgent?: string): Promise<void> {
   return new Promise((resolve) => {
     const cleanup = (ws: WebSocket) => { try { ws.close(); } catch { /* ignore */ } resolve(); };
     const timer = setTimeout(() => cleanup(ws), 5000);
     const ws = new WebSocket(wsUrl);
 
     ws.on('open', () => {
+      // Patch UA at the CDP/browser level — overrides both HTTP User-Agent header
+      // and navigator.userAgent. More reliable than --user-agent flag (only applies
+      // at daemon boot) or JS Object.defineProperty (fails if property non-configurable).
+      if (userAgent) {
+        ws.send(JSON.stringify({
+          id: 1,
+          method: 'Emulation.setUserAgentOverride',
+          params: {
+            userAgent,
+            acceptLanguage: 'en-US,en;q=0.9',
+            platform: 'Linux x86_64',
+          },
+        }));
+      }
       ws.send(JSON.stringify({
-        id: 1,
+        id: 2,
         method: 'Page.addScriptToEvaluateOnNewDocument',
         params: { source: script },
       }));
       ws.send(JSON.stringify({
-        id: 2,
+        id: 3,
         method: 'Runtime.evaluate',
         params: { expression: script, returnByValue: false },
       }));
@@ -231,12 +246,17 @@ function injectIntoPage(wsUrl: string, script: string): Promise<void> {
  * Inject the stealth script into every open page of the agent's browser
  * session via CDP. Call this after the agent-browser daemon has started.
  *
+ * @param userAgent  Patched UA string (HeadlessChrome → Chrome). When provided,
+ *                   Emulation.setUserAgentOverride is sent to each page target so
+ *                   both HTTP headers and navigator.userAgent are corrected.
+ *
  * Best-effort: any error is swallowed so a CDP failure never breaks the
  * caller's main flow.
  */
 export async function injectStealthViaCdp(
   sessionId: string,
   workspaceDir: string,
+  userAgent?: string,
 ): Promise<void> {
   if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return;
   if (!STEALTH_EXTENSION_DIR) return;
@@ -244,14 +264,17 @@ export async function injectStealthViaCdp(
   const scriptPath = path.join(STEALTH_EXTENSION_DIR, 'stealth.js');
   if (!fs.existsSync(scriptPath)) return;
 
+  // Resolve UA: explicit arg > env var set by prewarm > nothing
+  const ua = userAgent || process.env.AGENT_BROWSER_USER_AGENT || undefined;
+
   try {
     const script = fs.readFileSync(scriptPath, 'utf-8');
     const cdpUrl = await discoverCdpUrl(sessionId, workspaceDir);
     if (!cdpUrl) return;
 
     const pages = await fetchPageTargets(cdpUrl);
-    await Promise.all(pages.map((p) => injectIntoPage(p.webSocketDebuggerUrl, script)));
-    console.log(`[stealth] injected into ${pages.length} page(s) for session "${sessionId}"`);
+    await Promise.all(pages.map((p) => injectIntoPage(p.webSocketDebuggerUrl, script, ua)));
+    console.log(`[stealth] injected into ${pages.length} page(s) for session "${sessionId}"${ua ? ' (UA override applied)' : ''}`);
   } catch (err) {
     console.warn(`[stealth] CDP injection failed for "${sessionId}":`, err);
   }
@@ -373,7 +396,9 @@ export async function prewarmStealthDaemon(
   }
 
   // Daemon is up with correct flags. Register stealth JS for future navigations.
-  await injectStealthViaCdp(sessionId, workspaceDir);
+  // Pass patchedUA so Emulation.setUserAgentOverride is sent to every page target,
+  // fixing navigator.userAgent at the CDP level regardless of --user-agent flag support.
+  await injectStealthViaCdp(sessionId, workspaceDir, patchedUA || undefined);
 }
 
 // ── Test helpers ──────────────────────────────────────────────────────────────

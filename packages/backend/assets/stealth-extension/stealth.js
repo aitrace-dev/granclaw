@@ -220,15 +220,26 @@
 
   // ── 10. navigator.userAgent — strip HeadlessChrome ─────────────────────
   // Headless Chrome embeds "HeadlessChrome/" in the UA string instead of
-  // "Chrome/". Strip it here so JS-readable UA matches a real user session.
-  // Network-level UA is handled at launch via --user-agent; this covers
-  // all runtime reads (navigator.userAgent, performance.getEntriesByType, etc.)
+  // "Chrome/". Primary fix is Emulation.setUserAgentOverride via CDP (applied
+  // in stealth.ts before this script runs). This JS patch is a belt-and-braces
+  // fallback covering any reads that bypass the CDP override.
+  // Two-level attempt: prototype first (cleanest), then instance-level if the
+  // prototype property is non-configurable (Chrome 120+ tightened this).
   safe(() => {
     const realUA = navigator.userAgent.replace('HeadlessChrome/', 'Chrome/');
-    Object.defineProperty(Navigator.prototype, 'userAgent', {
-      get: () => realUA,
-      configurable: true,
-    });
+    if (realUA === navigator.userAgent) return; // CDP override already applied — no-op
+    try {
+      Object.defineProperty(Navigator.prototype, 'userAgent', {
+        get: () => realUA,
+        configurable: true,
+      });
+    } catch (_) {
+      // Prototype descriptor is non-configurable — fall back to instance property
+      Object.defineProperty(navigator, 'userAgent', {
+        get: () => realUA,
+        configurable: true,
+      });
+    }
   });
 
   // ── 11. navigator.userAgentData — Client Hints API ─────────────────────
@@ -242,17 +253,25 @@
       brand: b.brand.replace(/^Headless/i, ''),
       version: b.version,
     }));
-    Object.defineProperty(Navigator.prototype, 'userAgentData', {
-      get: () => new Proxy(uad, {
-        get(target, prop) {
-          if (prop === 'brands') return brands;
-          if (prop === 'mobile') return false;
-          const val = Reflect.get(target, prop);
-          return typeof val === 'function' ? val.bind(target) : val;
-        },
-      }),
-      configurable: true,
+    const patchedUad = new Proxy(uad, {
+      get(target, prop) {
+        if (prop === 'brands') return brands;
+        if (prop === 'mobile') return false;
+        const val = Reflect.get(target, prop);
+        return typeof val === 'function' ? val.bind(target) : val;
+      },
     });
+    try {
+      Object.defineProperty(Navigator.prototype, 'userAgentData', {
+        get: () => patchedUad,
+        configurable: true,
+      });
+    } catch (_) {
+      Object.defineProperty(navigator, 'userAgentData', {
+        get: () => patchedUad,
+        configurable: true,
+      });
+    }
   });
 
   // ── 12. navigator.deviceMemory ──────────────────────────────────────────
@@ -260,10 +279,36 @@
   // Spoofing 8 GB matches the most common desktop tier and avoids leaking
   // the container/VM memory footprint to fingerprinting scripts.
   safe(() => {
-    Object.defineProperty(Navigator.prototype, 'deviceMemory', {
-      get: () => 8,
-      configurable: true,
-    });
+    try {
+      Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+        get: () => 8,
+        configurable: true,
+      });
+    } catch (_) {
+      Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => 8,
+        configurable: true,
+      });
+    }
+  });
+
+  // ── 12b. performance.memory (CHR_MEMORY) ───────────────────────────────
+  // Sannysoft's CHR_MEMORY test reads performance.memory — the non-standard
+  // V8 heap API. In a constrained Docker container jsHeapSizeLimit is very
+  // low, which detectors flag. Spoof realistic desktop-tier values.
+  safe(() => {
+    if (typeof performance === 'undefined' || !performance.memory) return;
+    const fakeMem = {
+      jsHeapSizeLimit:  2172649472, // ~2 GB — typical 64-bit Chrome desktop
+      totalJSHeapSize:   67108864,  // 64 MB used
+      usedJSHeapSize:    23068672,  // 22 MB live
+    };
+    try {
+      Object.defineProperty(performance, 'memory', {
+        get: () => fakeMem,
+        configurable: true,
+      });
+    } catch (_) { /* non-configurable on this Chrome build — leave as-is */ }
   });
 
   // ── 13. screen dimensions ───────────────────────────────────────────────

@@ -54,11 +54,9 @@ describe('stealthArgv — flag composition', () => {
     __resetStealthCacheForTests();
   });
 
-  it('returns --extension <path> when the extension is present', () => {
+  it('does NOT include --extension (stealth is injected via CDP, not extension loader)', () => {
     const argv = stealthArgv();
-    const extIdx = argv.indexOf('--extension');
-    expect(extIdx).toBeGreaterThanOrEqual(0);
-    expect(argv[extIdx + 1]).toBe(STEALTH_EXTENSION_DIR);
+    expect(argv).not.toContain('--extension');
   });
 
   it('honours GRANCLAW_CHROME_PATH when the override points at a real file', () => {

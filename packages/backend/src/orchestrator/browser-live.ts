@@ -33,6 +33,9 @@ import type { Duplex } from 'stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { STEALTH_EXTENSION_DIR } from '../browser/stealth.js';
+import fs from 'fs';
+import path from 'path';
 
 const execFileAsync = promisify(execFile);
 
@@ -303,6 +306,52 @@ function pickCdpPageForTab(pages: CdpPage[], activeUrl: string): CdpPage | null 
 }
 
 /**
+ * Lazily read stealth.js once and cache it. Returns null if the extension
+ * directory is missing (e.g. the package wasn't installed with assets).
+ */
+let cachedStealthScript: string | null | undefined;
+function readStealthScript(): string | null {
+  if (cachedStealthScript !== undefined) return cachedStealthScript;
+  if (!STEALTH_EXTENSION_DIR) { cachedStealthScript = null; return null; }
+  const scriptPath = path.join(STEALTH_EXTENSION_DIR, 'stealth.js');
+  try {
+    cachedStealthScript = fs.readFileSync(scriptPath, 'utf-8');
+  } catch {
+    cachedStealthScript = null;
+  }
+  return cachedStealthScript;
+}
+
+/**
+ * Inject the stealth patches on an already-open CDP WebSocket. Uses the
+ * stream's cdpMessageId counter so IDs stay monotonically increasing.
+ *
+ * Two commands:
+ *   - Page.addScriptToEvaluateOnNewDocument — persists across navigations
+ *   - Runtime.evaluate                       — applies to the current document immediately
+ *
+ * Best-effort: silently skipped when stealth is disabled or the script is unavailable.
+ */
+function injectStealthOnPage(chromeWs: WebSocket, stream: Stream): void {
+  if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return;
+  const script = readStealthScript();
+  if (!script) return;
+
+  try {
+    chromeWs.send(JSON.stringify({
+      id: ++stream.cdpMessageId,
+      method: 'Page.addScriptToEvaluateOnNewDocument',
+      params: { source: script },
+    }));
+    chromeWs.send(JSON.stringify({
+      id: ++stream.cdpMessageId,
+      method: 'Runtime.evaluate',
+      params: { expression: script, returnByValue: false },
+    }));
+  } catch { /* ws closed between open and send — ignore */ }
+}
+
+/**
  * Attach to a specific CDP page target and begin screencasting. Called on
  * initial attach and again whenever we need to rebind to a new tab.
  */
@@ -314,6 +363,10 @@ function attachPageCdp(stream: Stream, page: CdpPage): void {
 
   chromeWs.on('open', () => {
     if (stream.disposed) { try { chromeWs.close(); } catch {} return; }
+
+    // Inject stealth patches on every page attach — works headlessly via CDP,
+    // no display or extension loader needed.
+    injectStealthOnPage(chromeWs, stream);
 
     chromeWs.send(JSON.stringify({
       id: ++stream.cdpMessageId,

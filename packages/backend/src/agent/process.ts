@@ -183,8 +183,18 @@ function main() {
             telegramAdapter!.appendChunk(job.channelId, chunk.text);
           }
         }
-        if ((chunk as any).type === 'takeover_requested' && isTelegramJob) {
-          telegramAdapter!.notifyTakeover(job.channelId, (chunk as any).takeoverUrl);
+        if ((chunk as any).type === 'takeover_requested') {
+          const takeoverUrl = (chunk as any).takeoverUrl as string;
+          if (isTelegramJob) {
+            telegramAdapter!.notifyTakeover(job.channelId, takeoverUrl);
+          } else {
+            // For UI/WebSocket channels inject the URL as a text chunk so it
+            // appears inline in the streaming response.
+            broadcastToChannel(job.channelId, {
+              type: 'chunk',
+              chunk: { type: 'text', text: `\n\n🔗 **Takeover link:** ${takeoverUrl}` },
+            });
+          }
         }
         if (chunk.type === 'tool_call') {
           const tcString = `${chunk.tool}(${JSON.stringify(chunk.input)})`;

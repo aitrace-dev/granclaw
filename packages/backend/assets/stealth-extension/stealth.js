@@ -281,4 +281,42 @@
     };
     Object.defineProperties(Screen.prototype, props);
   });
+
+  // ── 14. Canvas fingerprint noise ────────────────────────────────────────
+  // Sites call toDataURL() or getImageData() on a hidden canvas and hash the
+  // result. The hash is deterministic per GPU/driver combination — headless
+  // SwiftShader produces a known fingerprint. Adding sub-pixel noise to each
+  // getImageData call makes the hash unique per session while remaining
+  // visually imperceptible.
+  safe(() => {
+    const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+    CanvasRenderingContext2D.prototype.getImageData = function (x, y, w, h) {
+      const imageData = origGetImageData.call(this, x, y, w, h);
+      const data = imageData.data;
+      // XOR the last byte of every 4th pixel with a session-stable noise value
+      // so the fingerprint changes across sessions but is stable within one.
+      const noise = (Math.random() * 10 + 1) | 0; // 1–10, chosen once per page
+      for (let i = 3; i < data.length; i += 4 * 50) { // every 50th pixel's alpha
+        data[i] = Math.max(0, Math.min(255, data[i] ^ noise));
+      }
+      return imageData;
+    };
+  });
+
+  // ── 15. AudioContext fingerprint noise ──────────────────────────────────
+  // AudioContext.createOscillator + OfflineAudioContext rendering produces a
+  // deterministic output that fingerprinters hash. Patching getChannelData to
+  // add imperceptible noise breaks the hash without affecting audible output.
+  safe(() => {
+    const origGetChannelData = AudioBuffer.prototype.getChannelData;
+    AudioBuffer.prototype.getChannelData = function (channel) {
+      const channelData = origGetChannelData.call(this, channel);
+      if (channelData.length > 0) {
+        // Perturb a single sample by a sub-perceptible amount
+        const idx = channelData.length >> 1;
+        channelData[idx] += (Math.random() - 0.5) * 1e-7;
+      }
+      return channelData;
+    };
+  });
 })();

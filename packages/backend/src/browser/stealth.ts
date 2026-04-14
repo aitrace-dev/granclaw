@@ -310,32 +310,49 @@ export async function prewarmStealthDaemon(
   if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return;
 
   const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+  const profileDir = path.join(workspaceDir, '.browser-profile');
+  const uaCachePath = path.join(profileDir, 'ua.txt');
 
-  // ── Phase 1: boot daemon to discover the real browser UA ─────────────────
-  try {
-    await execFileAsync(
-      bin,
-      ['--session', sessionId, 'open', 'about:blank'],
-      { cwd: workspaceDir, timeout: 15000 },
-    );
-  } catch {
-    return; // No Chrome / wrong env — skip silently.
-  }
-
+  // ── UA cache: skip Phase 1 when the patched UA was already discovered ─────
+  // prewarmStealthDaemon writes the patched UA to <workspace>/.browser-profile/ua.txt
+  // after Phase 1 so subsequent backend restarts skip the extra boot cycle.
   let patchedUA = '';
-  const cdpUrl = await discoverCdpUrl(sessionId, workspaceDir);
-  if (cdpUrl) {
-    const rawUA = await fetchRawBrowserUA(cdpUrl);
-    if (rawUA.includes('HeadlessChrome/')) {
-      patchedUA = rawUA.replace('HeadlessChrome/', 'Chrome/');
-    }
-  }
-
-  // Kill the daemon so we can restart it with corrected launch flags.
   try {
-    await execFileAsync(bin, ['--session', sessionId, 'close', '--all'],
-      { cwd: workspaceDir, timeout: 5000 });
-  } catch { /* ignore — daemon may already be gone */ }
+    const cached = fs.readFileSync(uaCachePath, 'utf-8').trim();
+    if (cached.startsWith('Mozilla/')) patchedUA = cached;
+  } catch { /* file absent — fall through to Phase 1 */ }
+
+  if (!patchedUA) {
+    // ── Phase 1: boot daemon to discover the real browser UA ─────────────────
+    try {
+      await execFileAsync(
+        bin,
+        ['--session', sessionId, 'open', 'about:blank'],
+        { cwd: workspaceDir, timeout: 15000 },
+      );
+    } catch {
+      return; // No Chrome / wrong env — skip silently.
+    }
+
+    const cdpUrl = await discoverCdpUrl(sessionId, workspaceDir);
+    if (cdpUrl) {
+      const rawUA = await fetchRawBrowserUA(cdpUrl);
+      if (rawUA.includes('HeadlessChrome/')) {
+        patchedUA = rawUA.replace('HeadlessChrome/', 'Chrome/');
+        // Persist so the next backend restart skips Phase 1.
+        try {
+          fs.mkdirSync(profileDir, { recursive: true });
+          fs.writeFileSync(uaCachePath, patchedUA, 'utf-8');
+        } catch { /* best effort */ }
+      }
+    }
+
+    // Kill the Phase-1 daemon so we can restart it with corrected launch flags.
+    try {
+      await execFileAsync(bin, ['--session', sessionId, 'close', '--all'],
+        { cwd: workspaceDir, timeout: 5000 });
+    } catch { /* ignore — daemon may already be gone */ }
+  }
 
   // ── Phase 2: restart with stealth Chrome flags ────────────────────────────
   // stealthArgv() includes --args --disable-blink-features=AutomationControlled

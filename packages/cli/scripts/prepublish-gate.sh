@@ -89,7 +89,11 @@ else
   log 3 "✓ working tree clean"
 
   log 3 "gitleaks dist/"
-  "$GITLEAKS_BIN" detect --source "$CLI_ROOT/dist" --no-git --redact --exit-code 1 || fail 3 "secrets found in dist/"
+  DIST_GITLEAKS_ARGS=(--source "$CLI_ROOT/dist" --no-git --redact --exit-code 1)
+  if [ -f "$REPO_ROOT/.gitleaks.toml" ]; then
+    DIST_GITLEAKS_ARGS+=(--config "$REPO_ROOT/.gitleaks.toml")
+  fi
+  "$GITLEAKS_BIN" detect "${DIST_GITLEAKS_ARGS[@]}" || fail 3 "secrets found in dist/"
   log 3 "✓ dist/ clean"
 fi
 

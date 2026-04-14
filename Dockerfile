@@ -15,6 +15,9 @@
 # ── Stage 1: build frontend + compile backend ─────────────────────────────
 FROM node:20-slim AS builder
 
+# Skip Playwright browser downloads — we use system Chromium at runtime.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 WORKDIR /app
 
 COPY package.json package-lock.json* ./

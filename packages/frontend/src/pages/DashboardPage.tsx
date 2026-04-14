@@ -1,47 +1,62 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { fetchAgents, createAgent, deleteAgent, type Agent } from '../lib/api.ts';
-
-const MODELS = [
-  { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-  { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-];
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import {
+  fetchAgents, createAgent, deleteAgent, fetchProviderSettings, fetchAppConfig, importAgent,
+  type Agent, type ProviderSettings, type AppConfig,
+} from '../lib/api.ts';
+import { getModelsForProvider, getDefaultModel } from '../lib/models.ts';
+import {
+  buttonPrimary, buttonSecondary, buttonDanger,
+  inputCls as baseInputCls, inputMono,
+  cardCls, badgeSuccess, badgeNeutral,
+} from '../ui/primitives';
 
 function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
   const navigate = useNavigate();
   const isActive = agent.status === 'active';
+  const isBusy = agent.busy === true;
 
   return (
     <div
       onClick={() => navigate(`/agents/${agent.id}/chat`)}
-      className="flex items-center gap-4 rounded-lg bg-[#1e1f26] p-4 cursor-pointer transition-all hover:bg-[#252630] group"
+      className="group flex items-center gap-4 rounded-xl bg-surface-container-lowest border border-outline-variant/40 p-4 cursor-pointer transition-all hover:border-primary/40 hover:shadow-callout"
     >
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-display text-[15px] font-semibold text-on-surface">{agent.name}</span>
-          <span
-            className={`rounded-full px-1.5 py-[2px] text-[8px] font-semibold uppercase tracking-[0.1em] ${
-              isActive ? 'bg-secondary-container text-[#002113]' : 'bg-[#33343b] text-on-surface-variant/60'
-            }`}
-          >
-            {agent.status}
-          </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-headline text-lg font-bold text-on-surface">{agent.name}</span>
+          {isBusy ? (
+            <span
+              data-testid="busy-badge"
+              className="inline-flex items-center gap-1 rounded-full bg-secondary/15 border border-secondary/30 px-2 py-0.5 text-[10px] font-label font-semibold uppercase tracking-wider text-secondary"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse" />
+              busy
+            </span>
+          ) : (
+            <span className={isActive ? badgeSuccess : badgeNeutral}>
+              {agent.status}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 mt-1">
-          <span className="font-mono text-[10px] text-primary/50">{agent.model}</span>
-          <span className="font-mono text-[10px] text-on-surface-variant/30">id: {agent.id}</span>
+          <span className="font-mono text-[10px] text-primary/70">{agent.model}</span>
+          <span className="font-mono text-[10px] text-on-surface-variant/60 hidden sm:inline">id: {agent.id}</span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <div className="flex flex-wrap gap-1">
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="hidden sm:flex flex-wrap gap-1">
           {agent.allowedTools.slice(0, 3).map(t => (
-            <span key={t} className="font-mono text-[9px] text-on-surface-variant/30 bg-[#33343b] rounded px-1.5 py-0.5">{t}</span>
+            <span
+              key={t}
+              className="font-mono text-[9px] text-on-surface-variant bg-surface-container rounded px-1.5 py-0.5"
+            >
+              {t}
+            </span>
           ))}
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="text-[10px] px-2 py-1 rounded text-transparent group-hover:text-on-surface-variant/30 hover:!text-red-400 hover:!bg-red-950/20 transition-colors"
+          className={`${buttonDanger} sm:opacity-0 sm:group-hover:opacity-100`}
         >
           Delete
         </button>
@@ -53,21 +68,85 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
 export function DashboardPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [providerSettings, setProviderSettings] = useState<ProviderSettings | null>(null);
+  const [appConfig, setAppConfig] = useState<AppConfig>({ showWorkspaceDirConfig: true });
   const [showCreate, setShowCreate] = useState(false);
   const [newId, setNewId] = useState('');
   const [newName, setNewName] = useState('');
-  const [newModel, setNewModel] = useState('claude-sonnet-4-5');
+  const [newProvider, setNewProvider] = useState('');
+  const [newModel, setNewModel] = useState('');
   const [newWorkspace, setNewWorkspace] = useState('');
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
-  const loadAgents = () => {
-    fetchAgents().then(setAgents).catch(console.error).finally(() => setLoading(false));
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setError(null);
+    try {
+      let result;
+      try {
+        result = await importAgent(file);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('already exists')) {
+          const newAgentId = prompt(
+            `${msg}\n\nEnter a new id for the imported agent:`,
+            ''
+          )?.trim();
+          if (!newAgentId) { setImporting(false); return; }
+          result = await importAgent(file, { id: newAgentId });
+        } else {
+          throw err;
+        }
+      }
+      await loadAll();
+      navigate(`/agents/${result.id}/chat`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  }
+
+  const loadAll = () => {
+    Promise.all([fetchAgents(), fetchProviderSettings(), fetchAppConfig()])
+      .then(([agentList, ps, ac]) => {
+        setAgents(agentList);
+        setProviderSettings(ps);
+        setAppConfig(ac);
+        if (!newProvider) {
+          const firstProvider = ps.providers?.[0];
+          if (firstProvider) {
+            setNewProvider(firstProvider.provider);
+            setNewModel(firstProvider.model);
+          }
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadAgents(); }, []);
+  useEffect(() => {
+    loadAll();
+    const interval = setInterval(() => {
+      fetchAgents().then(setAgents).catch(() => {});
+    }, 2_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const navigate = useNavigate();
+  const configuredProviders = providerSettings?.providers ?? [];
+  const providerModels = newProvider ? getModelsForProvider(newProvider) : [];
+
+  function handleProviderChange(p: string) {
+    setNewProvider(p);
+    setNewModel(getDefaultModel(p));
+  }
 
   async function handleCreate() {
     if (!newId.trim() || !newName.trim()) return;
@@ -75,7 +154,7 @@ export function DashboardPage() {
     setError(null);
     try {
       const id = newId.trim();
-      await createAgent(id, newName.trim(), newModel, newWorkspace.trim() || undefined);
+      await createAgent(id, newName.trim(), newModel, newProvider || undefined, newWorkspace.trim() || undefined);
       navigate(`/agents/${id}/chat`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create');
@@ -86,81 +165,151 @@ export function DashboardPage() {
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Delete agent "${name}" (${id})?\n\nThis will stop the agent and permanently delete its workspace, including all files, vault data, and conversation history.\n\nThis cannot be undone.`)) return;
     await deleteAgent(id);
-    loadAgents();
+    loadAll();
   }
 
-  const inputCls = 'rounded bg-[#33343b] px-3 py-2 text-[12px] text-on-surface placeholder:text-on-surface-variant/30 outline-none focus:ring-1 focus:ring-primary/25 font-mono transition-shadow';
+  if (loading) {
+    return (
+      <div className="font-mono text-xs text-on-surface-variant p-8">loading agents…</div>
+    );
+  }
 
-  if (loading) return <div className="text-on-surface-variant/40 font-mono text-xs p-8">loading agents…</div>;
+  // Fresh install: no provider AND no agents — show full-screen CTA
+  if (providerSettings && !providerSettings.configured && agents.length === 0) {
+    return (
+      <div className="max-w-3xl mx-auto py-16 px-4">
+        <div className="text-center">
+          <h1 className="font-headline text-4xl font-bold text-on-surface mb-4">
+            Get started with <span className="highlight-marker">GranClaw</span>
+          </h1>
+          <p className="font-mono text-xs text-on-surface-variant mb-8">
+            Configure a provider and API key before creating agents.
+          </p>
+          <Link to="/settings" className={buttonPrimary}>
+            Configure provider
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-on-surface">Agents</h1>
-          <p className="font-mono text-[11px] text-on-surface-variant/40 mt-1">{agents.length} agent{agents.length !== 1 ? 's' : ''} configured</p>
+    <div className="max-w-4xl mx-auto py-8 px-4">
+      {/* Provider warning banner */}
+      {providerSettings && !providerSettings.configured && (
+        <div className="rounded-xl bg-warning/10 border border-warning/30 px-4 py-3 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="font-mono text-[11px] text-warning">
+            No provider configured — agents cannot run until you set one up.
+          </p>
+          <Link to="/settings" className="font-label text-[11px] font-semibold uppercase tracking-widest text-primary hover:text-surface-tint flex-shrink-0">
+            Configure →
+          </Link>
         </div>
-        <button
-          onClick={() => setShowCreate(s => !s)}
-          className="rounded-lg bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity hover:opacity-90 self-start sm:self-auto"
-        >
-          {showCreate ? 'Cancel' : '+ New Agent'}
-        </button>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+        <div>
+          <h1 className="font-headline text-3xl sm:text-4xl font-bold text-on-surface">Agents</h1>
+          <p className="font-mono text-[11px] text-on-surface-variant mt-1">
+            {agents.length} agent{agents.length !== 1 ? 's' : ''} configured
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            onChange={handleImport}
+            className="hidden"
+          />
+          <button
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing || !providerSettings?.configured}
+            className={buttonSecondary}
+            title="Import an agent from a granclaw export zip"
+          >
+            {importing ? 'Importing…' : '↥ Import'}
+          </button>
+          <button
+            onClick={() => setShowCreate(s => !s)}
+            disabled={!providerSettings?.configured}
+            className={buttonPrimary}
+          >
+            {showCreate ? 'Cancel' : '+ New Agent'}
+          </button>
+        </div>
       </div>
 
       {/* Create form */}
       {showCreate && (
-        <div className="rounded-lg bg-[#1e1f26] p-4 mb-4 space-y-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/50 font-medium">Create new agent</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className={`${cardCls} p-5 mb-6 space-y-3`}>
+          <p className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
+            Create new agent
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
-              className={inputCls}
+              className={inputMono}
               placeholder="agent-id (lowercase, no spaces)"
               value={newId}
               onChange={e => setNewId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
             />
             <input
-              className={inputCls}
+              className={baseInputCls}
               placeholder="Display name"
               value={newName}
               onChange={e => setNewName(e.target.value)}
             />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <select
-              className={`${inputCls} appearance-none`}
+              className={`${baseInputCls} appearance-none`}
+              value={newProvider}
+              onChange={e => handleProviderChange(e.target.value)}
+            >
+              {configuredProviders.map(p => (
+                <option key={p.provider} value={p.provider}>{p.label ?? p.provider}</option>
+              ))}
+            </select>
+            <select
+              className={`${baseInputCls} appearance-none`}
               value={newModel}
               onChange={e => setNewModel(e.target.value)}
             >
-              {MODELS.map(m => (
+              {providerModels.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
           </div>
-          <input
-            className={inputCls + ' w-full'}
-            placeholder={`Workspace path (optional, defaults to ./workspaces/${newId || 'agent-id'})`}
-            value={newWorkspace}
-            onChange={e => setNewWorkspace(e.target.value)}
-          />
-          <div className="flex items-center gap-2">
+          {appConfig.showWorkspaceDirConfig && (
+            <input
+              className={inputMono}
+              placeholder={`Workspace path (optional, defaults to ./workspaces/${newId || 'agent-id'})`}
+              value={newWorkspace}
+              onChange={e => setNewWorkspace(e.target.value)}
+            />
+          )}
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={handleCreate}
-              disabled={creating || !newId.trim() || !newName.trim()}
-              className="rounded bg-primary-container px-4 py-2 text-sm font-medium text-[#3c0091] transition-opacity disabled:opacity-40 hover:opacity-90"
+              disabled={creating || !newId.trim() || !newName.trim() || !newModel}
+              className={buttonPrimary}
             >
               {creating ? 'Creating…' : 'Create'}
             </button>
-            {error && <span className="font-mono text-[10px] text-red-400">{error}</span>}
+            {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
         </div>
       )}
 
       {/* Agent list */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         {agents.length === 0 ? (
           <div className="text-center py-16">
-            <span className="text-3xl opacity-20">🤖</span>
-            <p className="font-mono text-[11px] text-on-surface-variant/40 mt-3">No agents yet. Create one to get started.</p>
+            <span className="text-3xl opacity-30">🤖</span>
+            <p className="font-mono text-[11px] text-on-surface-variant mt-3">
+              No agents yet. Create one to get started.
+            </p>
           </div>
         ) : (
           agents.map(a => (

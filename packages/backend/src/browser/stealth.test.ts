@@ -30,6 +30,13 @@ describe('stealthArgv — packaged stealth extension', () => {
     expect(js).toMatch(/chrome\.runtime/);
     expect(js).toMatch(/WebGLRenderingContext/);
   });
+
+  it('ships a stealth.js that patches UA, deviceMemory, and userAgentData', () => {
+    const js = fs.readFileSync(path.join(STEALTH_EXTENSION_DIR as string, 'stealth.js'), 'utf8');
+    expect(js).toMatch(/HeadlessChrome/);      // UA strip — must reference the token it removes
+    expect(js).toMatch(/deviceMemory/);         // deviceMemory spoofing
+    expect(js).toMatch(/userAgentData/);        // Client Hints brands cleanup
+  });
 });
 
 describe('stealthArgv — flag composition', () => {
@@ -39,14 +46,11 @@ describe('stealthArgv — flag composition', () => {
     __resetStealthCacheForTests();
     delete process.env.GRANCLAW_STEALTH_DISABLED;
     delete process.env.GRANCLAW_CHROME_PATH;
-    // Stealth is disabled by default now (2026-04-11) — opt back in for
-    // these flag-composition tests so the existing assertions still hold.
-    process.env.GRANCLAW_STEALTH_ENABLED = '1';
+    delete process.env.AGENT_BROWSER_CHROME_PATH;
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
-    delete process.env.GRANCLAW_STEALTH_ENABLED;
     __resetStealthCacheForTests();
   });
 

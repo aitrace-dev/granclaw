@@ -58,7 +58,10 @@ let cachedChromePath: string | null | undefined;
 function detectChromePath(): string | null {
   if (cachedChromePath !== undefined) return cachedChromePath;
 
-  const override = process.env.GRANCLAW_CHROME_PATH;
+  // GRANCLAW_CHROME_PATH takes priority; fall back to the agent-browser env
+  // var so Docker containers (which set AGENT_BROWSER_CHROME_PATH=/usr/bin/chromium)
+  // automatically point stealth at the same binary agent-browser will use.
+  const override = process.env.GRANCLAW_CHROME_PATH || process.env.AGENT_BROWSER_CHROME_PATH;
   if (override && fs.existsSync(override)) {
     cachedChromePath = override;
     return override;
@@ -110,12 +113,9 @@ function detectChromePath(): string | null {
  *   const argv = ['--session', agentId, ...stealthArgv(), 'open', url];
  */
 export function stealthArgv(): string[] {
-  // DISABLED 2026-04-11: the stealth extension / real-Chrome swap was
-  // producing buggy behaviour in agent browser sessions. Keep the code
-  // in place so we can re-enable with one edit once we understand why.
-  // Set GRANCLAW_STEALTH_ENABLED=1 to opt back in.
-  if (process.env.GRANCLAW_STEALTH_ENABLED !== '1') return [];
-
+  // Re-enabled 2026-04-14: UA/deviceMemory patches added, AGENT_BROWSER_CHROME_PATH
+  // wired up so Docker containers automatically use the in-place Chromium.
+  // Set GRANCLAW_STEALTH_DISABLED=1 to opt out entirely.
   if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return [];
 
   const argv: string[] = [];

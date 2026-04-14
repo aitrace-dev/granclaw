@@ -217,4 +217,52 @@
       return result.replace(/at .*puppeteer_evaluation_script.*\n?/g, '');
     };
   });
+
+  // ── 10. navigator.userAgent — strip HeadlessChrome ─────────────────────
+  // Headless Chrome embeds "HeadlessChrome/" in the UA string instead of
+  // "Chrome/". Strip it here so JS-readable UA matches a real user session.
+  // Network-level UA is handled at launch via --user-agent; this covers
+  // all runtime reads (navigator.userAgent, performance.getEntriesByType, etc.)
+  safe(() => {
+    const realUA = navigator.userAgent.replace('HeadlessChrome/', 'Chrome/');
+    Object.defineProperty(Navigator.prototype, 'userAgent', {
+      get: () => realUA,
+      configurable: true,
+    });
+  });
+
+  // ── 11. navigator.userAgentData — Client Hints API ─────────────────────
+  // The modern Client Hints UA API also leaks "Headless" in its brand list.
+  // Patch brands to strip the "Headless" prefix so sites using getHighEntropyValues
+  // or brands directly see a normal Chrome brand string.
+  safe(() => {
+    if (typeof navigator.userAgentData === 'undefined') return;
+    const uad = navigator.userAgentData;
+    const brands = (uad.brands || []).map((b) => ({
+      brand: b.brand.replace(/^Headless/i, ''),
+      version: b.version,
+    }));
+    Object.defineProperty(Navigator.prototype, 'userAgentData', {
+      get: () => new Proxy(uad, {
+        get(target, prop) {
+          if (prop === 'brands') return brands;
+          if (prop === 'mobile') return false;
+          const val = Reflect.get(target, prop);
+          return typeof val === 'function' ? val.bind(target) : val;
+        },
+      }),
+      configurable: true,
+    });
+  });
+
+  // ── 12. navigator.deviceMemory ──────────────────────────────────────────
+  // Headless Chrome may expose the host's actual RAM or a low default.
+  // Spoofing 8 GB matches the most common desktop tier and avoids leaking
+  // the container/VM memory footprint to fingerprinting scripts.
+  safe(() => {
+    Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+      get: () => 8,
+      configurable: true,
+    });
+  });
 })();

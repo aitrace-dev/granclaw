@@ -13,7 +13,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import { getAgents, getAgent, AgentConfig, REPO_ROOT } from '../config.js';
-import { prewarmStealthDaemon } from '../browser/stealth.js';
 import { getSecrets } from '../secrets-vault.js';
 
 export const BASE_AGENT_PORT = Number(process.env.AGENT_BASE_PORT ?? 3100);
@@ -52,12 +51,6 @@ export function startAllAgents(): void {
     registry.set(agent.id, { config: agent, wsPort, bbPort: null, pid: child.pid });
     console.log(`[orchestrator] agent "${agent.id}" started on ws port ${wsPort} (pid ${child.pid})`);
 
-    // Pre-warm the browser daemon for browser-capable agents so stealth is
-    // registered before the first navigation. Fire-and-forget.
-    if (agent.allowedTools?.includes('browser')) {
-      const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
-      void prewarmStealthDaemon(agent.id, workspaceDir);
-    }
   });
 }
 
@@ -83,10 +76,6 @@ export function restartAgent(agentId: string): void {
   registry.set(agentId, { config: agent, wsPort: managed.wsPort, bbPort: null, pid: child.pid });
   console.log(`[orchestrator] agent "${agentId}" restarted (pid ${child.pid})`);
 
-  if (agent.allowedTools?.includes('browser')) {
-    const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
-    void prewarmStealthDaemon(agent.id, workspaceDir);
-  }
 }
 
 /**
@@ -101,14 +90,6 @@ export function startNewAgent(agent: AgentConfig): ManagedAgent {
   const managed: ManagedAgent = { config: agent, wsPort, bbPort: null, pid: child.pid };
   registry.set(agent.id, managed);
   console.log(`[orchestrator] agent "${agent.id}" started on ws port ${wsPort} (pid ${child.pid})`);
-
-  // Pre-warm the browser daemon for browser-capable agents so stealth is
-  // registered via Page.addScriptToEvaluateOnNewDocument before the agent's
-  // first navigation. Fire-and-forget — never blocks agent startup.
-  if (agent.allowedTools?.includes('browser')) {
-    const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
-    void prewarmStealthDaemon(agent.id, workspaceDir);
-  }
 
   return managed;
 }

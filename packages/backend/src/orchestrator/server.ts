@@ -50,7 +50,7 @@ import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
 import { listSessions, getSession as getBrowserSession, getVideoPath } from '../browser-sessions.js';
 import { handleBrowserLiveUpgrade } from './browser-live.js';
-import { stealthArgv, injectStealthViaCdp, prewarmStealthDaemon } from '../browser/stealth.js';
+import { stealthArgv } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
 import { getAppConfig } from '../app-config.js';
@@ -1232,10 +1232,6 @@ export function createServer() {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: `Failed to launch browser: ${message}` }); return;
     }
-
-    // Inject stealth patches via CDP now that the daemon is up.
-    // Fire-and-forget — a CDP failure must never block the browser-open response.
-    void injectStealthViaCdp(req.params.id, workspaceDir);
 
     headedBrowsers.set(req.params.id, { url });
     console.log(`[browser] launched headed browser for "${req.params.id}" with profile → ${url}`);

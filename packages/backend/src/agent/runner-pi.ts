@@ -39,7 +39,7 @@ import {
   finalizeSession as finalizeBrowserSession,
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
-import { stealthArgv, injectStealthViaCdp } from '../browser/stealth.js';
+import { stealthArgv } from '../browser/stealth.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -761,12 +761,6 @@ export async function runAgent(
           }
           if (!browserState.handle.recordingStarted) {
             await startBrowserRecording(browserState.handle);
-            // Re-inject stealth into whatever daemon was just booted by
-            // startBrowserRecording. Page.addScriptToEvaluateOnNewDocument
-            // registered here will run before every subsequent navigation
-            // on this page target, so stealth patches survive open commands.
-            // Awaited so patches are live before the agent's first command fires.
-            await injectStealthViaCdp(agent.id, workspaceDir);
           }
 
           // Build argv: --session <id> [--profile <path>] [--extension ...] [--executable-path ...] <command> <args...>
@@ -788,11 +782,6 @@ export async function runAgent(
               maxBuffer: 10 * 1024 * 1024,
             });
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
-            // Re-inject stealth after 'open' — agent-browser may create a new
-            // page target for the navigation, and new targets don't inherit
-            // Page.addScriptToEvaluateOnNewDocument from previous targets.
-            // Awaited so patches are registered before the next tool call runs.
-            if (command === 'open') await injectStealthViaCdp(agent.id, workspaceDir);
             const out = stdout.trim() || stderr.trim() || 'ok';
             return { content: [{ type: 'text' as const, text: out }] };
           } catch (err) {
@@ -1089,12 +1078,7 @@ export async function runAgent(
     if (browserState.handle) {
       try { await finalizeBrowserSession(browserState.handle, 'closed'); } catch { /* best effort */ }
       // Navigate back to about:blank to release the current site's resources
-      // (memory, service workers, open connections) while keeping the daemon
-      // alive so Chrome-level stealth flags (--user-agent, --disable-blink-features)
-      // survive into the next turn. We intentionally avoid 'tab close --all'
-      // because that may kill the daemon entirely, losing the stealth flags.
-      // Full cleanup happens in prewarmStealthDaemon's Phase 1 'close --all'
-      // the next time the agent process starts.
+      // (memory, service workers, open connections) while keeping the daemon alive.
       try {
         const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
         await execFileAsync(bin, ['--session', agent.id, 'open', 'about:blank'],

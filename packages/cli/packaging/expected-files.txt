@@ -2,6 +2,7 @@ LICENSE
 README.md
 bin/granclaw.js
 dist/backend/agent-db.js
+dist/backend/app-config.js
 dist/backend/agent/process.js
 dist/backend/agent/runner-pi.js
 dist/backend/agent/telegram-adapter.js

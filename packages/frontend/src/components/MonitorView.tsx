@@ -199,7 +199,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
                       onClick={() => killJob(agentId, j.id).catch(console.error)}
                       className="text-[8px] px-1.5 py-0.5 rounded bg-red-950/30 text-error/60 hover:text-error hover:bg-red-950/50 transition-colors"
                     >
-                      Matar
+                      Terminar
                     </button>
                   </div>
                   <p className="font-mono text-[10px] text-on-surface-variant leading-relaxed break-words" style={{ whiteSpace: 'pre-wrap' }}>

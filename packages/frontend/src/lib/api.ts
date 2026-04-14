@@ -710,15 +710,16 @@ export async function fetchProviderSettings(): Promise<ProviderSettings> {
 
 export interface AppConfig {
   showWorkspaceDirConfig: boolean;
+  showBraveSearchConfig: boolean;
 }
 
 export async function fetchAppConfig(): Promise<AppConfig> {
   try {
     const res = await fetch(`${BASE}/settings/app`);
-    if (!res.ok) return { showWorkspaceDirConfig: true };
+    if (!res.ok) return { showWorkspaceDirConfig: true, showBraveSearchConfig: true };
     return res.json() as Promise<AppConfig>;
   } catch {
-    return { showWorkspaceDirConfig: true };
+    return { showWorkspaceDirConfig: true, showBraveSearchConfig: true };
   }
 }
 

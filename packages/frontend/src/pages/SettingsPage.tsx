@@ -8,7 +8,9 @@ import {
   fetchSearchSettings,
   saveSearchSettings,
   clearSearchSettings,
+  fetchAppConfig,
   type ProviderEntry,
+  type AppConfig,
 } from '../lib/api.ts';
 import { PROVIDERS, getModelsForProvider, getDefaultModel } from '../lib/models.ts';
 
@@ -168,6 +170,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [configuredProviders, setConfiguredProviders] = useState<ProviderEntry[]>([]);
+  const [appConfig, setAppConfig] = useState<AppConfig>({ showWorkspaceDirConfig: true, showBraveSearchConfig: true });
 
   // Add-provider form
   const [addProvider, setAddProvider] = useState('');
@@ -186,10 +189,11 @@ export function SettingsPage() {
   const [replacingSearch, setReplacingSearch] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchProviderSettings(), fetchSearchSettings()])
-      .then(([ps, ss]) => {
+    Promise.all([fetchProviderSettings(), fetchSearchSettings(), fetchAppConfig()])
+      .then(([ps, ss, ac]) => {
         setConfiguredProviders(ps.providers ?? []);
         setSearchConfigured(ss.configured);
+        setAppConfig(ac);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -403,78 +407,88 @@ export function SettingsPage() {
       {/* ── Web Search ── */}
       <div className="mt-8 pt-8 border-t border-outline-variant/40">
         <h2 className="font-headline text-2xl font-bold text-on-surface mb-1">Web Search</h2>
-        <p className="font-mono text-[11px] text-on-surface-variant/70 mb-6">
-          Brave Search gives agents real web search capability.{' '}
-          {searchConfigured
-            ? <span className="text-success">Configured ✓</span>
-            : <span className="text-warning">Not configured — agents cannot search the web.</span>}
-        </p>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block font-mono text-[11px] text-on-surface-variant mb-1">
-              Brave Search API key
-            </label>
-            {searchConfigured && !replacingSearch ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="password"
-                  className={inputCls}
-                  value="••••••••••••••••••••"
-                  readOnly
-                />
-                <button
-                  type="button"
-                  onClick={() => { setReplacingSearch(true); setSearchSuccess(false); }}
-                  className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant hover:text-on-surface bg-surface-container transition-colors"
-                >
-                  Replace
-                </button>
+        {appConfig.showBraveSearchConfig ? (
+          <>
+            <p className="font-mono text-[11px] text-on-surface-variant/70 mb-6">
+              Brave Search gives agents real web search capability.{' '}
+              {searchConfigured
+                ? <span className="text-success">Configured ✓</span>
+                : <span className="text-warning">Not configured — agents cannot search the web.</span>}
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block font-mono text-[11px] text-on-surface-variant mb-1">
+                  Brave Search API key
+                </label>
+                {searchConfigured && !replacingSearch ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      className={inputCls}
+                      value="••••••••••••••••••••"
+                      readOnly
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setReplacingSearch(true); setSearchSuccess(false); }}
+                      className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant hover:text-on-surface bg-surface-container transition-colors"
+                    >
+                      Replace
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="password"
+                    className={inputCls}
+                    placeholder="Enter Brave Search API key"
+                    value={braveApiKey}
+                    onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
+                    autoComplete="off"
+                    autoFocus={replacingSearch}
+                  />
+                )}
               </div>
-            ) : (
-              <input
-                type="password"
-                className={inputCls}
-                placeholder="Enter Brave Search API key"
-                value={braveApiKey}
-                onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
-                autoComplete="off"
-                autoFocus={replacingSearch}
-              />
-            )}
-          </div>
 
-          <div className="flex items-center gap-3">
-            {(!searchConfigured || replacingSearch) && (
-              <button
-                onClick={handleSearchSave}
-                disabled={searchSaving || !braveApiKey.trim()}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {searchSaving ? 'Saving…' : 'Save'}
-              </button>
-            )}
-            {replacingSearch && (
-              <button
-                onClick={() => { setReplacingSearch(false); setBraveApiKey(''); setSearchError(null); }}
-                className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
-              >
-                Cancel
-              </button>
-            )}
-            {searchConfigured && (
-              <button
-                onClick={handleSearchReset}
-                disabled={searchSaving}
-                className="rounded px-3 py-2 text-[12px] font-mono text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors disabled:opacity-40"
-              >
-                Remove
-              </button>
-            )}
-            {searchSuccess && <span className="font-mono text-[11px] text-success">Saved</span>}
-            {searchError && <span className="font-mono text-[10px] text-error">{searchError}</span>}
-          </div>
-        </div>
+              <div className="flex items-center gap-3">
+                {(!searchConfigured || replacingSearch) && (
+                  <button
+                    onClick={handleSearchSave}
+                    disabled={searchSaving || !braveApiKey.trim()}
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {searchSaving ? 'Saving…' : 'Save'}
+                  </button>
+                )}
+                {replacingSearch && (
+                  <button
+                    onClick={() => { setReplacingSearch(false); setBraveApiKey(''); setSearchError(null); }}
+                    className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+                {searchConfigured && (
+                  <button
+                    onClick={handleSearchReset}
+                    disabled={searchSaving}
+                    className="rounded px-3 py-2 text-[12px] font-mono text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors disabled:opacity-40"
+                  >
+                    Remove
+                  </button>
+                )}
+                {searchSuccess && <span className="font-mono text-[11px] text-success">Saved</span>}
+                {searchError && <span className="font-mono text-[10px] text-error">{searchError}</span>}
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="font-mono text-[11px] text-on-surface-variant/70 mt-2">
+            Web search is pre-configured for this workspace.{' '}
+            <span className="text-success">Active ✓</span>
+          </p>
+        )}
       </div>
     </div>
   );

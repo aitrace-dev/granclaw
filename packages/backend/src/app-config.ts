@@ -13,10 +13,13 @@ const CONFIG_APP_PATH = path.join(GRANCLAW_HOME, 'config-app.json');
 export interface AppConfig {
   /** Show the workspace directory path input when creating an agent. Default: true */
   showWorkspaceDirConfig: boolean;
+  /** Show the Brave Search configuration section in Settings. Default: true. Set false in enterprise where a key is provided server-side. */
+  showBraveSearchConfig: boolean;
 }
 
 const DEFAULTS: AppConfig = {
   showWorkspaceDirConfig: true,
+  showBraveSearchConfig: true,
 };
 
 export function getAppConfig(): AppConfig {

@@ -193,15 +193,17 @@ export interface SearchConfig {
   apiKey: string;
 }
 
-/** Returns the Brave Search API key, or null if not configured. */
+/** Returns the Brave Search API key, or null if not configured.
+ *  Checks user config first, then falls back to the managed config seeded by the enterprise control plane. */
 export function getSearchApiKey(): string | null {
   try {
     const raw = fs.readFileSync(configPath(), 'utf8');
     const parsed = JSON.parse(raw) as { search?: { apiKey?: string } };
-    return parsed.search?.apiKey ?? null;
-  } catch {
-    return null;
-  }
+    if (parsed.search?.apiKey) return parsed.search.apiKey;
+  } catch { /* fall through */ }
+  // Fall back to managed config (enterprise control seeds search.apiKey)
+  const managed = readManagedConfig();
+  return managed.search?.apiKey ?? null;
 }
 
 export function saveSearch(apiKey: string): void {

@@ -62,6 +62,10 @@ packages/cli/granclaw-*.tgz
 # Git worktrees — isolated branch workspaces, not shipped
 .worktrees/
 
+# Server shell scripts and commands — contain credentials, never commit
+run_in_server.sh
+.claude/commands/sync-server-image.md
+
 # Provider credentials — local-only, never commit (real API keys live here)
 providers.config.json
 documentation/

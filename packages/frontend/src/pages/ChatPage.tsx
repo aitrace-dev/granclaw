@@ -364,53 +364,91 @@ export function ChatPage() {
   // ── Render ─────────────────────────────────────────────────────────────
 
   const bbEnabled = agent?.bigBrother?.enabled && agent.bbPort !== null;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-full gap-5">
+    <div className="flex h-full gap-0 md:gap-5 relative">
 
-      {/* Left panel — agent settings */}
-      {agent ? (
-        <AgentSettingsPanel
-          agentId={agentId}
-          agent={agent}
-          agentDisplayName={agentDisplayName}
-          connected={connected}
-          secretNames={secretNames}
-          setSecretNames={setSecretNames}
-          isWiping={isWiping}
-          isSending={isSending}
-          onWipe={handleWipe}
-          mainView={mainView}
-          onViewChange={setMainView}
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
         />
-      ) : (
-        <aside className="w-80 flex-shrink-0 rounded-md bg-surface-container-lowest border border-outline-variant/40 p-4">
-          <p className="font-mono text-xs text-on-surface-variant">loading…</p>
-        </aside>
       )}
 
-      {/* Main content — chat or filesystem or browser or tasks */}
-      {mainView === 'files' ? (
-        <WorkspaceExplorer agentId={agentId} />
-      ) : mainView === 'browser' ? (
-        <BrowserView agentId={agentId} />
-      ) : mainView === 'tasks' ? (
-        <TaskBoard agentId={agentId} />
-      ) : mainView === 'workflows' ? (
-        <WorkflowList agentId={agentId} />
-      ) : mainView === 'schedules' ? (
-        <ScheduleList agentId={agentId} />
-      ) : mainView === 'monitor' ? (
-        <MonitorView agentId={agentId} />
-      ) : mainView === 'usage' ? (
-        <UsageView agentId={agentId} />
-      ) : mainView === 'logs' ? (
-        <LogsView agentId={agentId} />
-      ) : mainView === 'integrations' ? (
-        <div className="flex-1 overflow-y-auto p-6">
-          <IntegrationsView agentId={agentId} secretNames={secretNames} setSecretNames={setSecretNames} />
+      {/* Left panel — agent settings (overlay on mobile, inline on desktop) */}
+      <div className={`
+        fixed md:static top-14 bottom-0 left-0 z-40
+        w-72 flex-shrink-0 flex flex-col
+        bg-background md:bg-transparent
+        transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}
+      `}>
+        {agent ? (
+          <AgentSettingsPanel
+            agentId={agentId}
+            agent={agent}
+            agentDisplayName={agentDisplayName}
+            connected={connected}
+            secretNames={secretNames}
+            setSecretNames={setSecretNames}
+            isWiping={isWiping}
+            isSending={isSending}
+            onWipe={handleWipe}
+            mainView={mainView}
+            onViewChange={(view) => { setMainView(view); setSidebarOpen(false); }}
+          />
+        ) : (
+          <aside className="w-full h-full rounded-md bg-surface-container-lowest border border-outline-variant/40 p-4">
+            <p className="font-mono text-xs text-on-surface-variant">loading…</p>
+          </aside>
+        )}
+      </div>
+
+      {/* Right column: mobile toggle bar + main content */}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+
+        {/* Mobile sidebar toggle bar — only visible on mobile */}
+        <div className="md:hidden flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-surface-container-lowest border-b border-outline-variant/20">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(o => !o)}
+            className="flex items-center gap-2 text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            <span className="material-symbols-outlined text-[18px]">menu</span>
+            <span className="font-mono text-[11px] truncate max-w-[160px]">
+              {agentDisplayName ?? agent?.name ?? agentId}
+            </span>
+          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-success animate-pulse' : 'bg-outline/50'}`} />
+            <span className="font-mono text-[9px] text-on-surface-variant/60">{connected ? 'live' : 'off'}</span>
+          </div>
         </div>
-      ) : (
+
+        {/* Main content — chat or filesystem or browser or tasks */}
+        {mainView === 'files' ? (
+          <WorkspaceExplorer agentId={agentId} />
+        ) : mainView === 'browser' ? (
+          <BrowserView agentId={agentId} />
+        ) : mainView === 'tasks' ? (
+          <TaskBoard agentId={agentId} />
+        ) : mainView === 'workflows' ? (
+          <WorkflowList agentId={agentId} />
+        ) : mainView === 'schedules' ? (
+          <ScheduleList agentId={agentId} />
+        ) : mainView === 'monitor' ? (
+          <MonitorView agentId={agentId} />
+        ) : mainView === 'usage' ? (
+          <UsageView agentId={agentId} />
+        ) : mainView === 'logs' ? (
+          <LogsView agentId={agentId} />
+        ) : mainView === 'integrations' ? (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <IntegrationsView agentId={agentId} secretNames={secretNames} setSecretNames={setSecretNames} />
+          </div>
+        ) : (
       <div className="flex flex-1 flex-col rounded-lg bg-surface-container-lowest overflow-hidden min-w-0">
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
@@ -485,7 +523,7 @@ export function ChatPage() {
         <div className="flex gap-2 border-t border-outline-variant/20 p-3">
           <textarea
             className="flex-1 rounded bg-surface-container-high px-3 py-2 text-sm text-on-surface placeholder-on-surface-variant outline-none focus:ring-1 focus:ring-primary/40 font-mono resize-none"
-            placeholder={`Message ${agentDisplayName ?? agent?.name ?? 'agent'}… (Shift+Enter for new line)`}
+            placeholder={`Message ${agentDisplayName ?? agent?.name ?? 'agent'}…`}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
@@ -510,12 +548,17 @@ export function ChatPage() {
             </button>
           )}
         </div>
+        <p className="hidden md:block px-3 pb-1.5 font-mono text-[9px] text-on-surface-variant/30 -mt-1">
+          Enter to send · Shift+Enter for new line
+        </p>
       </div>
       )}
 
-      {/* Big Brother panel — only visible in chat view */}
+      </div>{/* end right column */}
+
+      {/* Big Brother panel — only visible in chat view, hidden on mobile */}
       {bbEnabled && mainView === 'chat' && (
-        <div data-testid="bb-panel" className={`relative flex-shrink-0 flex flex-col rounded-lg bg-surface-container-lowest overflow-hidden transition-all duration-200 ${bbPanelOpen ? 'w-96' : 'w-10'}`}>
+        <div data-testid="bb-panel" className={`hidden md:flex relative flex-shrink-0 flex-col rounded-lg bg-surface-container-lowest overflow-hidden transition-all duration-200 ${bbPanelOpen ? 'w-96' : 'w-10'}`}>
 
           {/* Coming Soon overlay */}
           <div

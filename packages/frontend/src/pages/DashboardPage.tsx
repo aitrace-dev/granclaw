@@ -46,8 +46,8 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
           <span className="font-mono text-[10px] text-on-surface-variant/60">id: {agent.id}</span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <div className="flex flex-wrap gap-1">
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="hidden sm:flex flex-wrap gap-1">
           {agent.allowedTools.slice(0, 3).map(t => (
             <span
               key={t}
@@ -59,7 +59,7 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className={`${buttonDanger} opacity-0 group-hover:opacity-100`}
+          className={`${buttonDanger} sm:opacity-0 sm:group-hover:opacity-100`}
         >
           Delete
         </button>
@@ -204,25 +204,25 @@ export function DashboardPage() {
     <div className="max-w-4xl mx-auto py-8 px-4">
       {/* Provider warning banner (shown when agents exist but provider not configured) */}
       {providerSettings && !providerSettings.configured && (
-        <div className="rounded-xl bg-warning/10 border border-warning/30 px-4 py-3 mb-6 flex items-center justify-between">
+        <div className="rounded-xl bg-warning/10 border border-warning/30 px-4 py-3 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <p className="font-mono text-[11px] text-warning">
             No provider configured — agents cannot run until you set one up.
           </p>
-          <Link to="/settings" className="font-label text-[11px] font-semibold uppercase tracking-widest text-primary hover:text-surface-tint">
+          <Link to="/settings" className="font-label text-[11px] font-semibold uppercase tracking-widest text-primary hover:text-surface-tint flex-shrink-0">
             Configure →
           </Link>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="font-headline text-4xl font-bold text-on-surface">Agents</h1>
+          <h1 className="font-headline text-3xl sm:text-4xl font-bold text-on-surface">Agents</h1>
           <p className="font-mono text-[11px] text-on-surface-variant mt-1">
             {agents.length} agent{agents.length !== 1 ? 's' : ''} configured
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <input
             ref={importInputRef}
             type="file"
@@ -254,7 +254,7 @@ export function DashboardPage() {
           <p className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
             Create new agent
           </p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               className={inputMono}
               placeholder="agent-id (lowercase, no spaces)"
@@ -268,7 +268,7 @@ export function DashboardPage() {
               onChange={e => setNewName(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <select
               className={`${baseInputCls} appearance-none`}
               value={newProvider}

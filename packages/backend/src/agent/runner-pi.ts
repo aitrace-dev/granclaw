@@ -1030,8 +1030,9 @@ export async function runAgent(
           let capturedUrl = params.url;
           if (!capturedUrl) {
             try {
+              const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
               const { stdout } = await execFileAsync(
-                agentBrowserBin,
+                bin,
                 ['--session', agent.id, 'get', 'url'],
                 { cwd: workspaceDir, timeout: 5000 },
               );

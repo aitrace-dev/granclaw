@@ -134,6 +134,16 @@ export function bootstrapWorkspace(workspaceDir: string, agentId?: string): void
   // loadSkills() scans <cwd>/.pi/skills/ for project-level skills. Using
   // .agent/skills/ (the previous path) meant the <available_skills> block
   // in the system prompt was always empty and the agent had to explore manually.
+  //
+  // We OVERWRITE template-shipped skill dirs on every bootstrap so skill
+  // content is version-controlled by the image, not frozen at first
+  // bootstrap. Previously the loop skipped any existing destDir, which
+  // meant updates to memory/SKILL.md, email/SKILL.md, etc. in a new
+  // image never propagated to already-initialised workspaces — new
+  // skills landed, existing ones stayed stale forever. Workspace-local
+  // skills written by the skill-creator skill live at paths that are
+  // NOT in the template source, so cpSync leaves them alone (it only
+  // touches dirs named after a template skill).
   const skillsTemplateDir = path.join(resolveTemplatesDir(), 'skills');
   if (fs.existsSync(skillsTemplateDir)) {
     const targetSkillsDir = path.join(workspaceDir, '.pi', 'skills');
@@ -142,15 +152,12 @@ export function bootstrapWorkspace(workspaceDir: string, agentId?: string): void
       const srcDir = path.join(skillsTemplateDir, skillName);
       const destDir = path.join(targetSkillsDir, skillName);
       if (!fs.statSync(srcDir).isDirectory()) continue;
-      if (fs.existsSync(destDir)) continue;
       fs.mkdirSync(destDir, { recursive: true });
-      for (const file of fs.readdirSync(srcDir)) {
-        fs.copyFileSync(path.join(srcDir, file), path.join(destDir, file));
-      }
+      fs.cpSync(srcDir, destDir, { recursive: true, force: true });
       for (const file of fs.readdirSync(destDir)) {
         if (file.endsWith('.sh')) fs.chmodSync(path.join(destDir, file), 0o755);
       }
-      console.log(`[runner-pi] bootstrapped skill "${skillName}" to ${destDir}`);
+      console.log(`[runner-pi] synced skill "${skillName}" to ${destDir}`);
     }
   }
 

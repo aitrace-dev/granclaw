@@ -40,10 +40,10 @@ Ask the user to add the following secrets in the **Secrets** panel. Required for
 
 | Secret | Example | Notes |
 |---|---|---|
-| `SMTP_HOST` | `smtp.gmail.com`, `smtp.fastmail.com`, `smtp-mail.outlook.com` | Provider's SMTP host |
+| `SMTP_HOST` | `smtp.gmail.com`, `smtp.fastmail.com`, `smtp-mail.outlook.com`, `mail.your-company.com` | Provider's SMTP host |
 | `SMTP_PORT` | `587` (STARTTLS) or `465` (implicit TLS) | 587 is the modern default |
 | `SMTP_USER` | `alice@gmail.com` | Full email address |
-| `SMTP_PASS` | `abcdabcdabcdabcd` (16 chars) | **App password, not the real account password** |
+| `SMTP_PASS` | depends on provider — see below | Gmail / Outlook / Yahoo / Fastmail REQUIRE a dedicated app password. Self-hosted, corporate, Zoho-without-2FA, and most custom providers accept the regular account password. Never accept the password directly in chat — it always goes through the Secrets panel. |
 
 Required for reading (optional if the user only wants to send):
 
@@ -52,7 +52,23 @@ Required for reading (optional if the user only wants to send):
 | `IMAP_HOST` | `imap.gmail.com` |
 | `IMAP_PORT` | `993` (SSL — almost always) |
 | `IMAP_USER` | same as `SMTP_USER` |
-| `IMAP_PASS` | same app password as `SMTP_PASS` |
+| `IMAP_PASS` | same value as `SMTP_PASS` in almost every case |
+
+**When is an app password required vs optional?**
+
+| Provider | App password required? |
+|---|---|
+| **Gmail / Google Workspace** | Yes — plain password is refused by SMTP. 2FA must be enabled first. |
+| **Outlook / Microsoft 365** (personal, 2FA on) | Yes |
+| **Outlook / Microsoft 365** (personal, no 2FA) | Plain password works but enabling 2FA + an app password is the safer path |
+| **Yahoo** | Yes — plain password has been refused for SMTP since 2022 |
+| **Fastmail** | Yes — per-app passwords are the only way |
+| **Zoho** | Only if the user has 2FA on; otherwise the regular password works |
+| **Proton Mail** | Yes — Bridge-issued credentials, never the real password |
+| **Self-hosted / corporate Exchange / Mail-in-a-Box / Postfix+Dovecot** | No — the user's regular mailbox password is what the server expects |
+| **Small / custom providers** | Usually no — ask the user whether their account uses 2FA |
+
+Default advice: if the user's provider is in the "Yes" column, walk them through the app-password flow in the per-provider section below. If it's in the "No" column (or you can't tell), the user's regular mailbox password will work — but **still** have them paste it into the Secrets panel, never in chat.
 
 ### Provider-specific setup walkthroughs
 
@@ -102,9 +118,18 @@ Figure out which provider the user is on, then copy-paste the relevant block:
 
 **Proton Bridge:** install the Bridge app locally, copy the Bridge-issued password it shows. Hosts: `127.0.0.1` with the ports Bridge displays.
 
-**Self-hosted / custom:** ask the user for the SMTP and IMAP host+port pair and walk them through creating an app-specific password in their admin panel (most mail servers support this).
+**Self-hosted / custom / corporate (Exchange, Mail-in-a-Box, Postfix+Dovecot, mailcow, etc.):**
 
-Do **not** accept the user's regular account password. If they try to paste it, refuse and explain why.
+> 1. Ask the user for the SMTP host + port and the IMAP host + port (the same ones their email client uses — Thunderbird, Apple Mail, whatever).
+> 2. Ask whether their provider supports app-specific passwords (most self-hosted servers don't — the account password just works).
+> 3. Add the secrets in the **Secrets** panel:
+>    - `SMTP_HOST` = whatever the user said, `SMTP_PORT` = `587` usually, `465` for implicit TLS
+>    - `IMAP_HOST` = whatever the user said, `IMAP_PORT` = `993` usually
+>    - `SMTP_USER` / `IMAP_USER` = the full mailbox address they sign in with
+>    - `SMTP_PASS` / `IMAP_PASS` = the regular mailbox password (or an app password if their admin panel offers one — safer when available)
+> 4. Save and tell me when done.
+
+**Do not accept the user typing the password directly in chat — it always goes through the Secrets panel, regardless of whether it's a real password or an app password.**
 
 ### Sending
 
@@ -268,8 +293,8 @@ Do not hard-code the user's email address in commands — read it from `./.pi/sk
 
 **`invalid_grant` from gmcli** — the refresh token has been revoked (user changed password, removed the app from their Google account, or the OAuth app expired because it's in testing mode and was never verified). Re-run Step 3 of first-time setup.
 
-**SMTP `535 Authentication failed`** — either the app password is wrong, the user pasted the account password by mistake, or 2FA isn't enabled on the provider (some providers refuse SMTP entirely without 2FA). Ask the user to regenerate the app password.
+**SMTP `535 Authentication failed`** — the password is wrong for one of these reasons. On Gmail / Outlook / Yahoo / Fastmail / Proton: the user probably pasted their real account password instead of an app password, OR the app password is mistyped, OR they never enabled 2FA (app passwords require 2FA on most providers). On self-hosted / corporate / small providers: the password is just wrong, or the username they pasted doesn't match (some servers want `alice@example.com`, others just `alice`). Ask the user to double-check the Secrets panel.
 
-**IMAP `A001 NO [AUTHENTICATIONFAILED]`** — same as SMTP: wrong or missing app password.
+**IMAP `A001 NO [AUTHENTICATIONFAILED]`** — same diagnosis as SMTP: either the wrong password for the provider's policy, or the wrong username format.
 
 **Empty search results** — Gmail's search syntax is NOT the same as IMAP's. If the user gave you a Gmail-style query (`is:unread from:x`) and you're on the IMAP branch, translate it: `UNSEEN FROM "x"`.

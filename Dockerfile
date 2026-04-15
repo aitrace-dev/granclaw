@@ -32,7 +32,6 @@ RUN npm install --no-audit --no-fund
 # frontend — packages/agent is a legacy standalone package that is not used
 # by the dev stack and doesn't need to ship in the container.
 COPY packages ./packages
-COPY templates ./templates
 RUN npm run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────
@@ -83,7 +82,9 @@ RUN npm install --omit=dev --no-audit --no-fund \
 # Copy compiled backend + built frontend + templates from the builder stage.
 COPY --chown=node:node --from=builder /app/packages/backend/dist ./packages/backend/dist
 COPY --chown=node:node --from=builder /app/packages/frontend/dist ./packages/frontend/dist
-COPY --chown=node:node templates ./templates
+COPY --chown=node:node packages/cli/templates ./packages/cli/templates
+# Assets (stealth extension, capmonster extension) — not emitted by tsc, must be copied explicitly
+COPY --chown=node:node packages/backend/assets ./packages/backend/dist/assets
 
 # Runtime config. CONFIG_PATH is pinned so REPO_ROOT resolves to /app
 # regardless of where the node process was started from. HOME points to

@@ -13,6 +13,7 @@
     "@mariozechner/pi-agent-core": "^0.65.2",
     "@mariozechner/pi-ai": "^0.65.2",
     "@mariozechner/pi-coding-agent": "^0.65.2",
+    "@sinclair/typebox": "^0.27.10",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",
     "cron-parser": "^4.9.0",

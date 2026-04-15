@@ -74,6 +74,7 @@ dist/backend/config.js
 dist/backend/data-db.js
 dist/backend/esm-import.js
 dist/backend/index.js
+dist/backend/lib/flatten-markdown-tables.js
 dist/backend/lib/i18n-telegram.js
 dist/backend/logs-db.js
 dist/backend/messages-db.js

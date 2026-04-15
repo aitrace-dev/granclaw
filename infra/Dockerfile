@@ -5,6 +5,7 @@ FROM node:20-slim
 # `record start` prints a success line but produces no .webm file, so the
 # browser session view shows sessions with "no recording" forever.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
       chromium \
       curl \
       ffmpeg \

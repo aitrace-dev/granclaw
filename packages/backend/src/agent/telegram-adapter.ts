@@ -22,6 +22,7 @@
  * re-sent every 4 s while the job is running.
  */
 
+import telegramifyMarkdown from 'telegramify-markdown';
 import { TelegramHttpClient } from './telegram-http-client.js';
 import { enqueue } from '../agent-db.js';
 import {
@@ -214,6 +215,17 @@ export class TelegramAdapter {
     state.responseBuffer += text;
   }
 
+  /** Called from process.ts when the agent emits a takeover_requested chunk. */
+  notifyTakeover(channelId: string, takeoverUrl: string) {
+    const state = this.chats.get(channelId);
+    if (!state) return;
+    this.bot
+      .sendMessage(state.chatId, `Takeover link: ${takeoverUrl}`)
+      .catch((err: Error) => {
+        console.warn(`[agent:${this.agentId}] Telegram takeover notify failed:`, err.message);
+      });
+  }
+
   // ── Finalize + flush ─────────────────────────────────────────────────────
 
   /**
@@ -274,17 +286,33 @@ export class TelegramAdapter {
 
   private async sendReply(chatId: number, text: string): Promise<void> {
     const MAX = 4000;
-    if (text.length <= MAX) {
-      await this.bot.sendMessage(chatId, text, { parse_mode: 'Markdown' }).catch(() =>
-        this.bot.sendMessage(chatId, text)
-      );
+
+    // Convert standard markdown → Telegram MarkdownV2. Fall back to plain
+    // text if conversion throws (e.g. deeply malformed LLM output).
+    let body: string;
+    let parseMode: 'MarkdownV2' | undefined;
+    try {
+      body = telegramifyMarkdown(text, 'escape');
+      parseMode = 'MarkdownV2';
+    } catch {
+      body = text;
+      parseMode = undefined;
+    }
+
+    const send = (chunk: string) =>
+      this.bot
+        .sendMessage(chatId, chunk, parseMode ? { parse_mode: parseMode } : undefined)
+        .catch(() => this.bot.sendMessage(chatId, chunk, {})); // plain-text fallback
+
+    if (body.length <= MAX) {
+      await send(body);
       return;
     }
-    let remaining = text;
+    let remaining = body;
     while (remaining.length > 0) {
-      const chunk = remaining.slice(0, MAX);
-      const splitAt = chunk.lastIndexOf('\n') > MAX / 2 ? chunk.lastIndexOf('\n') : MAX;
-      await this.bot.sendMessage(chatId, remaining.slice(0, splitAt)).catch(() => {});
+      const slice = remaining.slice(0, MAX);
+      const splitAt = slice.lastIndexOf('\n') > MAX / 2 ? slice.lastIndexOf('\n') : MAX;
+      await send(remaining.slice(0, splitAt));
       remaining = remaining.slice(splitAt).trimStart();
     }
   }

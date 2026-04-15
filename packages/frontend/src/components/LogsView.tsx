@@ -206,16 +206,16 @@ export function LogsView({ agentId }: { agentId: string }) {
     <div className="flex flex-col h-full w-full min-w-0 rounded-lg overflow-hidden bg-surface-container-lowest">
 
       {/* ── Search + controls bar ── */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-outline-variant/30 bg-background">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-outline-variant/30 bg-background">
         {/* Search */}
-        <div className="flex-1 flex items-center gap-1.5">
+        <div className="flex-1 min-w-0 flex items-center gap-1.5">
           <div className="flex-1 relative">
             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant/60" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
             </svg>
             <input
               className="w-full bg-surface-container-lowest rounded pl-8 pr-7 py-1.5 text-[11px] text-on-surface font-mono placeholder:text-on-surface-variant/25 outline-none focus:ring-1 focus:ring-primary/30 transition-shadow"
-              placeholder="Search logs..."
+              placeholder="Buscar registros..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && applySearch()}
@@ -234,7 +234,7 @@ export function LogsView({ agentId }: { agentId: string }) {
             disabled={search === searchDebounced}
             className="px-2.5 py-1.5 rounded bg-primary/20 text-[10px] font-mono text-primary transition-colors hover:bg-primary/30 disabled:opacity-30 disabled:cursor-default flex-shrink-0"
           >
-            Apply
+            Aplicar
           </button>
         </div>
 
@@ -264,7 +264,7 @@ export function LogsView({ agentId }: { agentId: string }) {
           }`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-success animate-pulse' : 'bg-outline/60'}`} />
-          Live
+          En vivo
         </button>
 
         {/* Count */}
@@ -277,12 +277,12 @@ export function LogsView({ agentId }: { agentId: string }) {
       <div ref={containerRef} className="flex-1 overflow-y-auto scrollbar-thin font-mono text-[11px]">
         {loading && logs.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <span className="text-on-surface-variant text-[10px]">loading...</span>
+            <span className="text-on-surface-variant text-[10px]">cargando...</span>
           </div>
         ) : sorted.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <span className="text-on-surface-variant text-[10px]">
-              {search ? `no results for "${search}"` : 'no log entries'}
+              {search ? `sin resultados para "${search}"` : 'sin entradas de registro'}
             </span>
           </div>
         ) : (
@@ -364,7 +364,7 @@ export function LogsView({ agentId }: { agentId: string }) {
                   onClick={() => setLimit(l => l + 100)}
                   className="text-[9px] text-primary/40 hover:text-primary/70 transition-colors"
                 >
-                  Load {Math.min(100, total - logs.length)} older entries...
+                  Cargar {Math.min(100, total - logs.length)} entradas anteriores...
                 </button>
               </div>
             )}

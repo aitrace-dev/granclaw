@@ -18,12 +18,12 @@ const INTEGRATIONS: IntegrationDef[] = [
   {
     id: 'telegram',
     name: 'Telegram',
-    description: 'Receive and reply to messages via a Telegram bot.',
+    description: 'Recibe y responde mensajes a través de un bot de Telegram.',
     icon: '✈️',
     secretKey: 'TELEGRAM_BOT_TOKEN',
-    tokenLabel: 'Bot Token',
+    tokenLabel: 'Token del bot',
     tokenPlaceholder: '110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw',
-    helpText: 'Create a bot via @BotFather on Telegram, then paste the token here.',
+    helpText: 'Crea un bot mediante @BotFather en Telegram, luego pega el token aquí.',
   },
 ];
 
@@ -51,7 +51,7 @@ function IntegrationCard({
   const [error, setError] = useState<string | null>(null);
 
   async function handleConnect() {
-    if (!token.trim()) { setError('Token is required'); return; }
+    if (!token.trim()) { setError('El token es requerido'); return; }
     setSaving(true); setError(null);
     try {
       await addSecret(agentId, def.secretKey, token.trim());
@@ -59,14 +59,14 @@ function IntegrationCard({
       setConfiguring(false);
       setToken('');
     } catch {
-      setError('Failed to save — check the console');
+      setError('Error al guardar — revisa la consola');
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDisconnect() {
-    if (!confirm(`Disconnect ${def.name}? The agent will stop using it immediately.`)) return;
+    if (!confirm(`¿Desconectar ${def.name}? El agente dejará de usarlo inmediatamente.`)) return;
     await deleteSecretApi(agentId, def.secretKey);
     onDisable(def.secretKey);
   }
@@ -90,13 +90,13 @@ function IntegrationCard({
             <>
               <span className="font-mono text-[9px] text-secondary/80 flex items-center gap-1">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-secondary/70" />
-                Connected
+                Conectado
               </span>
               <button
                 onClick={handleDisconnect}
                 className="rounded px-2 py-1 text-[10px] font-mono text-error/50 hover:text-error hover:bg-error/10 transition-colors"
               >
-                Disconnect
+                Desconectar
               </button>
             </>
           ) : (
@@ -104,7 +104,7 @@ function IntegrationCard({
               onClick={() => { setConfiguring(true); setError(null); }}
               className="rounded bg-primary/10 border border-primary/20 px-3 py-1 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors"
             >
-              Connect
+              Conectar
             </button>
           )}
         </div>
@@ -137,13 +137,13 @@ function IntegrationCard({
               disabled={saving || !token.trim()}
               className="rounded bg-primary px-3 py-1.5 text-[12px] font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
-              {saving ? 'Saving…' : 'Save & Connect'}
+              {saving ? 'Guardando…' : 'Guardar y conectar'}
             </button>
             <button
               onClick={() => { setConfiguring(false); setToken(''); setError(null); }}
               className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
             >
-              Cancel
+              Cancelar
             </button>
             {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
@@ -155,12 +155,12 @@ function IntegrationCard({
         <div className="pt-2 border-t border-outline-variant/30 space-y-3">
           <div>
             <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
-              New {def.tokenLabel}
+              Nuevo {def.tokenLabel}
             </label>
             <input
               type="password"
               className={inputCls}
-              placeholder="Paste new token"
+              placeholder="Pega el nuevo token"
               value={token}
               onChange={e => { setToken(e.target.value); setError(null); }}
               autoComplete="off"
@@ -173,13 +173,13 @@ function IntegrationCard({
               disabled={saving || !token.trim()}
               className="rounded bg-primary px-3 py-1.5 text-[12px] font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
-              {saving ? 'Saving…' : 'Update Token'}
+              {saving ? 'Guardando…' : 'Actualizar token'}
             </button>
             <button
               onClick={() => { setConfiguring(false); setToken(''); setError(null); }}
               className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
             >
-              Cancel
+              Cancelar
             </button>
             {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
@@ -192,7 +192,7 @@ function IntegrationCard({
           onClick={() => { setConfiguring(true); setError(null); }}
           className="font-mono text-[10px] text-on-surface-variant/50 hover:text-on-surface-variant transition-colors"
         >
-          Rotate token
+          Rotar token
         </button>
       )}
     </div>
@@ -213,9 +213,9 @@ export function IntegrationsView({
   return (
     <div className="flex flex-col gap-4 max-w-xl">
       <div>
-        <h2 className="font-headline text-[22px] font-bold text-on-surface">Integrations</h2>
+        <h2 className="font-headline text-[22px] font-bold text-on-surface">Integraciones</h2>
         <p className="font-mono text-[11px] text-on-surface-variant/70 mt-1">
-          Connect external services. Each integration stores a token as a secret and activates automatically.
+          Conecta servicios externos. Cada integración almacena un token como secreto y se activa automáticamente.
         </p>
       </div>
 
@@ -233,7 +233,7 @@ export function IntegrationsView({
       </div>
 
       <p className="font-mono text-[10px] text-on-surface-variant/40 mt-2">
-        More integrations coming soon. For other API keys and credentials, use the Secrets section in the sidebar.
+        Más integraciones próximamente. Para otras claves API y credenciales, usa la sección de Secretos en la barra lateral.
       </p>
     </div>
   );

@@ -61,7 +61,7 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
   if (!run) {
     return (
       <div className="p-4 font-mono text-sm text-on-surface-variant">
-        Loading run…
+        Cargando ejecución…
       </div>
     );
   }
@@ -71,12 +71,12 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
   return (
     <div className="p-4">
       <button onClick={onBack} className={`${buttonGhost} mb-3`}>
-        ← Back to workflow
+        ← Volver al flujo
       </button>
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-headline text-xl font-bold text-on-surface">
-          Run — <span className={statusText[run.status]}>{run.status}</span>
+          Ejecución — <span className={statusText[run.status]}>{run.status}</span>
         </h2>
         <span className="font-mono text-[11px] text-on-surface-variant">
           {new Date(run.startedAt).toLocaleString()}
@@ -121,7 +121,7 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
                   )}
                   {rs.input !== null && (
                     <div>
-                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">Input</div>
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">Entrada</div>
                       <pre className="font-mono text-xs text-on-surface bg-surface-container-low p-2 rounded overflow-auto max-h-52 whitespace-pre-wrap break-words">
                         {typeof rs.input === 'string' ? rs.input : JSON.stringify(rs.input, null, 2)}
                       </pre>
@@ -129,7 +129,7 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
                   )}
                   {rs.output !== null && (
                     <div>
-                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">Output</div>
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">Salida</div>
                       <pre className="font-mono text-xs text-on-surface bg-surface-container-low p-2 rounded overflow-auto max-h-52 whitespace-pre-wrap break-words">
                         {typeof rs.output === 'string' ? rs.output : JSON.stringify(rs.output, null, 2)}
                       </pre>

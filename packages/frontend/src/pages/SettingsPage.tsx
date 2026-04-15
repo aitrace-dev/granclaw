@@ -42,7 +42,7 @@ function ManagedProviderRow({ entry }: { entry: ProviderEntry }) {
         </span>
       </div>
       <p className="font-mono text-[10px] text-on-surface-variant/60 mt-2">
-        Pre-configured · includes free credits · read-only
+        Preconfigurado · incluye créditos gratuitos · solo lectura
       </p>
     </div>
   );
@@ -67,7 +67,7 @@ function ConfiguredProviderRow({
   const [success, setSuccess] = useState(false);
 
   async function handleSave() {
-    if (!apiKey.trim()) { setError('API key is required'); return; }
+    if (!apiKey.trim()) { setError('La clave API es requerida'); return; }
     setSaving(true); setError(null); setSuccess(false);
     try {
       await onReplaceKey(entry.provider, model, apiKey.trim());
@@ -75,7 +75,7 @@ function ConfiguredProviderRow({
       setApiKey('');
       setReplacing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
+      setError(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -83,8 +83,8 @@ function ConfiguredProviderRow({
 
   return (
     <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
           <span className="font-mono text-[13px] text-on-surface font-semibold">
             {PROVIDER_LABELS[entry.provider] ?? entry.provider}
           </span>
@@ -93,20 +93,20 @@ function ConfiguredProviderRow({
           </span>
           <span className="ml-2 text-success text-[10px] font-mono">✓</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {!replacing && (
             <button
               onClick={() => { setReplacing(true); setSuccess(false); }}
               className="rounded px-2 py-1 text-[11px] font-mono text-on-surface-variant hover:text-on-surface bg-surface-container transition-colors"
             >
-              Replace key
+              Reemplazar clave
             </button>
           )}
           <button
             onClick={onRemove}
             className="rounded px-2 py-1 text-[11px] font-mono text-error/60 hover:text-error hover:bg-error/10 transition-colors"
           >
-            Remove
+            Eliminar
           </button>
         </div>
       </div>
@@ -115,7 +115,7 @@ function ConfiguredProviderRow({
         <div className="space-y-2 pt-1 border-t border-outline-variant/40">
           <div>
             <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1">
-              Model
+              Modelo
             </label>
             <select
               className={`${inputCls} appearance-none`}
@@ -129,12 +129,12 @@ function ConfiguredProviderRow({
           </div>
           <div>
             <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1">
-              New API Key
+              Nueva clave API
             </label>
             <input
               type="password"
               className={inputCls}
-              placeholder="Paste new API key"
+              placeholder="Pega la nueva clave API"
               value={apiKey}
               onChange={e => { setApiKey(e.target.value); setError(null); }}
               autoComplete="off"
@@ -147,15 +147,15 @@ function ConfiguredProviderRow({
               disabled={saving}
               className="rounded bg-primary px-3 py-1.5 text-[12px] font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Guardando…' : 'Guardar'}
             </button>
             <button
               onClick={() => { setReplacing(false); setApiKey(''); setError(null); }}
               className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
             >
-              Cancel
+              Cancelar
             </button>
-            {success && <span className="font-mono text-[11px] text-success">Saved</span>}
+            {success && <span className="font-mono text-[11px] text-success">Guardado</span>}
             {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
         </div>
@@ -225,7 +225,7 @@ export function SettingsPage() {
   }
 
   async function handleAdd() {
-    if (!addProvider || !addModel || !addApiKey.trim()) { setAddError('All fields required'); return; }
+    if (!addProvider || !addModel || !addApiKey.trim()) { setAddError('Todos los campos son requeridos'); return; }
     setAdding(true); setAddError(null); setAddSuccess(false);
     try {
       await saveProviderSettings(addProvider, addModel, addApiKey.trim());
@@ -236,7 +236,7 @@ export function SettingsPage() {
       setAddSuccess(true);
       setAddApiKey('');
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'Failed to save');
+      setAddError(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
       setAdding(false);
     }
@@ -250,13 +250,13 @@ export function SettingsPage() {
   }
 
   async function handleRemove(provider: string) {
-    if (!confirm(`Remove ${PROVIDER_LABELS[provider] ?? provider}? Agents using this provider will stop responding.`)) return;
+    if (!confirm(`¿Eliminar ${PROVIDER_LABELS[provider] ?? provider}? Los agentes que usan este proveedor dejarán de responder.`)) return;
     await removeProviderSettings(provider);
     setConfiguredProviders(prev => prev.filter(p => p.provider !== provider));
   }
 
   async function handleSearchSave() {
-    if (!braveApiKey.trim()) { setSearchError('API key is required'); return; }
+    if (!braveApiKey.trim()) { setSearchError('La clave API es requerida'); return; }
     setSearchSaving(true); setSearchError(null); setSearchSuccess(false);
     try {
       await saveSearchSettings('brave', braveApiKey.trim());
@@ -265,7 +265,7 @@ export function SettingsPage() {
       setBraveApiKey('');
       setReplacingSearch(false);
     } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Failed to save');
+      setSearchError(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
       setSearchSaving(false);
     }
@@ -280,16 +280,16 @@ export function SettingsPage() {
       setSearchSuccess(false);
       setReplacingSearch(false);
     } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Failed to reset');
+      setSearchError(err instanceof Error ? err.message : 'Error al restablecer');
     } finally {
       setSearchSaving(false);
     }
   }
 
-  if (loading) return <div className="text-on-surface-variant/70 font-mono text-xs p-8">loading…</div>;
+  if (loading) return <div className="text-on-surface-variant/70 font-mono text-xs p-8">cargando…</div>;
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
+    <div className="max-w-2xl mx-auto py-6 sm:py-8 px-4">
 
       {/* ── Back button ── */}
       <button
@@ -298,16 +298,16 @@ export function SettingsPage() {
         className="flex items-center gap-1.5 mb-6 font-mono text-[12px] text-on-surface-variant hover:text-on-surface transition-colors"
       >
         <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-        Go back to agent
+        Volver al agente
       </button>
 
       {/* ── Provider Settings ── */}
       <div className="mb-8">
         <h1 className="font-headline text-4xl font-bold text-on-surface">
-          <span className="highlight-marker">Provider</span> Settings
+          <span className="highlight-marker">Configuración</span> de proveedor
         </h1>
         <p className="font-mono text-[11px] text-on-surface-variant mt-2">
-          Configure AI providers. Each agent can use a different provider.
+          Configura proveedores de IA. Cada agente puede usar un proveedor diferente.
         </p>
       </div>
 
@@ -323,7 +323,7 @@ export function SettingsPage() {
       {/* User-configured providers */}
       {userProviders.length === 0 && managedProviders.length === 0 ? (
         <p className="font-mono text-[11px] text-warning/80 mb-4">
-          No providers configured — agents will not respond until you add one.
+          Sin proveedores configurados — los agentes no responderán hasta que agregues uno.
         </p>
       ) : userProviders.length > 0 ? (
         <div className="space-y-2 mb-6">
@@ -342,13 +342,13 @@ export function SettingsPage() {
       {availableToAdd.length > 0 && (
         <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-5 space-y-4">
           <p className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium">
-            Add provider
+            Agregar proveedor
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
-                Provider
+                Proveedor
               </label>
               <select
                 className={`${inputCls} appearance-none`}
@@ -362,7 +362,7 @@ export function SettingsPage() {
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
-                Model
+                Modelo
               </label>
               <select
                 className={`${inputCls} appearance-none`}
@@ -378,12 +378,12 @@ export function SettingsPage() {
 
           <div>
             <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
-              API Key
+              Clave API
             </label>
             <input
               type="password"
               className={inputCls}
-              placeholder="Paste your API key"
+              placeholder="Pega tu clave API"
               value={addApiKey}
               onChange={e => { setAddApiKey(e.target.value); setAddError(null); setAddSuccess(false); }}
               autoComplete="off"
@@ -396,9 +396,9 @@ export function SettingsPage() {
               disabled={adding || !addApiKey.trim()}
               className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
-              {adding ? 'Adding…' : 'Add'}
+              {adding ? 'Agregando…' : 'Agregar'}
             </button>
-            {addSuccess && <span className="font-mono text-[11px] text-success">Added ✓</span>}
+            {addSuccess && <span className="font-mono text-[11px] text-success">Agregado ✓</span>}
             {addError && <span className="font-mono text-[10px] text-error">{addError}</span>}
           </div>
         </div>
@@ -406,21 +406,21 @@ export function SettingsPage() {
 
       {/* ── Web Search ── */}
       <div className="mt-8 pt-8 border-t border-outline-variant/40">
-        <h2 className="font-headline text-2xl font-bold text-on-surface mb-1">Web Search</h2>
+        <h2 className="font-headline text-2xl font-bold text-on-surface mb-1">Búsqueda Web</h2>
 
         {appConfig.showBraveSearchConfig ? (
           <>
             <p className="font-mono text-[11px] text-on-surface-variant/70 mb-6">
-              Brave Search gives agents real web search capability.{' '}
+              Brave Search otorga a los agentes capacidad de búsqueda web real.{' '}
               {searchConfigured
-                ? <span className="text-success">Configured ✓</span>
-                : <span className="text-warning">Not configured — agents cannot search the web.</span>}
+                ? <span className="text-success">Configurado ✓</span>
+                : <span className="text-warning">Sin configurar — los agentes no pueden buscar en la web.</span>}
             </p>
 
             <div className="space-y-4">
               <div>
                 <label className="block font-mono text-[11px] text-on-surface-variant mb-1">
-                  Brave Search API key
+                  Clave API de Brave Search
                 </label>
                 {searchConfigured && !replacingSearch ? (
                   <div className="flex items-center gap-2">
@@ -435,14 +435,14 @@ export function SettingsPage() {
                       onClick={() => { setReplacingSearch(true); setSearchSuccess(false); }}
                       className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant hover:text-on-surface bg-surface-container transition-colors"
                     >
-                      Replace
+                      Reemplazar
                     </button>
                   </div>
                 ) : (
                   <input
                     type="password"
                     className={inputCls}
-                    placeholder="Enter Brave Search API key"
+                    placeholder="Ingresa la clave API de Brave Search"
                     value={braveApiKey}
                     onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
                     autoComplete="off"
@@ -458,7 +458,7 @@ export function SettingsPage() {
                     disabled={searchSaving || !braveApiKey.trim()}
                     className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {searchSaving ? 'Saving…' : 'Save'}
+                    {searchSaving ? 'Guardando…' : 'Guardar'}
                   </button>
                 )}
                 {replacingSearch && (
@@ -466,7 +466,7 @@ export function SettingsPage() {
                     onClick={() => { setReplacingSearch(false); setBraveApiKey(''); setSearchError(null); }}
                     className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
                   >
-                    Cancel
+                    Cancelar
                   </button>
                 )}
                 {searchConfigured && (
@@ -475,18 +475,18 @@ export function SettingsPage() {
                     disabled={searchSaving}
                     className="rounded px-3 py-2 text-[12px] font-mono text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors disabled:opacity-40"
                   >
-                    Remove
+                    Eliminar
                   </button>
                 )}
-                {searchSuccess && <span className="font-mono text-[11px] text-success">Saved</span>}
+                {searchSuccess && <span className="font-mono text-[11px] text-success">Guardado</span>}
                 {searchError && <span className="font-mono text-[10px] text-error">{searchError}</span>}
               </div>
             </div>
           </>
         ) : (
           <p className="font-mono text-[11px] text-on-surface-variant/70 mt-2">
-            Web search is pre-configured for this workspace.{' '}
-            <span className="text-success">Active ✓</span>
+            La búsqueda web está preconfigurada para este espacio de trabajo.{' '}
+            <span className="text-success">Activo ✓</span>
           </p>
         )}
       </div>

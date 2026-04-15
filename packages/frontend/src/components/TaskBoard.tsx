@@ -20,23 +20,23 @@ import { TaskDetailPanel } from './TaskDetailPanel.tsx';
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
-  { status: 'backlog', label: 'BACKLOG' },
-  { status: 'in_progress', label: 'IN PROGRESS' },
-  { status: 'scheduled', label: 'SCHEDULED' },
-  { status: 'to_review', label: 'TO REVIEW' },
-  { status: 'done', label: 'DONE' },
+  { status: 'backlog', label: 'PENDIENTE' },
+  { status: 'in_progress', label: 'EN PROGRESO' },
+  { status: 'scheduled', label: 'PROGRAMADO' },
+  { status: 'to_review', label: 'EN REVISIÓN' },
+  { status: 'done', label: 'COMPLETADO' },
 ];
 
 function relativeTime(unixSeconds: number): string {
   const diffMs = Date.now() - unixSeconds * 1000;
   const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'just now';
+  if (diffSec < 60) return 'ahora';
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return `hace ${diffMin}m`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) return `hace ${diffHr}h`;
   const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
+  return `hace ${diffDay}d`;
 }
 
 function stripMarkdown(text: string): string {
@@ -105,7 +105,7 @@ function TaskCard({
         </span>
         {showEditedBy && (
           <span className="font-mono text-[8px] text-warning/50 truncate">
-            edited by {task.updatedBy}
+            editado por {task.updatedBy}
           </span>
         )}
       </div>
@@ -317,7 +317,7 @@ function ColumnWrapper({
             <input
               autoFocus
               className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 w-full"
-              placeholder="Task title…"
+              placeholder="Título de tarea…"
               value={newTitle}
               onChange={(e) => onNewTitleChange(e.target.value)}
               onKeyDown={(e) => {
@@ -326,7 +326,7 @@ function ColumnWrapper({
             />
             <textarea
               className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 w-full resize-y min-h-[48px] font-mono"
-              placeholder="Description (markdown)…"
+              placeholder="Descripción (markdown)…"
               value={newDesc}
               onChange={(e) => onNewDescChange(e.target.value)}
               onKeyDown={(e) => {
@@ -340,13 +340,13 @@ function ColumnWrapper({
                 onClick={onConfirmAdding}
                 className="flex-1 rounded bg-primary/15 px-2 py-1 text-[10px] text-primary/70 hover:bg-primary/25 transition-colors disabled:opacity-30"
               >
-                Add
+                Agregar
               </button>
               <button
                 onClick={onCancelAdding}
                 className="rounded bg-surface-container px-2 py-1 text-[10px] text-on-surface-variant/70 hover:text-on-surface-variant/70 transition-colors"
               >
-                Cancel
+                Cancelar
               </button>
             </div>
           </div>

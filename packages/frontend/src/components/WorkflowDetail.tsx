@@ -61,13 +61,13 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
   return (
     <div className="p-4">
       <button onClick={onBack} className={`${buttonGhost} mb-3`}>
-        ← Back to workflows
+        ← Volver a flujos
       </button>
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-headline text-xl font-bold text-on-surface">{workflow.name}</h2>
         <button onClick={onRun} className={buttonPrimary}>
-          Run
+          Ejecutar
         </button>
       </div>
 
@@ -77,7 +77,7 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
 
       {/* Steps timeline */}
       <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
-        Steps ({workflow.steps.length})
+        Pasos ({workflow.steps.length})
       </h3>
       <div className="flex flex-col gap-1 mb-6">
         {workflow.steps.map((step: WorkflowStep, i: number) => {
@@ -99,7 +99,7 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
                 <span className="text-sm text-on-surface flex-1">{step.name}</span>
                 {step.transitions && (
                   <span className="font-mono text-[10px] text-on-surface-variant">
-                    {step.transitions.conditions.length} condition{step.transitions.conditions.length !== 1 ? 's' : ''}
+                    {step.transitions.conditions.length} condición{step.transitions.conditions.length !== 1 ? 'es' : ''}
                   </span>
                 )}
                 <span
@@ -122,8 +122,8 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
                     </pre>
                   )}
                   <div className="flex gap-4 mt-1.5 font-mono text-[10px] text-on-surface-variant">
-                    <span>Type: {step.type}</span>
-                    {timeoutMs && <span>Timeout: {(timeoutMs / 1000)}s</span>}
+                    <span>Tipo: {step.type}</span>
+                    {timeoutMs && <span>Límite de tiempo: {(timeoutMs / 1000)}s</span>}
                     <span>ID: {step.id.slice(0, 8)}</span>
                   </div>
                 </div>
@@ -135,10 +135,10 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
 
       {/* Run history */}
       <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
-        Run History ({runs.length})
+        Historial de ejecuciones ({runs.length})
       </h3>
       {runs.length === 0 ? (
-        <p className="text-xs text-on-surface-variant">No runs yet.</p>
+        <p className="text-xs text-on-surface-variant">Sin ejecuciones aún.</p>
       ) : (
         <div className="flex flex-col gap-1">
           {runs.map((run: WorkflowRun) => (

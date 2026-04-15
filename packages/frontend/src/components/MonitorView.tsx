@@ -68,7 +68,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
   }, [agentId]);
 
   if (!data) {
-    return <div className="text-on-surface-variant/70 text-xs p-6">Loading monitor...</div>;
+    return <div className="text-on-surface-variant/70 text-xs p-6">Cargando monitor...</div>;
   }
 
   const processing = data.jobs.processing;
@@ -78,7 +78,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
   const isIdle = processing.length === 0 && workflows.length === 0 && totalClaude === 0;
 
   return (
-    <div className="flex flex-col h-full bg-surface-container-lowest">
+    <div className="flex flex-col h-full min-w-0 bg-surface-container-lowest">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/30">
         <div className="flex items-center gap-2">
@@ -89,7 +89,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
         </div>
         <div className="flex items-center gap-3">
           <span className={`font-mono text-[9px] ${isIdle ? 'text-on-surface-variant/60' : 'text-secondary'}`}>
-            {isIdle ? 'idle' : `${totalClaude} claude session${totalClaude !== 1 ? 's' : ''}`}
+            {isIdle ? 'inactivo' : `${totalClaude} sesión${totalClaude !== 1 ? 'es' : ''} claude`}
           </span>
           <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${isIdle ? 'bg-outline/50' : 'bg-success'}`} />
         </div>
@@ -100,23 +100,23 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {/* ── Processes ── */}
         <div>
           <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
-            Processes
+            Procesos
           </p>
           <div className="space-y-1.5">
             <ProcessCard
               info={data.agent}
-              label="Agent Process"
+              label="Proceso del Agente"
               extra={data.agent ? <span className="font-mono text-[9px] text-primary/40">pid {data.agent.pid}</span> : undefined}
             />
             <ProcessCard
               info={data.guardian}
-              label="Guardian (Big Brother)"
+              label="Guardián (Big Brother)"
             />
             {data.browserProcess && (
               <div className="rounded bg-surface-container-lowest border border-outline-variant/40 p-3">
                 <div className="flex items-center gap-2">
                   <StatusDot tone="warning" pulse />
-                  <span className="font-label text-[10px] uppercase tracking-wider text-on-surface font-semibold">Browser Daemon</span>
+                  <span className="font-label text-[10px] uppercase tracking-wider text-on-surface font-semibold">Demonio de Navegador</span>
                   <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">PID {data.browserProcess.pid}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-2">
@@ -142,7 +142,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {totalClaude > 0 && (
           <div>
             <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
-              Active Claude Sessions — {totalClaude}
+              Sesiones Claude Activas — {totalClaude}
             </p>
             <div className="space-y-1.5">
               {data.claudeProcesses.map(cp => (
@@ -182,24 +182,24 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {/* ── Jobs ── */}
         <div>
           <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
-            Job Queue — {processing.length} running, {pending.length} queued
+            Cola de trabajos — {processing.length} en proceso, {pending.length} en espera
           </p>
 
           {processing.length === 0 && pending.length === 0 ? (
-            <p className="text-[10px] text-on-surface-variant italic">No active jobs</p>
+            <p className="text-[10px] text-on-surface-variant italic">Sin trabajos activos</p>
           ) : (
             <div className="space-y-1.5">
               {processing.map(j => (
                 <div key={j.id} className="rounded bg-surface-container-lowest border border-outline-variant/40 p-2.5">
                   <div className="flex items-center gap-2 mb-1">
                     <StatusDot tone="success" pulse />
-                    <span className="font-mono text-[9px] text-secondary/70 uppercase">processing</span>
+                    <span className="font-mono text-[9px] text-secondary/70 uppercase">procesando</span>
                     <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">{j.channelId}</span>
                     <button
                       onClick={() => killJob(agentId, j.id).catch(console.error)}
                       className="text-[8px] px-1.5 py-0.5 rounded bg-red-950/30 text-error/60 hover:text-error hover:bg-red-950/50 transition-colors"
                     >
-                      Kill
+                      Terminar
                     </button>
                   </div>
                   <p className="font-mono text-[10px] text-on-surface-variant leading-relaxed break-words" style={{ whiteSpace: 'pre-wrap' }}>
@@ -212,13 +212,13 @@ export function MonitorView({ agentId }: { agentId: string }) {
                 <div key={j.id} className="rounded bg-surface-container-lowest p-2.5">
                   <div className="flex items-center gap-2 mb-1">
                     <StatusDot tone="muted" />
-                    <span className="font-mono text-[9px] text-on-surface-variant/70 uppercase">queued</span>
+                    <span className="font-mono text-[9px] text-on-surface-variant/70 uppercase">en cola</span>
                     <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">{j.channelId}</span>
                     <button
                       onClick={() => killJob(agentId, j.id).catch(console.error)}
                       className="text-[8px] px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant/70 hover:text-error transition-colors"
                     >
-                      Cancel
+                      Cancelar
                     </button>
                   </div>
                   <p className="font-mono text-[10px] text-on-surface-variant/70 leading-relaxed break-words" style={{ whiteSpace: 'pre-wrap' }}>
@@ -234,7 +234,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {workflows.length > 0 && (
           <div>
             <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
-              Running Workflows
+              Flujos de trabajo en ejecución
             </p>
             <div className="space-y-1.5">
               {workflows.map(w => (

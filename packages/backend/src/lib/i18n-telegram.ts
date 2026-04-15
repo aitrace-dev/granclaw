@@ -26,6 +26,12 @@ const SPANISH_HINTS = [
   /[ñ¿¡]/i,
   // Common stopwords / greetings, anchored on word boundaries
   /\b(hola|gracias|por favor|qué|cómo|cuándo|dónde|para|porque|también|esto|esta|este|tengo|necesito|quiero)\b/i,
+  // Common verbs used in everyday requests
+  /\b(busca|buscar|necesita|necesitas|hace|hacer|dame|dime|ayuda|ayudar|puedo|puede|puedes|tienes|sabes|quieres|mira|mirar|revisa|revisar|crea|crear|escribe|escribir|analiza|analizar|explica|explicar|encuentra|encontrar|muestra|mostrar|abre|abrir|deja|dejar|pon|poner|trae|traer|usa|usar)\b/i,
+  // Common words that are Spanish-only or statistically dominant in Spanish
+  /\b(favor|bien|información|informacion|todo|todos|ahora|aquí|aqui|hay|más|mas|pero|solo|muy|cuando|donde|como|cual|cuál|este|esa|ese|eso|algo|alguien|nada|nadie|siempre|nunca|también|tampoco|después|despues|antes|durante|mientras|entonces|luego|además|ademas|sobre|entre|contra|hacia|desde|hasta|mediante|según|segun)\b/i,
+  // Common greetings / closings not already covered
+  /\b(buenos|buenas|hasta|hoy|mañana|manana|semana|mes|año|anio|lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\b/i,
 ];
 
 const CHINESE_RE = /[\u4e00-\u9fff]/;

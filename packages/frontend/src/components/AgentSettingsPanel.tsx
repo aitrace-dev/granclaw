@@ -181,31 +181,31 @@ export function AgentSettingsPanel({
       />
       <ViewButton
         icon="▦"
-        label="Tasks"
+        label="Tareas"
         active={mainView === 'tasks'}
         onClick={() => onViewChange('tasks')}
       />
       <ViewButton
         icon="🌐"
-        label="Browser"
+        label="Navegador"
         active={mainView === 'browser'}
         onClick={() => onViewChange('browser')}
       />
       <ViewButton
         icon="📂"
-        label="Files"
+        label="Archivos"
         active={mainView === 'files'}
         onClick={() => onViewChange('files')}
       />
       <ViewButton
         icon="⚡"
-        label="Workflows"
+        label="Flujos de trabajo"
         active={mainView === 'workflows'}
         onClick={() => onViewChange('workflows')}
       />
       <ViewButton
         icon="⏰"
-        label="Schedules"
+        label="Programados"
         active={mainView === 'schedules'}
         onClick={() => onViewChange('schedules')}
       />
@@ -217,19 +217,19 @@ export function AgentSettingsPanel({
       />
       <ViewButton
         icon="📊"
-        label="Usage"
+        label="Uso"
         active={mainView === 'usage'}
         onClick={() => onViewChange('usage')}
       />
       <ViewButton
         icon="📋"
-        label="Logs"
+        label="Registros"
         active={mainView === 'logs'}
         onClick={() => onViewChange('logs')}
       />
       <ViewButton
         icon="🔌"
-        label="Integrations"
+        label="Integraciones"
         active={mainView === 'integrations'}
         onClick={() => onViewChange('integrations')}
       />
@@ -240,10 +240,10 @@ export function AgentSettingsPanel({
       >
         <span className="text-[13px]">🛡</span>
         <span className="text-[11px] uppercase tracking-[0.14em] font-medium text-on-surface-variant/70">
-          Guardian
+          Guardián
         </span>
         <span className="ml-auto rounded-full bg-amber-400/10 border border-amber-400/20 px-1.5 py-[1px] font-mono text-[7px] text-warning uppercase tracking-widest">
-          Soon
+          Pronto
         </span>
       </div>
 
@@ -253,7 +253,7 @@ export function AgentSettingsPanel({
       {/* Tools and Environment sections removed — tools are configured via agents.config.json */}
 
       {/* ═════════════════════  SECRETS  ═════════════════════════════════ */}
-      <Section title="Secrets" icon={<span>🔐</span>} count={secretNames.length}>
+      <Section title="Secretos" icon={<span>🔐</span>} count={secretNames.length}>
         <div className="space-y-2.5">
           {/* Secret list — same style as environment */}
           {secretNames.length > 0 && (
@@ -290,18 +290,18 @@ export function AgentSettingsPanel({
           )}
 
           {secretNames.length === 0 && (
-            <p className="font-mono text-[10px] text-on-surface-variant italic">No secrets configured</p>
+            <p className="font-mono text-[10px] text-on-surface-variant italic">Sin secretos configurados</p>
           )}
 
           {/* Edit mode: update an existing secret */}
           {isEditing ? (
             <div className="flex flex-col gap-1.5">
-              <p className="font-mono text-[9px] text-primary/50">Updating {secretForm.name}</p>
+              <p className="font-mono text-[9px] text-primary/50">Actualizando {secretForm.name}</p>
               <div className="flex gap-1.5">
                 <input
                   type="password"
                   className={`${inputCls} flex-1 min-w-0`}
-                  placeholder="new value"
+                  placeholder="nuevo valor"
                   value={secretForm.value}
                   onChange={(e) => setSecretForm((f) => ({ ...f, value: e.target.value }))}
                 />
@@ -313,7 +313,7 @@ export function AgentSettingsPanel({
                   }}
                   disabled={!secretForm.value.trim()}
                   className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface-variant transition-all disabled:opacity-20 hover:bg-surface-container hover:text-on-surface flex-shrink-0"
-                >Save</button>
+                >Guardar</button>
                 <button
                   onClick={() => setSecretForm({ name: '', value: '' })}
                   className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface-variant/60 hover:text-on-surface-variant/70 transition-colors flex-shrink-0"
@@ -325,14 +325,14 @@ export function AgentSettingsPanel({
             <div className="flex gap-1.5">
               <input
                 className={`${inputCls} flex-1 min-w-0`}
-                placeholder="NAME"
+                placeholder="NOMBRE"
                 value={secretForm.name}
                 onChange={(e) => setSecretForm((f) => ({ ...f, name: e.target.value }))}
               />
               <input
                 type="password"
                 className={`${inputCls} flex-1 min-w-0`}
-                placeholder="value"
+                placeholder="valor"
                 value={secretForm.value}
                 onChange={(e) => setSecretForm((f) => ({ ...f, value: e.target.value }))}
               />
@@ -354,7 +354,7 @@ export function AgentSettingsPanel({
       {/* ═════════════════════  GUARDRAILS  ══════════════════════════════ */}
       {agent.guardrails && agent.guardrails.length > 0 && (
         <Section
-          title="Guardrails"
+          title="Restricciones"
           icon={<span>🛡</span>}
           count={agent.guardrails.length}
           accentClass="text-warning/60"
@@ -373,7 +373,7 @@ export function AgentSettingsPanel({
               ))}
             </div>
             <p className="font-mono text-[8px] text-on-surface-variant/20 uppercase tracking-[0.15em]">
-              Configured via guardian chat
+              Configurado via chat guardián
             </p>
           </div>
         </Section>
@@ -385,16 +385,16 @@ export function AgentSettingsPanel({
           href={exportAgentUrl(agentId)}
           download
           className="block w-full rounded-md bg-surface-container-lowest px-3 py-2 font-mono text-[10px] text-on-surface-variant/70 transition-all hover:bg-surface-container-lowest border border-outline-variant/40 hover:text-on-surface-variant/70"
-          title="Download a full backup of this agent's workspace as a zip"
+          title="Descargar una copia de seguridad completa del espacio de trabajo del agente como zip"
         >
-          📦 Export agent
+          📦 Exportar agente
         </a>
         <button
           onClick={onWipe}
           disabled={isWiping || isSending}
           className="w-full rounded-md bg-surface-container-lowest px-3 py-2 text-left font-mono text-[10px] text-error/40 transition-all hover:bg-error/10 hover:text-error disabled:opacity-20"
         >
-          {isWiping ? 'wiping…' : '🗑 Wipe agent'}
+          {isWiping ? 'borrando…' : '🗑 Borrar agente'}
         </button>
       </div>
     </aside>

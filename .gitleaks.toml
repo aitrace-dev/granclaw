@@ -67,9 +67,9 @@ paths = [
 
   # Vendored CapMonster browser extension — third-party bundled JS assets,
   # not GranClaw source code. clientKey is patched at runtime from env var.
-  # Two paths: source tree and CLI dist (scanned separately by the gate).
-  '''^packages/backend/assets/capmonster-extension/''',
-  '''^backend/assets/capmonster-extension/''',
+  # Unanchored: gitleaks reports absolute paths when --source is absolute
+  # (dist scan), so ^-anchored patterns don't match.
+  '''capmonster-extension/''',
 ]
 
 # PostHog project API key — intentionally bundled in client-side telemetry

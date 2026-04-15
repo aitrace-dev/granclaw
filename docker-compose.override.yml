@@ -8,16 +8,17 @@
 
 services:
   granclaw:
+    # Secret values (proxy pool + CapMonster key) come from your local .env
+    # file — never hard-coded here. Copy .env.example to .env and populate
+    # before running `docker compose up`.
     environment:
-      # Point GRANCLAW_HOME to /app so the mounted providers.config.json
-      # and data/ directory are picked up by the backend.
       GRANCLAW_HOME: "/app"
       # Residential proxy pool (mirrors mariados instance on production)
-      GRANCLAW_PROXY_ENABLE: "true"
-      GRANCLAW_PROXY_LIST: "http://grkworvf:pljomvl4ouip@9.142.33.23:7194,http://grkworvf:pljomvl4ouip@216.98.253.193:6236,http://grkworvf:pljomvl4ouip@72.1.178.97:6991,http://grkworvf:pljomvl4ouip@45.89.248.187:6060,http://grkworvf:pljomvl4ouip@72.1.129.235:7628,http://grkworvf:pljomvl4ouip@216.98.228.67:5768,http://grkworvf:pljomvl4ouip@45.38.245.221:6866,http://grkworvf:pljomvl4ouip@159.148.109.137:5739,http://grkworvf:pljomvl4ouip@45.38.219.161:6339,http://grkworvf:pljomvl4ouip@82.23.63.252:8006,http://grkworvf:pljomvl4ouip@46.203.4.217:7718,http://grkworvf:pljomvl4ouip@82.23.85.215:7472,http://grkworvf:pljomvl4ouip@82.23.90.64:7822,http://grkworvf:pljomvl4ouip@136.0.166.162:7665,http://grkworvf:pljomvl4ouip@96.62.184.159:7368,http://grkworvf:pljomvl4ouip@104.252.120.163:7033,http://grkworvf:pljomvl4ouip@104.252.114.166:6536,http://grkworvf:pljomvl4ouip@104.252.121.116:6987,http://grkworvf:pljomvl4ouip@104.252.120.140:7010,http://grkworvf:pljomvl4ouip@136.143.245.22:7171,http://grkworvf:pljomvl4ouip@104.252.121.41:6912,http://grkworvf:pljomvl4ouip@136.143.245.252:7401,http://grkworvf:pljomvl4ouip@136.143.245.53:7202,http://grkworvf:pljomvl4ouip@136.143.245.64:7213,http://grkworvf:pljomvl4ouip@136.143.245.104:7253"
+      GRANCLAW_PROXY_ENABLE: "${GRANCLAW_PROXY_ENABLE:-true}"
+      GRANCLAW_PROXY_LIST: "${GRANCLAW_PROXY_LIST}"
       # CapMonster anti-captcha
-      CAPMONSTER_ENABLED: "true"
-      CAPMONSTER_API_KEY: "b26b3bc0e26f3d093e4ea64d9ccb24f7"
+      CAPMONSTER_ENABLED: "${CAPMONSTER_ENABLED:-true}"
+      CAPMONSTER_API_KEY: "${CAPMONSTER_API_KEY}"
     volumes:
       # Mount local providers.config.json so the backend can authenticate
       # with whatever provider you have configured (Anthropic, OpenRouter, etc.)

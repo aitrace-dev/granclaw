@@ -1395,15 +1395,18 @@ export async function runAgent(
     // Finalize the browser session if the agent used it — stops the WebM
     // recording and marks status closed so the dashboard replay view can
     // serve it. No-op if the agent never called the browser tool.
+    //
+    // We used to also navigate the tab to about:blank here, because the old
+    // stealth model ran `Runtime.evaluate` on each Page.navigate and a
+    // fresh document made the injection deterministic. That is no longer
+    // how stealth works — the MV3 stealth extension ships at
+    // assets/stealth-extension and is loaded by agent-browser at daemon
+    // boot via --extension, running in world=MAIN at document_start on
+    // every page automatically. The about:blank navigation wiped cookies
+    // in-memory, open SPAs, and form state between turns for no remaining
+    // benefit, so we dropped it.
     if (browserState.handle) {
       try { await finalizeBrowserSession(browserState.handle, 'closed'); } catch { /* best effort */ }
-      // Navigate back to about:blank to release the current site's resources
-      // (memory, service workers, open connections) while keeping the daemon alive.
-      try {
-        const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
-        await execFileAsync(bin, ['--session', agent.id, 'open', 'about:blank'],
-          { cwd: workspaceDir, timeout: 5000 });
-      } catch { /* best effort */ }
     }
     // Restore env var only if it was injected (envKey is set only after model guard)
     if (envKey !== undefined) {

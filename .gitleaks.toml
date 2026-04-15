@@ -36,6 +36,7 @@ paths = [
   # Build caches/artifacts
   '''^packages/frontend/dist/''',
   '''^packages/backend/dist/''',
+  '''^packages/cli/dist/''',
 
   # Claude Code slash-command test fixtures — contain intentional dummy
   # secrets like "stolen-key-123" used to exercise the secrets UI

@@ -18,6 +18,7 @@ import path from 'path';
 import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { networkInterfaces } from 'os';
 import { randomUUID } from 'crypto';
 import {
@@ -1019,40 +1020,13 @@ export async function runAgent(
     // Normal mode: plain HTTP GET. Unblocker mode: Bright Data Web Unlocker API.
     // Always registered — no key required for basic usage.
     extensionFactories.push((pi: any) => {
-      // Lightweight HTML → markdown converter (no external deps needed)
+      const nhm = new NodeHtmlMarkdown();
       function htmlToMarkdown(html: string, maxChars = 4000): string {
-        let t = html
-          // remove non-content blocks entirely
-          .replace(/<(head|script|style|noscript|svg|nav|footer|aside)[^>]*>[\s\S]*?<\/\1>/gi, '')
-          // headings
-          .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, '\n# $1\n')
-          .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, '\n## $1\n')
-          .replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, '\n### $1\n')
-          .replace(/<h[4-6][^>]*>([\s\S]*?)<\/h[4-6]>/gi, '\n#### $1\n')
-          // links — preserve href
-          .replace(/<a[^>]+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)')
-          // bold / italic
-          .replace(/<(?:strong|b)[^>]*>([\s\S]*?)<\/(?:strong|b)>/gi, '**$1**')
-          .replace(/<(?:em|i)[^>]*>([\s\S]*?)<\/(?:em|i)>/gi, '_$1_')
-          // list items
-          .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '\n- $1')
-          // block elements → newlines
-          .replace(/<(?:p|div|section|article|main|header|tr|td|th|blockquote)[^>]*>/gi, '\n')
-          .replace(/<br\s*\/?>/gi, '\n')
-          // strip all remaining tags
-          .replace(/<[^>]+>/g, '')
-          // decode common HTML entities
-          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
-          .replace(/&#\d+;/g, ' ')
-          // collapse whitespace
-          .replace(/[ \t]{2,}/g, ' ')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim();
-        if (t.length > maxChars) {
-          t = t.slice(0, maxChars) + `\n\n[...truncated at ${maxChars} chars]`;
+        let md = nhm.translate(html).replace(/\n{3,}/g, '\n\n').trim();
+        if (md.length > maxChars) {
+          md = md.slice(0, maxChars) + `\n\n[...truncated at ${maxChars} chars]`;
         }
-        return t;
+        return md;
       }
 
       pi.registerTool({

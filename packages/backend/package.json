@@ -18,6 +18,7 @@
     "cron-parser": "^4.9.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "node-html-markdown": "^2.0.0",
     "posthog-node": "^5.29.2",
     "ws": "^8.17.1"
   },

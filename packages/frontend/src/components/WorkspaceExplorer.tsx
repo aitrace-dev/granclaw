@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchFiles, readFile, writeFile, type FileEntry } from '../lib/api.ts';
+import { useT } from '../lib/i18n.tsx';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  WorkspaceExplorer
@@ -9,6 +10,7 @@ import { fetchFiles, readFile, writeFile, type FileEntry } from '../lib/api.ts';
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export function WorkspaceExplorer({ agentId }: { agentId: string }) {
+  const { t } = useT();
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
             onClick={() => loadDir('')}
             className="font-mono text-[11px] text-primary/60 hover:text-primary transition-colors flex-shrink-0"
           >
-            workspace
+            {t('files.workspace')}
           </button>
           {pathParts.map((part, i) => (
             <span key={i} className="flex items-center gap-1 flex-shrink-0">
@@ -119,7 +121,7 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
             className="rounded px-3 py-1 text-[11px] font-medium transition-all disabled:opacity-20
               bg-primary/20 text-primary hover:bg-primary/30"
           >
-            {saving ? 'saving…' : 'Save'}
+            {saving ? t('files.savingLabel') : t('files.saveButton')}
           </button>
         )}
 
@@ -155,7 +157,7 @@ export function WorkspaceExplorer({ agentId }: { agentId: string }) {
         /* ── Directory listing ────────────────────────────────── */
         <div className="flex-1 overflow-y-auto">
           {entries.length === 0 ? (
-            <p className="font-mono text-[11px] text-on-surface-variant/60 p-4 italic">Empty directory</p>
+            <p className="font-mono text-[11px] text-on-surface-variant/60 p-4 italic">{t('files.emptyDir')}</p>
           ) : (
             <div className="flex flex-col">
               {/* Parent directory link */}

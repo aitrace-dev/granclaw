@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchMonitor, killJob, type MonitorData, type ProcessInfo } from '../lib/api.ts';
+import { useT } from '../lib/i18n.tsx';
 
 function relativeTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -23,6 +24,7 @@ function StatusDot({ tone, pulse }: { tone: 'success' | 'warning' | 'primary' | 
 }
 
 function ProcessCard({ info, label, extra }: { info: ProcessInfo | null; label: string; extra?: React.ReactNode }) {
+  const { t } = useT();
   if (!info) return null;
   return (
     <div className="rounded bg-surface-container-lowest border border-outline-variant/40 p-3 space-y-2">
@@ -33,19 +35,19 @@ function ProcessCard({ info, label, extra }: { info: ProcessInfo | null; label: 
       </div>
       <div className="grid grid-cols-4 gap-2">
         <div>
-          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">CPU</p>
+          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.cpu')}</p>
           <p className="font-mono text-[11px] text-on-surface/80">{info.cpu}</p>
         </div>
         <div>
-          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">MEM</p>
+          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.mem')}</p>
           <p className="font-mono text-[11px] text-on-surface/80">{info.mem}</p>
         </div>
         <div>
-          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">RSS</p>
+          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.rss')}</p>
           <p className="font-mono text-[11px] text-on-surface/80">{info.rss}</p>
         </div>
         <div>
-          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">Uptime</p>
+          <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.uptime')}</p>
           <p className="font-mono text-[11px] text-on-surface/80">{info.elapsed}</p>
         </div>
       </div>
@@ -58,6 +60,7 @@ function ProcessCard({ info, label, extra }: { info: ProcessInfo | null; label: 
 }
 
 export function MonitorView({ agentId }: { agentId: string }) {
+  const { t } = useT();
   const [data, setData] = useState<MonitorData | null>(null);
 
   useEffect(() => {
@@ -68,7 +71,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
   }, [agentId]);
 
   if (!data) {
-    return <div className="text-on-surface-variant/70 text-xs p-6">Cargando monitor...</div>;
+    return <div className="text-on-surface-variant/70 text-xs p-6">{t('monitor.loading')}</div>;
   }
 
   const processing = data.jobs.processing;
@@ -84,12 +87,12 @@ export function MonitorView({ agentId }: { agentId: string }) {
         <div className="flex items-center gap-2">
           <span className="text-[13px] opacity-60">📡</span>
           <span className="font-label text-[11px] uppercase tracking-[0.14em] font-semibold text-on-surface">
-            Monitor
+            {t('monitor.title')}
           </span>
         </div>
         <div className="flex items-center gap-3">
           <span className={`font-mono text-[9px] ${isIdle ? 'text-on-surface-variant/60' : 'text-secondary'}`}>
-            {isIdle ? 'inactivo' : `${totalClaude} sesión${totalClaude !== 1 ? 'es' : ''} claude`}
+            {isIdle ? t('monitor.idle') : t(totalClaude === 1 ? 'monitor.claudeSessionsOne' : 'monitor.claudeSessionsOther', { count: totalClaude })}
           </span>
           <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${isIdle ? 'bg-outline/50' : 'bg-success'}`} />
         </div>
@@ -100,36 +103,36 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {/* ── Processes ── */}
         <div>
           <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
-            Procesos
+            {t('monitor.processes')}
           </p>
           <div className="space-y-1.5">
             <ProcessCard
               info={data.agent}
-              label="Proceso del Agente"
+              label={t('monitor.agentProcess')}
               extra={data.agent ? <span className="font-mono text-[9px] text-primary/40">pid {data.agent.pid}</span> : undefined}
             />
             <ProcessCard
               info={data.guardian}
-              label="Guardián (Big Brother)"
+              label={t('monitor.guardianProcess')}
             />
             {data.browserProcess && (
               <div className="rounded bg-surface-container-lowest border border-outline-variant/40 p-3">
                 <div className="flex items-center gap-2">
                   <StatusDot tone="warning" pulse />
-                  <span className="font-label text-[10px] uppercase tracking-wider text-on-surface font-semibold">Demonio de Navegador</span>
+                  <span className="font-label text-[10px] uppercase tracking-wider text-on-surface font-semibold">{t('monitor.browserDaemon')}</span>
                   <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">PID {data.browserProcess.pid}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   <div>
-                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">CPU</p>
+                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.cpu')}</p>
                     <p className="font-mono text-[11px] text-on-surface/80">{data.browserProcess.cpu}</p>
                   </div>
                   <div>
-                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">MEM</p>
+                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.mem')}</p>
                     <p className="font-mono text-[11px] text-on-surface/80">{data.browserProcess.mem}</p>
                   </div>
                   <div>
-                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">RSS</p>
+                    <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.rss')}</p>
                     <p className="font-mono text-[11px] text-on-surface/80">{data.browserProcess.rss}</p>
                   </div>
                 </div>
@@ -142,7 +145,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {totalClaude > 0 && (
           <div>
             <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
-              Sesiones Claude Activas — {totalClaude}
+              {t('monitor.activeClaudeSessions', { count: totalClaude })}
             </p>
             <div className="space-y-1.5">
               {data.claudeProcesses.map(cp => (
@@ -154,19 +157,19 @@ export function MonitorView({ agentId }: { agentId: string }) {
                   </div>
                   <div className="grid grid-cols-4 gap-2">
                     <div>
-                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">CPU</p>
+                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.cpu')}</p>
                       <p className="font-mono text-[11px] text-on-surface/80">{cp.cpu}</p>
                     </div>
                     <div>
-                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">MEM</p>
+                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.mem')}</p>
                       <p className="font-mono text-[11px] text-on-surface/80">{cp.mem}</p>
                     </div>
                     <div>
-                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">RSS</p>
+                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.rss')}</p>
                       <p className="font-mono text-[11px] text-on-surface/80">{cp.rss}</p>
                     </div>
                     <div>
-                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">Uptime</p>
+                      <p className="font-label text-[8px] uppercase tracking-wider text-on-surface-variant mb-0.5">{t('monitor.uptime')}</p>
                       <p className="font-mono text-[11px] text-on-surface/80">{cp.elapsed}</p>
                     </div>
                   </div>
@@ -182,24 +185,24 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {/* ── Jobs ── */}
         <div>
           <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
-            Cola de trabajos — {processing.length} en proceso, {pending.length} en espera
+            {t('monitor.jobQueue', { processing: processing.length, pending: pending.length })}
           </p>
 
           {processing.length === 0 && pending.length === 0 ? (
-            <p className="text-[10px] text-on-surface-variant italic">Sin trabajos activos</p>
+            <p className="text-[10px] text-on-surface-variant italic">{t('monitor.noActiveJobs')}</p>
           ) : (
             <div className="space-y-1.5">
               {processing.map(j => (
                 <div key={j.id} className="rounded bg-surface-container-lowest border border-outline-variant/40 p-2.5">
                   <div className="flex items-center gap-2 mb-1">
                     <StatusDot tone="success" pulse />
-                    <span className="font-mono text-[9px] text-secondary/70 uppercase">procesando</span>
+                    <span className="font-mono text-[9px] text-secondary/70 uppercase">{t('monitor.processing')}</span>
                     <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">{j.channelId}</span>
                     <button
                       onClick={() => killJob(agentId, j.id).catch(console.error)}
                       className="text-[8px] px-1.5 py-0.5 rounded bg-red-950/30 text-error/60 hover:text-error hover:bg-red-950/50 transition-colors"
                     >
-                      Terminar
+                      {t('monitor.terminate')}
                     </button>
                   </div>
                   <p className="font-mono text-[10px] text-on-surface-variant leading-relaxed break-words" style={{ whiteSpace: 'pre-wrap' }}>
@@ -212,13 +215,13 @@ export function MonitorView({ agentId }: { agentId: string }) {
                 <div key={j.id} className="rounded bg-surface-container-lowest p-2.5">
                   <div className="flex items-center gap-2 mb-1">
                     <StatusDot tone="muted" />
-                    <span className="font-mono text-[9px] text-on-surface-variant/70 uppercase">en cola</span>
+                    <span className="font-mono text-[9px] text-on-surface-variant/70 uppercase">{t('monitor.queued')}</span>
                     <span className="font-mono text-[9px] text-on-surface-variant/60 ml-auto">{j.channelId}</span>
                     <button
                       onClick={() => killJob(agentId, j.id).catch(console.error)}
                       className="text-[8px] px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant/70 hover:text-error transition-colors"
                     >
-                      Cancelar
+                      {t('monitor.cancel')}
                     </button>
                   </div>
                   <p className="font-mono text-[10px] text-on-surface-variant/70 leading-relaxed break-words" style={{ whiteSpace: 'pre-wrap' }}>
@@ -234,7 +237,7 @@ export function MonitorView({ agentId }: { agentId: string }) {
         {workflows.length > 0 && (
           <div>
             <p className="font-label text-[9px] uppercase tracking-[0.18em] text-on-surface-variant font-semibold mb-2">
-              Flujos de trabajo en ejecución
+              {t('monitor.runningWorkflows')}
             </p>
             <div className="space-y-1.5">
               {workflows.map(w => (

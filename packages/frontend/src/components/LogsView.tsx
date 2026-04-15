@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { fetchLogs, type LogEntry } from '../lib/api.ts';
+import { useT } from '../lib/i18n.tsx';
 
 // ── Normalize API response ──────────────────────────────────────────────────
 
@@ -148,6 +149,7 @@ function highlightSearch(text: string, search: string): React.ReactNode {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function LogsView({ agentId }: { agentId: string }) {
+  const { t } = useT();
   const [filter, setFilter] = useState<Filter>('default');
   const [search, setSearch] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
@@ -215,7 +217,7 @@ export function LogsView({ agentId }: { agentId: string }) {
             </svg>
             <input
               className="w-full bg-surface-container-lowest rounded pl-8 pr-7 py-1.5 text-[11px] text-on-surface font-mono placeholder:text-on-surface-variant/25 outline-none focus:ring-1 focus:ring-primary/30 transition-shadow"
-              placeholder="Buscar registros..."
+              placeholder={t('logs.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && applySearch()}
@@ -234,7 +236,7 @@ export function LogsView({ agentId }: { agentId: string }) {
             disabled={search === searchDebounced}
             className="px-2.5 py-1.5 rounded bg-primary/20 text-[10px] font-mono text-primary transition-colors hover:bg-primary/30 disabled:opacity-30 disabled:cursor-default flex-shrink-0"
           >
-            Aplicar
+            {t('logs.apply')}
           </button>
         </div>
 
@@ -264,7 +266,7 @@ export function LogsView({ agentId }: { agentId: string }) {
           }`}
         >
           <span className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-success animate-pulse' : 'bg-outline/60'}`} />
-          En vivo
+          {t('logs.live')}
         </button>
 
         {/* Count */}
@@ -277,12 +279,12 @@ export function LogsView({ agentId }: { agentId: string }) {
       <div ref={containerRef} className="flex-1 overflow-y-auto scrollbar-thin font-mono text-[11px]">
         {loading && logs.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <span className="text-on-surface-variant text-[10px]">cargando...</span>
+            <span className="text-on-surface-variant text-[10px]">{t('logs.loading')}</span>
           </div>
         ) : sorted.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <span className="text-on-surface-variant text-[10px]">
-              {search ? `sin resultados para "${search}"` : 'sin entradas de registro'}
+              {search ? t('logs.noResults', { query: search }) : t('logs.noEntries')}
             </span>
           </div>
         ) : (
@@ -364,7 +366,7 @@ export function LogsView({ agentId }: { agentId: string }) {
                   onClick={() => setLimit(l => l + 100)}
                   className="text-[9px] text-primary/40 hover:text-primary/70 transition-colors"
                 >
-                  Cargar {Math.min(100, total - logs.length)} entradas anteriores...
+                  {t('logs.loadOlder', { count: Math.min(100, total - logs.length) })}
                 </button>
               </div>
             )}

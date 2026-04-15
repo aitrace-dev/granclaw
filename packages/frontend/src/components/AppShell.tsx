@@ -1,4 +1,5 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useT, LanguageSwitcher } from '../lib/i18n.tsx';
 
 declare const __GRANCLAW_VERSION__: string;
 
@@ -6,6 +7,7 @@ export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const isChat = location.pathname.includes('/chat');
+  const { t } = useT();
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface">
@@ -23,10 +25,13 @@ export function AppShell() {
             v{__GRANCLAW_VERSION__}
           </span>
         </button>
-        <span className="flex items-center gap-1.5 rounded-full bg-secondary-container/20 px-2 sm:px-3 py-1 text-xs font-mono text-secondary flex-shrink-0">
-          <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse flex-shrink-0" />
-          <span className="hidden sm:inline">sistema </span>en línea
-        </span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <LanguageSwitcher />
+          <span className="flex items-center gap-1.5 rounded-full bg-secondary-container/20 px-2 sm:px-3 py-1 text-xs font-mono text-secondary flex-shrink-0">
+            <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse flex-shrink-0" />
+            <span className="hidden sm:inline">{t('shell.systemPrefix')}</span>{t('shell.onlineSuffix')}
+          </span>
+        </div>
       </header>
 
       {/* Page content — full height, no padding for chat (it manages its own) */}

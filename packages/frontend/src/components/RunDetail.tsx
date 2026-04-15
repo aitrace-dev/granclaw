@@ -6,6 +6,7 @@ import {
   type WorkflowStep,
 } from '../lib/api.ts';
 import { buttonGhost, cardCls } from '../ui/primitives';
+import { useT } from '../lib/i18n.tsx';
 
 interface Props {
   agentId: string;
@@ -34,6 +35,7 @@ const statusIcons: Record<string, string> = {
 };
 
 export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) {
+  const { t } = useT();
   const [run, setRun] = useState<WorkflowRunWithSteps | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -61,7 +63,7 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
   if (!run) {
     return (
       <div className="p-4 font-mono text-sm text-on-surface-variant">
-        Cargando ejecución…
+        {t('runDetail.loading')}
       </div>
     );
   }
@@ -71,12 +73,12 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
   return (
     <div className="p-4">
       <button onClick={onBack} className={`${buttonGhost} mb-3`}>
-        ← Volver al flujo
+        {t('runDetail.back')}
       </button>
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-headline text-xl font-bold text-on-surface">
-          Ejecución — <span className={statusText[run.status]}>{run.status}</span>
+          {t('runDetail.runLabel')} <span className={statusText[run.status]}>{run.status}</span>
         </h2>
         <span className="font-mono text-[11px] text-on-surface-variant">
           {new Date(run.startedAt).toLocaleString()}
@@ -116,12 +118,12 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
                 <div className="px-3 pb-3 text-sm space-y-2">
                   {rs.error && (
                     <div className="text-error whitespace-pre-wrap font-mono text-xs">
-                      Error: {rs.error}
+                      {t('runDetail.errorPrefix')} {rs.error}
                     </div>
                   )}
                   {rs.input !== null && (
                     <div>
-                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">Entrada</div>
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">{t('runDetail.input')}</div>
                       <pre className="font-mono text-xs text-on-surface bg-surface-container-low p-2 rounded overflow-auto max-h-52 whitespace-pre-wrap break-words">
                         {typeof rs.input === 'string' ? rs.input : JSON.stringify(rs.input, null, 2)}
                       </pre>
@@ -129,7 +131,7 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
                   )}
                   {rs.output !== null && (
                     <div>
-                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">Salida</div>
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">{t('runDetail.output')}</div>
                       <pre className="font-mono text-xs text-on-surface bg-surface-container-low p-2 rounded overflow-auto max-h-52 whitespace-pre-wrap break-words">
                         {typeof rs.output === 'string' ? rs.output : JSON.stringify(rs.output, null, 2)}
                       </pre>

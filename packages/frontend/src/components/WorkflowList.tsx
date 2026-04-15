@@ -10,8 +10,10 @@ import {
 } from '../lib/api.ts';
 import { WorkflowDetail } from './WorkflowDetail.tsx';
 import { badgeSuccess, badgeWarning, badgeNeutral, buttonPrimary, cardCls } from '../ui/primitives';
+import { useT } from '../lib/i18n.tsx';
 
 export function WorkflowList({ agentId }: { agentId: string }) {
+  const { t } = useT();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [selected, setSelected] = useState<WorkflowWithSteps | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
@@ -76,11 +78,11 @@ export function WorkflowList({ agentId }: { agentId: string }) {
 
   return (
     <div className="p-3 sm:p-4 min-w-0">
-      <h2 className="font-headline text-xl font-bold text-on-surface mb-4">Flujos de trabajo</h2>
+      <h2 className="font-headline text-xl font-bold text-on-surface mb-4">{t('workflows.title')}</h2>
 
       {workflows.length === 0 ? (
         <p className="font-mono text-xs text-on-surface-variant">
-          Sin flujos de trabajo aún. Pídele al agente que cree uno via chat.
+          {t('workflows.emptyText')}
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -102,7 +104,7 @@ export function WorkflowList({ agentId }: { agentId: string }) {
                   disabled={running === wf.id || wf.status !== 'active'}
                   className={buttonPrimary}
                 >
-                  {running === wf.id ? 'Ejecutando…' : 'Ejecutar'}
+                  {running === wf.id ? t('workflows.running') : t('workflows.run')}
                 </button>
               </div>
               {wf.description && (
@@ -111,7 +113,7 @@ export function WorkflowList({ agentId }: { agentId: string }) {
                 </p>
               )}
               <div className="mt-1 font-mono text-[10px] text-on-surface-variant/60">
-                {wf.id} · Creado {new Date(wf.createdAt).toLocaleDateString()}
+                {t('workflows.createdOn', { id: wf.id, date: new Date(wf.createdAt).toLocaleDateString() })}
               </div>
             </div>
           ))}

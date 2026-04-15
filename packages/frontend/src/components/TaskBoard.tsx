@@ -11,6 +11,7 @@ import {
   type TaskWithComments,
 } from '../lib/api.ts';
 import { TaskDetailPanel } from './TaskDetailPanel.tsx';
+import { useT } from '../lib/i18n.tsx';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  TaskBoard
@@ -19,24 +20,27 @@ import { TaskDetailPanel } from './TaskDetailPanel.tsx';
  *  creation. Polls every 4 s. Clicking a card opens TaskDetailPanel.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const COLUMNS: { status: TaskStatus; label: string }[] = [
-  { status: 'backlog', label: 'PENDIENTE' },
-  { status: 'in_progress', label: 'EN PROGRESO' },
-  { status: 'scheduled', label: 'PROGRAMADO' },
-  { status: 'to_review', label: 'EN REVISIÓN' },
-  { status: 'done', label: 'COMPLETADO' },
+const COLUMN_ORDER: { status: TaskStatus; labelKey: string }[] = [
+  { status: 'backlog', labelKey: 'tasks.columns.backlog' },
+  { status: 'in_progress', labelKey: 'tasks.columns.inProgress' },
+  { status: 'scheduled', labelKey: 'tasks.columns.scheduled' },
+  { status: 'to_review', labelKey: 'tasks.columns.toReview' },
+  { status: 'done', labelKey: 'tasks.columns.done' },
 ];
 
-function relativeTime(unixSeconds: number): string {
-  const diffMs = Date.now() - unixSeconds * 1000;
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'ahora';
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `hace ${diffMin}m`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `hace ${diffHr}h`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `hace ${diffDay}d`;
+function useRelativeTime() {
+  const { t } = useT();
+  return (unixSeconds: number): string => {
+    const diffMs = Date.now() - unixSeconds * 1000;
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return t('tasks.relativeNow');
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return t('tasks.relativeMinutes', { n: diffMin });
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return t('tasks.relativeHours', { n: diffHr });
+    const diffDay = Math.floor(diffHr / 24);
+    return t('tasks.relativeDays', { n: diffDay });
+  };
 }
 
 function stripMarkdown(text: string): string {
@@ -64,6 +68,8 @@ function TaskCard({
   onDragStart: (id: string) => void;
   onClick: (task: Task) => void;
 }) {
+  const { t } = useT();
+  const relativeTime = useRelativeTime();
   const preview = stripMarkdown(task.description).slice(0, 120);
   const showEditedBy = task.updatedBy !== null && task.updatedBy !== task.source;
 
@@ -105,7 +111,7 @@ function TaskCard({
         </span>
         {showEditedBy && (
           <span className="font-mono text-[8px] text-warning/50 truncate">
-            editado por {task.updatedBy}
+            {t('tasks.editedBy', { name: task.updatedBy ?? '' })}
           </span>
         )}
       </div>
@@ -116,6 +122,7 @@ function TaskCard({
 // ── Main component ───────────────────────────────────────────────────────────
 
 export function TaskBoard({ agentId }: { agentId: string }) {
+  const { t } = useT();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<TaskWithComments | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -202,13 +209,13 @@ export function TaskBoard({ agentId }: { agentId: string }) {
 
   return (
     <div className="flex flex-1 gap-2 overflow-x-auto p-3 relative">
-      {COLUMNS.map(({ status, label }) => {
-        const colTasks = tasks.filter((t) => t.status === status);
+      {COLUMN_ORDER.map(({ status, labelKey }) => {
+        const colTasks = tasks.filter((tk) => tk.status === status);
         return (
           <ColumnWrapper
             key={status}
             status={status}
-            label={label}
+            label={t(labelKey)}
             tasks={colTasks}
             addingTask={addingColumn === status}
             newTitle={addingColumn === status ? newTitle : ''}
@@ -272,6 +279,7 @@ function ColumnWrapper({
   onDrop: (status: TaskStatus) => Promise<void>;
   onCardClick: (task: Task) => void;
 }) {
+  const { t } = useT();
   const [isDragOver, setIsDragOver] = useState(false);
 
   return (
@@ -317,7 +325,7 @@ function ColumnWrapper({
             <input
               autoFocus
               className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 w-full"
-              placeholder="Título de tarea…"
+              placeholder={t('tasks.titlePlaceholder')}
               value={newTitle}
               onChange={(e) => onNewTitleChange(e.target.value)}
               onKeyDown={(e) => {
@@ -326,7 +334,7 @@ function ColumnWrapper({
             />
             <textarea
               className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface placeholder:text-on-surface-variant/60 outline-none focus:ring-1 focus:ring-primary/25 w-full resize-y min-h-[48px] font-mono"
-              placeholder="Descripción (markdown)…"
+              placeholder={t('tasks.descPlaceholder')}
               value={newDesc}
               onChange={(e) => onNewDescChange(e.target.value)}
               onKeyDown={(e) => {
@@ -340,13 +348,13 @@ function ColumnWrapper({
                 onClick={onConfirmAdding}
                 className="flex-1 rounded bg-primary/15 px-2 py-1 text-[10px] text-primary/70 hover:bg-primary/25 transition-colors disabled:opacity-30"
               >
-                Agregar
+                {t('tasks.add')}
               </button>
               <button
                 onClick={onCancelAdding}
                 className="rounded bg-surface-container px-2 py-1 text-[10px] text-on-surface-variant/70 hover:text-on-surface-variant/70 transition-colors"
               >
-                Cancelar
+                {t('tasks.cancel')}
               </button>
             </div>
           </div>

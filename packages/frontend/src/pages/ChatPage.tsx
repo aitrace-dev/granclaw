@@ -16,6 +16,7 @@ import { MonitorView } from '../components/MonitorView.tsx';
 import { UsageView } from '../components/UsageView.tsx';
 import { LogsView } from '../components/LogsView.tsx';
 import { IntegrationsView } from '../components/IntegrationsView.tsx';
+import { useT } from '../lib/i18n.tsx';
 
 type MainView = 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
 
@@ -62,6 +63,7 @@ function ShieldIcon({ className = '' }: { className?: string }) {
 // ── Tool calls block (ChatGPT-style collapsible) ─────────────────────────
 
 function ToolCallsBlock({ toolCalls, isStreaming }: { toolCalls: string[]; isStreaming?: boolean }) {
+  const { t } = useT();
   const [expanded, setExpanded] = useState(false);
   const count = toolCalls.length;
 
@@ -86,7 +88,7 @@ function ToolCallsBlock({ toolCalls, isStreaming }: { toolCalls: string[]; isStr
           <span className="text-[10px] text-primary/60 flex-shrink-0">⚙</span>
         )}
         <span className="font-mono text-[10px] text-on-surface-variant flex-1 truncate">
-          {isStreaming ? `Ejecutando ${latestTool}…` : `${count} llamada${count !== 1 ? 's' : ''} a herramienta`}
+          {isStreaming ? t('chat.executing', { tool: latestTool }) : t(count === 1 ? 'chat.toolCallsOne' : 'chat.toolCallsOther', { count })}
         </span>
         <svg
           className="w-2.5 h-2.5 text-on-surface-variant/30 transition-transform duration-150 flex-shrink-0"
@@ -124,6 +126,7 @@ function ToolCallsBlock({ toolCalls, isStreaming }: { toolCalls: string[]; isStr
 // ── Component ─────────────────────────────────────────────────────────────
 
 export function ChatPage() {
+  const { t } = useT();
   const { id: agentId = '' } = useParams<{ id: string }>();
   // Route is `agents/:id/*` — the splat is either "chat" or "view/:view"
   const splat = (useParams() as Record<string, string>)['*'] ?? '';
@@ -306,7 +309,7 @@ export function ChatPage() {
         setPendingApproval({ reason: chunk.reason });
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === agentMsgId ? { ...m, text: `⏳ Esperando aprobación: ${chunk.reason}` } : m
+            m.id === agentMsgId ? { ...m, text: t('chat.pendingApproval', { reason: chunk.reason }) } : m
           )
         );
       } else if (chunk.type === 'blocked') {
@@ -337,7 +340,7 @@ export function ChatPage() {
   // ── Wipe ───────────────────────────────────────────────────────────────
 
   async function handleWipe() {
-    if (!window.confirm('[PELIGROSO] ¿Borrar agente?\n\nEsto eliminará permanentemente:\n• Todo el historial de chat\n• Memoria de sesión de Claude\n• Archivos del espacio de trabajo\n\nEsta acción no se puede deshacer.')) return;
+    if (!window.confirm(t('chat.wipeConfirm'))) return;
     setIsWiping(true);
     try {
       await resetAgent(agentId);
@@ -384,7 +387,7 @@ export function ChatPage() {
           />
         ) : (
           <aside className="w-full h-full rounded-md bg-surface-container-lowest p-4">
-            <p className="font-mono text-xs text-on-surface-variant">cargando…</p>
+            <p className="font-mono text-xs text-on-surface-variant">{t('common.loading')}</p>
           </aside>
         )}
       </div>
@@ -400,7 +403,7 @@ export function ChatPage() {
           </button>
           <div className="ml-auto flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-secondary animate-pulse' : 'bg-outline/50'}`} />
-            <span className="font-mono text-[9px] text-on-surface-variant/60">{connected ? 'en vivo' : 'desconectado'}</span>
+            <span className="font-mono text-[9px] text-on-surface-variant/60">{connected ? t('chat.live') : t('chat.disconnected')}</span>
           </div>
         </div>
 
@@ -431,14 +434,14 @@ export function ChatPage() {
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
           {messages.length === 0 && (
             <p className="font-mono text-xs text-on-surface-variant m-auto">
-              Envía un mensaje para iniciar la conversación…
+              {t('chat.emptyConversation')}
             </p>
           )}
 
           {messages.map((m) => (
             <div key={m.id} className={`flex flex-col gap-1 ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
               <span className="text-[10px] uppercase tracking-widest text-on-surface-variant font-medium">
-                {m.role === 'user' ? 'tú' : agent?.name ?? 'agente'}
+                {m.role === 'user' ? t('chat.roleUser') : agent?.name ?? t('chat.roleAgentFallback')}
               </span>
 
               {/* Tool calls — collapsible fixed-height container */}
@@ -489,9 +492,9 @@ export function ChatPage() {
           <div data-testid="pending-approval" className="flex items-center gap-3 border-t border-amber-800/50 bg-amber-950/40 px-4 py-3">
             <ShieldIcon className="h-5 w-5 text-warning flex-shrink-0 animate-pulse" />
             <div className="flex-1 min-w-0">
-              <p className="font-mono text-xs text-warning font-semibold">Esperando aprobación</p>
+              <p className="font-mono text-xs text-warning font-semibold">{t('chat.waitingApproval')}</p>
               <p className="font-mono text-[11px] text-warning/80 mt-0.5">{pendingApproval.reason}</p>
-              <p className="font-mono text-[10px] text-amber-500/60 mt-1">Responde en el panel guardián →</p>
+              <p className="font-mono text-[10px] text-amber-500/60 mt-1">{t('chat.respondInGuardian')}</p>
             </div>
           </div>
         )}
@@ -500,7 +503,7 @@ export function ChatPage() {
         <div className="flex gap-2 border-t border-outline-variant/20 p-2 sm:p-3">
           <textarea
             className="flex-1 min-w-0 rounded bg-surface-container-high px-3 py-2 text-sm text-on-surface placeholder-on-surface-variant outline-none focus:ring-1 focus:ring-primary/40 font-mono resize-none"
-            placeholder={`Mensaje a ${agentDisplayName ?? agent?.name ?? 'agente'}…`}
+            placeholder={t('chat.messagePlaceholder', { name: agentDisplayName ?? agent?.name ?? t('chat.roleAgentFallback') })}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
@@ -513,7 +516,7 @@ export function ChatPage() {
               onClick={handleStop}
               className="rounded bg-red-500/20 px-4 py-2 text-sm font-medium text-red-400 transition-opacity hover:bg-red-500/30"
             >
-              Detener
+              {t('chat.stop')}
             </button>
           ) : (
             <button
@@ -521,7 +524,7 @@ export function ChatPage() {
               disabled={!input.trim() || !connected}
               className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
-              Enviar
+              {t('chat.send')}
             </button>
           )}
         </div>
@@ -543,14 +546,14 @@ export function ChatPage() {
             {bbPanelOpen && (
               <>
                 <p className="font-headline text-lg font-semibold text-on-surface tracking-tight mb-2">
-                  Guardián
+                  {t('chat.guardian')}
                 </p>
                 <span className="rounded-full bg-warning/10 border border-warning/30 px-3 py-1 font-label text-[10px] font-semibold text-warning uppercase tracking-widest mb-4">
-                  Próximamente
+                  {t('chat.comingSoon')}
                 </span>
                 <p className="max-w-[260px] text-center font-mono text-[10px] text-on-surface-variant/50 leading-relaxed px-4">
-                  Configura un agente guardián para controlar lo que puede hacer tu agente principal.
-                  Define restricciones, bloquea acciones y exige aprobación antes de operaciones sensibles.
+                  {t('chat.guardianBlurb1')}{' '}
+                  {t('chat.guardianBlurb2')}
                 </p>
               </>
             )}
@@ -568,7 +571,7 @@ export function ChatPage() {
                     Guardian
                   </p>
                   <p className="font-mono text-[9px] text-on-surface-variant">
-                    ○ desconectado
+                    {t('chat.guardianDisconnected')}
                   </p>
                 </div>
               </>
@@ -578,9 +581,7 @@ export function ChatPage() {
           {/* Placeholder content behind overlay */}
           {bbPanelOpen && (
             <div className="flex-1 overflow-hidden p-3 flex flex-col gap-2">
-              <p className="font-mono text-[10px] text-on-surface-variant/20 m-auto text-center leading-relaxed">
-                Chat del guardián.<br />Configura restricciones aquí.
-              </p>
+              <p className="font-mono text-[10px] text-on-surface-variant/20 m-auto text-center leading-relaxed" dangerouslySetInnerHTML={{ __html: t('chat.guardianChatBlurb') }} />
             </div>
           )}
         </div>

@@ -5,6 +5,7 @@ import {
   type Agent, type ProviderSettings, type AppConfig,
 } from '../lib/api.ts';
 import { getModelsForProvider, getDefaultModel } from '../lib/models.ts';
+import { useT } from '../lib/i18n.tsx';
 import {
   buttonPrimary, buttonSecondary, buttonDanger,
   inputCls as baseInputCls, inputMono,
@@ -13,6 +14,7 @@ import {
 
 function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
   const navigate = useNavigate();
+  const { t } = useT();
   const isActive = agent.status === 'active';
   const isBusy = agent.busy === true;
 
@@ -58,7 +60,7 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className={`${buttonDanger} sm:opacity-0 sm:group-hover:opacity-100`}
         >
-          Eliminar
+          {t('dashboard.delete')}
         </button>
       </div>
     </div>
@@ -66,6 +68,7 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
 }
 
 export function DashboardPage() {
+  const { t } = useT();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [providerSettings, setProviderSettings] = useState<ProviderSettings | null>(null);
@@ -106,7 +109,7 @@ export function DashboardPage() {
       await loadAll();
       navigate(`/agents/${result.id}/chat`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Importación fallida');
+      setError(err instanceof Error ? err.message : t('dashboard.importFailed'));
     } finally {
       setImporting(false);
       if (importInputRef.current) importInputRef.current.value = '';
@@ -157,20 +160,20 @@ export function DashboardPage() {
       await createAgent(id, newName.trim(), newModel, newProvider || undefined, newWorkspace.trim() || undefined);
       navigate(`/agents/${id}/chat`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al crear');
+      setError(err instanceof Error ? err.message : t('common.errorCreate'));
       setCreating(false);
     }
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`¿Eliminar agente "${name}" (${id})?\n\nEsto detendrá el agente y eliminará permanentemente su espacio de trabajo, incluyendo todos los archivos, datos del vault e historial de conversaciones.\n\nEsta acción no se puede deshacer.`)) return;
+    if (!confirm(t('dashboard.deleteConfirm', { name, id }))) return;
     await deleteAgent(id);
     loadAll();
   }
 
   if (loading) {
     return (
-      <div className="font-mono text-xs text-on-surface-variant p-8">cargando agentes…</div>
+      <div className="font-mono text-xs text-on-surface-variant p-8">{t('dashboard.loadingAgents')}</div>
     );
   }
 
@@ -180,13 +183,13 @@ export function DashboardPage() {
       <div className="max-w-3xl mx-auto py-16 px-4">
         <div className="text-center">
           <h1 className="font-headline text-4xl font-bold text-on-surface mb-4">
-            Comenzar con <span className="highlight-marker">GranClaw</span>
+            {t('dashboard.getStartedWith')} <span className="highlight-marker">GranClaw</span>
           </h1>
           <p className="font-mono text-xs text-on-surface-variant mb-8">
-            Configura un proveedor y clave API antes de crear agentes.
+            {t('dashboard.configureProviderBlurb')}
           </p>
           <Link to="/settings" className={buttonPrimary}>
-            Configurar proveedor
+            {t('dashboard.configureProvider')}
           </Link>
         </div>
       </div>
@@ -199,10 +202,10 @@ export function DashboardPage() {
       {providerSettings && !providerSettings.configured && (
         <div className="rounded-xl bg-warning/10 border border-warning/30 px-4 py-3 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <p className="font-mono text-[11px] text-warning">
-            Sin proveedor configurado — los agentes no pueden ejecutarse hasta que configures uno.
+            {t('dashboard.noProviderWarning')}
           </p>
           <Link to="/settings" className="font-label text-[11px] font-semibold uppercase tracking-widest text-primary hover:text-surface-tint flex-shrink-0">
-            Configurar →
+            {t('dashboard.configureArrow')}
           </Link>
         </div>
       )}
@@ -210,9 +213,9 @@ export function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="font-headline text-3xl sm:text-4xl font-bold text-on-surface">Agentes</h1>
+          <h1 className="font-headline text-3xl sm:text-4xl font-bold text-on-surface">{t('dashboard.title')}</h1>
           <p className="font-mono text-[11px] text-on-surface-variant mt-1">
-            {agents.length} agente{agents.length !== 1 ? 's' : ''} configurado{agents.length !== 1 ? 's' : ''}
+            {t(agents.length === 1 ? 'dashboard.agentsCountOne' : 'dashboard.agentsCountOther', { count: agents.length })}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -227,16 +230,16 @@ export function DashboardPage() {
             onClick={() => importInputRef.current?.click()}
             disabled={importing || !providerSettings?.configured}
             className={buttonSecondary}
-            title="Import an agent from a granclaw export zip"
+            title={t('dashboard.importTitle')}
           >
-            {importing ? 'Importando…' : '↥ Importar'}
+            {importing ? t('dashboard.importing') : t('dashboard.import')}
           </button>
           <button
             onClick={() => setShowCreate(s => !s)}
             disabled={!providerSettings?.configured}
             className={buttonPrimary}
           >
-            {showCreate ? 'Cancelar' : '+ Nuevo Agente'}
+            {showCreate ? t('dashboard.cancel') : t('dashboard.newAgent')}
           </button>
         </div>
       </div>
@@ -245,18 +248,18 @@ export function DashboardPage() {
       {showCreate && (
         <div className={`${cardCls} p-5 mb-6 space-y-3`}>
           <p className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
-            Crear nuevo agente
+            {t('dashboard.createNewAgent')}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               className={inputMono}
-              placeholder="id-agente (minúsculas, sin espacios)"
+              placeholder={t('dashboard.agentIdPlaceholder')}
               value={newId}
               onChange={e => setNewId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
             />
             <input
               className={baseInputCls}
-              placeholder="Nombre de visualización"
+              placeholder={t('dashboard.displayNamePlaceholder')}
               value={newName}
               onChange={e => setNewName(e.target.value)}
             />
@@ -284,7 +287,7 @@ export function DashboardPage() {
           {appConfig.showWorkspaceDirConfig && (
             <input
               className={inputMono}
-              placeholder={`Ruta del espacio de trabajo (opcional, por defecto ./workspaces/${newId || 'id-agente'})`}
+              placeholder={t('dashboard.workspacePlaceholder', { id: newId || t('dashboard.workspacePlaceholderDefault') })}
               value={newWorkspace}
               onChange={e => setNewWorkspace(e.target.value)}
             />
@@ -295,7 +298,7 @@ export function DashboardPage() {
               disabled={creating || !newId.trim() || !newName.trim() || !newModel}
               className={buttonPrimary}
             >
-              {creating ? 'Creando…' : 'Crear'}
+              {creating ? t('dashboard.creating') : t('dashboard.create')}
             </button>
             {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
@@ -308,7 +311,7 @@ export function DashboardPage() {
           <div className="text-center py-16">
             <span className="text-3xl opacity-30">🤖</span>
             <p className="font-mono text-[11px] text-on-surface-variant mt-3">
-              Sin agentes aún. Crea uno para comenzar.
+              {t('dashboard.noAgents')}
             </p>
           </div>
         ) : (

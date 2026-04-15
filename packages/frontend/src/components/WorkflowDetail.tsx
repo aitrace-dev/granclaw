@@ -6,6 +6,7 @@ import {
 } from '../lib/api.ts';
 import { RunDetail } from './RunDetail.tsx';
 import { buttonPrimary, buttonGhost, cardCls, badgeBase } from '../ui/primitives';
+import { useT } from '../lib/i18n.tsx';
 
 interface Props {
   agentId: string;
@@ -34,6 +35,7 @@ const runStatusDot: Record<string, string> = {
 };
 
 export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefreshRuns }: Props) {
+  const { t } = useT();
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
 
@@ -61,13 +63,13 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
   return (
     <div className="p-4">
       <button onClick={onBack} className={`${buttonGhost} mb-3`}>
-        ← Volver a flujos
+        {t('workflows.back')}
       </button>
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-headline text-xl font-bold text-on-surface">{workflow.name}</h2>
         <button onClick={onRun} className={buttonPrimary}>
-          Ejecutar
+          {t('workflows.run_button')}
         </button>
       </div>
 
@@ -77,7 +79,7 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
 
       {/* Steps timeline */}
       <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
-        Pasos ({workflow.steps.length})
+        {t('workflows.stepsTitle', { count: workflow.steps.length })}
       </h3>
       <div className="flex flex-col gap-1 mb-6">
         {workflow.steps.map((step: WorkflowStep, i: number) => {
@@ -99,7 +101,7 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
                 <span className="text-sm text-on-surface flex-1">{step.name}</span>
                 {step.transitions && (
                   <span className="font-mono text-[10px] text-on-surface-variant">
-                    {step.transitions.conditions.length} condición{step.transitions.conditions.length !== 1 ? 'es' : ''}
+                    {t(step.transitions.conditions.length === 1 ? 'workflows.conditionsOne' : 'workflows.conditionsOther', { count: step.transitions.conditions.length })}
                   </span>
                 )}
                 <span
@@ -122,9 +124,9 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
                     </pre>
                   )}
                   <div className="flex gap-4 mt-1.5 font-mono text-[10px] text-on-surface-variant">
-                    <span>Tipo: {step.type}</span>
-                    {timeoutMs && <span>Límite de tiempo: {(timeoutMs / 1000)}s</span>}
-                    <span>ID: {step.id.slice(0, 8)}</span>
+                    <span>{t('workflows.stepType', { type: step.type })}</span>
+                    {timeoutMs && <span>{t('workflows.stepTimeout', { seconds: timeoutMs / 1000 })}</span>}
+                    <span>{t('workflows.stepId', { id: step.id.slice(0, 8) })}</span>
                   </div>
                 </div>
               )}
@@ -135,10 +137,10 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
 
       {/* Run history */}
       <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
-        Historial de ejecuciones ({runs.length})
+        {t('workflows.runHistoryTitle', { count: runs.length })}
       </h3>
       {runs.length === 0 ? (
-        <p className="text-xs text-on-surface-variant">Sin ejecuciones aún.</p>
+        <p className="text-xs text-on-surface-variant">{t('workflows.noRuns')}</p>
       ) : (
         <div className="flex flex-col gap-1">
           {runs.map((run: WorkflowRun) => (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { fetchUsage, type UsageSummary } from '../lib/api.ts';
 import { Chart, registerables } from 'chart.js';
+import { useT } from '../lib/i18n.tsx';
 
 Chart.register(...registerables);
 
@@ -164,6 +165,7 @@ function CostChart({ data }: { data: UsageSummary }) {
 }
 
 export function UsageView({ agentId }: { agentId: string }) {
+  const { t } = useT();
   const [data, setData] = useState<UsageSummary | null>(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
@@ -174,7 +176,7 @@ export function UsageView({ agentId }: { agentId: string }) {
   }, [agentId, days]);
 
   if (loading || !data) {
-    return <div className="text-on-surface-variant/70 text-xs p-6">Escaneando sesiones...</div>;
+    return <div className="text-on-surface-variant/70 text-xs p-6">{t('usage.loading')}</div>;
   }
 
   const models = Object.entries(data.byModel).sort((a, b) => b[1].estimatedCostUsd - a[1].estimatedCostUsd);
@@ -186,7 +188,7 @@ export function UsageView({ agentId }: { agentId: string }) {
         <div className="flex items-center gap-2">
           <span className="text-[13px] opacity-60">📊</span>
           <span className="text-[11px] uppercase tracking-[0.14em] font-medium text-on-surface-variant">
-            Uso
+            {t('usage.title')}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -209,37 +211,37 @@ export function UsageView({ agentId }: { agentId: string }) {
         {/* Summary cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4">
-            <p className="text-[9px] uppercase text-on-surface-variant/60 mb-1.5">Tokens totales</p>
+            <p className="text-[9px] uppercase text-on-surface-variant/60 mb-1.5">{t('usage.totalTokens')}</p>
             <p className="font-mono text-[20px] text-on-surface/80">{formatTokens(data.totalInputTokens + data.totalOutputTokens)}</p>
-            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-1">{formatTokens(data.totalCacheReadTokens + data.totalCacheCreateTokens)} en caché</p>
+            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-1">{t('usage.cachedSuffix', { amount: formatTokens(data.totalCacheReadTokens + data.totalCacheCreateTokens) })}</p>
           </div>
           <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4">
-            <p className="text-[9px] uppercase text-on-surface-variant/60 mb-1.5">Sesiones</p>
+            <p className="text-[9px] uppercase text-on-surface-variant/60 mb-1.5">{t('usage.sessions')}</p>
             <p className="font-mono text-[20px] text-on-surface/80">{data.totalSessions}</p>
-            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-1">{Object.keys(data.byModel).length} modelos</p>
+            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-1">{t('usage.modelsCount', { count: Object.keys(data.byModel).length })}</p>
           </div>
           <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4">
-            <p className="text-[9px] uppercase text-on-surface-variant/60 mb-1.5">Costo est.</p>
+            <p className="text-[9px] uppercase text-on-surface-variant/60 mb-1.5">{t('usage.estCost')}</p>
             <p className="font-mono text-[20px] text-error/80">${data.totalEstimatedCostUsd.toFixed(2)}</p>
-            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-1">Período de {days} días</p>
+            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-1">{t('usage.periodDays', { days })}</p>
           </div>
           <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4">
-            <p className="text-[9px] uppercase text-on-surface-variant/60 mb-1.5">Prom/Día</p>
+            <p className="text-[9px] uppercase text-on-surface-variant/60 mb-1.5">{t('usage.avgDay')}</p>
             <p className="font-mono text-[20px] text-warning/80">${data.daily.length > 0 ? (data.totalEstimatedCostUsd / data.daily.length).toFixed(2) : '0.00'}</p>
-            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-1">{data.daily.length > 0 ? Math.round(data.totalSessions / data.daily.length) : 0} sesiones/día</p>
+            <p className="font-mono text-[9px] text-on-surface-variant/60 mt-1">{t('usage.sessionsPerDay', { count: data.daily.length > 0 ? Math.round(data.totalSessions / data.daily.length) : 0 })}</p>
           </div>
         </div>
 
         {/* Token chart */}
         <div>
           <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
-            Uso diario de tokens
+            {t('usage.dailyTokenUsage')}
           </p>
           <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4" style={{ height: '300px' }}>
             {data.daily.length > 0 ? (
               <TokenChart data={data} />
             ) : (
-              <p className="text-on-surface-variant/25 text-xs text-center pt-20">Sin datos de uso</p>
+              <p className="text-on-surface-variant/25 text-xs text-center pt-20">{t('usage.noUsageData')}</p>
             )}
           </div>
         </div>
@@ -247,13 +249,13 @@ export function UsageView({ agentId }: { agentId: string }) {
         {/* Cost chart */}
         <div>
           <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
-            Costo estimado diario
+            {t('usage.dailyCost')}
           </p>
           <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4" style={{ height: '250px' }}>
             {data.daily.length > 0 ? (
               <CostChart data={data} />
             ) : (
-              <p className="text-on-surface-variant/25 text-xs text-center pt-16">Sin datos de costo</p>
+              <p className="text-on-surface-variant/25 text-xs text-center pt-16">{t('usage.noCostData')}</p>
             )}
           </div>
         </div>
@@ -262,7 +264,7 @@ export function UsageView({ agentId }: { agentId: string }) {
         {models.length > 0 && (
           <div>
             <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
-              Por modelo
+              {t('usage.byModel')}
             </p>
             <div className="space-y-1">
               {models.map(([model, stats]) => (
@@ -270,7 +272,7 @@ export function UsageView({ agentId }: { agentId: string }) {
                   <div className="flex-1 min-w-0">
                     <span className="font-mono text-[10px] text-on-surface/70 truncate block">{model}</span>
                     <span className="font-mono text-[9px] text-on-surface-variant/60">
-                      {stats.sessions} sesiones · {formatTokens(stats.inputTokens)} entrada · {formatTokens(stats.outputTokens)} salida
+                      {t('usage.modelSessionsBlurb', { sessions: stats.sessions, input: formatTokens(stats.inputTokens), output: formatTokens(stats.outputTokens) })}
                     </span>
                   </div>
                   <span className="font-mono text-[10px] text-error/60 flex-shrink-0">
@@ -285,23 +287,23 @@ export function UsageView({ agentId }: { agentId: string }) {
         {/* Token breakdown */}
         <div>
           <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
-            Desglose de tokens
+            {t('usage.tokenBreakdown')}
           </p>
           <div className="rounded bg-surface-container-lowest border border-outline-variant/40 p-3 space-y-1.5">
             <div className="flex justify-between">
-              <span className="font-mono text-[10px] text-on-surface-variant">Tokens de entrada</span>
+              <span className="font-mono text-[10px] text-on-surface-variant">{t('usage.inputTokens')}</span>
               <span className="font-mono text-[10px] text-primary">{formatTokens(data.totalInputTokens)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="font-mono text-[10px] text-on-surface-variant">Tokens de salida</span>
+              <span className="font-mono text-[10px] text-on-surface-variant">{t('usage.outputTokens')}</span>
               <span className="font-mono text-[10px] text-info">{formatTokens(data.totalOutputTokens)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="font-mono text-[10px] text-on-surface-variant">Lectura de caché</span>
+              <span className="font-mono text-[10px] text-on-surface-variant">{t('usage.cacheRead')}</span>
               <span className="font-mono text-[10px] text-success">{formatTokens(data.totalCacheReadTokens)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="font-mono text-[10px] text-on-surface-variant">Escritura de caché</span>
+              <span className="font-mono text-[10px] text-on-surface-variant">{t('usage.cacheWrite')}</span>
               <span className="font-mono text-[10px] text-warning">{formatTokens(data.totalCacheCreateTokens)}</span>
             </div>
           </div>
@@ -311,7 +313,7 @@ export function UsageView({ agentId }: { agentId: string }) {
         {Object.keys(data.byTool).length > 0 && (
           <div>
             <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
-              Invocaciones de herramientas
+              {t('usage.toolInvocations')}
             </p>
             <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-3 space-y-1">
               {Object.entries(data.byTool).sort((a, b) => b[1] - a[1]).map(([tool, count]) => {
@@ -336,18 +338,18 @@ export function UsageView({ agentId }: { agentId: string }) {
         {/* Daily detail table */}
         <div>
           <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-2">
-            Desglose diario
+            {t('usage.dailyBreakdown')}
           </p>
           <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 overflow-hidden">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-outline-variant/30">
-                  <th className="px-3 py-2 text-left text-[9px] font-mono text-on-surface-variant/70 font-medium">Fecha</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">Sesiones</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">Entrada</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">Salida</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">Caché</th>
-                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">Costo</th>
+                  <th className="px-3 py-2 text-left text-[9px] font-mono text-on-surface-variant/70 font-medium">{t('usage.date')}</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">{t('usage.tableSessions')}</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">{t('usage.tableInput')}</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">{t('usage.tableOutput')}</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">{t('usage.tableCache')}</th>
+                  <th className="px-3 py-2 text-right text-[9px] font-mono text-on-surface-variant/70 font-medium">{t('usage.tableCost')}</th>
                 </tr>
               </thead>
               <tbody>

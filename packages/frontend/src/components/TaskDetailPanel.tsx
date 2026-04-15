@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { TaskWithComments, TaskComment, TaskStatus } from '../lib/api.ts';
+import { useT } from '../lib/i18n.tsx';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  TaskDetailPanel
@@ -9,24 +10,27 @@ import type { TaskWithComments, TaskComment, TaskStatus } from '../lib/api.ts';
  *  markdown description, flat comment list, add comment, delete.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
-  { value: 'backlog', label: 'Pendiente' },
-  { value: 'in_progress', label: 'En progreso' },
-  { value: 'scheduled', label: 'Programado' },
-  { value: 'to_review', label: 'En revisión' },
-  { value: 'done', label: 'Completado' },
+const STATUS_ORDER: { value: TaskStatus; labelKey: string }[] = [
+  { value: 'backlog', labelKey: 'tasks.statusLabels.backlog' },
+  { value: 'in_progress', labelKey: 'tasks.statusLabels.inProgress' },
+  { value: 'scheduled', labelKey: 'tasks.statusLabels.scheduled' },
+  { value: 'to_review', labelKey: 'tasks.statusLabels.toReview' },
+  { value: 'done', labelKey: 'tasks.statusLabels.done' },
 ];
 
-function relativeTime(unixSeconds: number): string {
-  const diffMs = Date.now() - unixSeconds * 1000;
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'ahora';
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `hace ${diffMin}m`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `hace ${diffHr}h`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `hace ${diffDay}d`;
+function useRelativeTime() {
+  const { t } = useT();
+  return (unixSeconds: number): string => {
+    const diffMs = Date.now() - unixSeconds * 1000;
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return t('tasks.relativeNow');
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return t('tasks.relativeMinutes', { n: diffMin });
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return t('tasks.relativeHours', { n: diffHr });
+    const diffDay = Math.floor(diffHr / 24);
+    return t('tasks.relativeDays', { n: diffDay });
+  };
 }
 
 const inputCls =
@@ -47,6 +51,7 @@ function SourceBadge({ source }: { source: 'agent' | 'human' }) {
 }
 
 function CommentItem({ comment }: { comment: TaskComment }) {
+  const relativeTime = useRelativeTime();
   return (
     <div className="flex flex-col gap-1 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
       <div className="flex items-center gap-2">
@@ -75,6 +80,8 @@ export function TaskDetailPanel({
   onAddComment: (taskId: string, body: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
 }) {
+  const { t } = useT();
+  const relativeTime = useRelativeTime();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
 
@@ -133,7 +140,7 @@ export function TaskDetailPanel({
   };
 
   const handleDelete = async () => {
-    if (!confirm(`¿Eliminar tarea "${task.title}"? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(t('taskDetail.deleteConfirm', { title: task.title }))) return;
     setDeleting(true);
     try { await onDelete(task.id); } finally { setDeleting(false); }
   };
@@ -165,14 +172,14 @@ export function TaskDetailPanel({
             <span className="font-mono text-[10px] text-primary/40 flex-shrink-0">{task.id}</span>
             {saving && (
               <span className="font-mono text-[9px] text-on-surface-variant/60 animate-pulse">
-                guardando…
+                {t('taskDetail.saving')}
               </span>
             )}
           </div>
           <button
             onClick={onClose}
             className="text-on-surface-variant/70 hover:text-on-surface transition-colors text-[18px] leading-none flex-shrink-0"
-            aria-label="Cerrar"
+            aria-label={t('taskDetail.close')}
           >
             ×
           </button>
@@ -210,16 +217,16 @@ export function TaskDetailPanel({
             {/* Status dropdown */}
             <div className="flex flex-col gap-1.5">
               <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
-                Estado
+                {t('taskDetail.status')}
               </p>
               <select
                 value={task.status}
                 onChange={(e) => void commitStatus(e.target.value as TaskStatus)}
                 className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface outline-none focus:ring-1 focus:ring-primary/25 cursor-pointer font-mono transition-shadow"
               >
-                {STATUS_OPTIONS.map((o) => (
+                {STATUS_ORDER.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label}
+                    {t(o.labelKey)}
                   </option>
                 ))}
               </select>
@@ -229,14 +236,14 @@ export function TaskDetailPanel({
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/60">
-                  fuente
+                  {t('taskDetail.sourceLabel')}
                 </span>
                 <SourceBadge source={task.source} />
               </div>
               {showEditedBy && task.updatedBy && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-[8px] uppercase tracking-[0.15em] text-on-surface-variant/60">
-                    editado por
+                    {t('taskDetail.editedByLabel')}
                   </span>
                   <SourceBadge source={task.updatedBy} />
                 </div>
@@ -246,11 +253,11 @@ export function TaskDetailPanel({
             {/* Timestamps */}
             <div className="flex flex-col gap-1">
               <p className="font-mono text-[10px] text-on-surface-variant/60">
-                <span className="text-on-surface-variant/20">creado</span>{' '}
+                <span className="text-on-surface-variant/20">{t('taskDetail.created')}</span>{' '}
                 {relativeTime(task.createdAt)}
               </p>
               <p className="font-mono text-[10px] text-on-surface-variant/60">
-                <span className="text-on-surface-variant/20">actualizado</span>{' '}
+                <span className="text-on-surface-variant/20">{t('taskDetail.updated')}</span>{' '}
                 {relativeTime(task.updatedAt)}
               </p>
             </div>
@@ -258,7 +265,7 @@ export function TaskDetailPanel({
             {/* Description */}
             <div className="flex flex-col gap-1.5">
               <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
-                Descripción
+                {t('taskDetail.description')}
               </p>
               {editingDesc ? (
                 <div className="flex flex-col gap-1.5">
@@ -267,20 +274,20 @@ export function TaskDetailPanel({
                     className={`${inputCls} min-h-[120px] resize-y font-mono text-[11px] leading-relaxed`}
                     value={descDraft}
                     onChange={(e) => setDescDraft(e.target.value)}
-                    placeholder="Agregar una descripción…"
+                    placeholder={t('taskDetail.descPlaceholder')}
                   />
                   <div className="flex gap-1.5">
                     <button
                       onClick={commitDesc}
                       className="flex-1 rounded bg-primary/15 px-2 py-1.5 text-[10px] text-primary/70 hover:bg-primary/25 transition-colors"
                     >
-                      Guardar
+                      {t('taskDetail.save')}
                     </button>
                     <button
                       onClick={() => { setEditingDesc(false); setDescDraft(task.description); }}
                       className="rounded bg-surface-container px-2 py-1.5 text-[10px] text-on-surface-variant/70 hover:text-on-surface-variant/70 transition-colors"
                     >
-                      Cancelar
+                      {t('taskDetail.cancel')}
                     </button>
                   </div>
                 </div>
@@ -296,7 +303,7 @@ export function TaskDetailPanel({
                     </div>
                   ) : (
                     <p className="font-mono text-[11px] text-on-surface-variant/25 italic group-hover:text-on-surface-variant/70 transition-colors">
-                      Sin descripción — clic para agregar
+                      {t('taskDetail.descEmpty')}
                     </p>
                   )}
                 </div>
@@ -306,11 +313,11 @@ export function TaskDetailPanel({
             {/* Comments */}
             <div className="flex flex-col gap-0">
               <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold mb-1">
-                Comentarios ({task.comments.length})
+                {t('taskDetail.commentsLabel', { count: task.comments.length })}
               </p>
               {task.comments.length === 0 && (
                 <p className="font-mono text-[10px] text-on-surface-variant/25 italic py-2">
-                  Sin comentarios aún
+                  {t('taskDetail.noComments')}
                 </p>
               )}
               {task.comments.map((c) => (
@@ -321,11 +328,11 @@ export function TaskDetailPanel({
             {/* Add comment */}
             <div className="flex flex-col gap-1.5">
               <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
-                Agregar comentario
+                {t('taskDetail.addComment')}
               </p>
               <textarea
                 className={`${inputCls} min-h-[72px] resize-none font-mono text-[11px] leading-relaxed`}
-                placeholder="Escribe un comentario… (markdown soportado)"
+                placeholder={t('taskDetail.commentPlaceholder')}
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
               />
@@ -334,21 +341,21 @@ export function TaskDetailPanel({
                 onClick={submitComment}
                 className="self-end rounded bg-primary/15 px-3 py-1.5 text-[10px] text-primary/70 hover:bg-primary/25 transition-colors disabled:opacity-30"
               >
-                {submittingComment ? 'Publicando…' : 'Publicar comentario'}
+                {submittingComment ? t('taskDetail.publishing') : t('taskDetail.publishComment')}
               </button>
             </div>
 
             {/* Danger zone */}
             <div className="mt-2 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
               <p className="text-[8px] uppercase tracking-[0.18em] text-error/30 font-semibold mb-2">
-                Zona peligrosa
+                {t('taskDetail.dangerZone')}
               </p>
               <button
                 onClick={handleDelete}
                 disabled={deleting}
                 className="w-full rounded bg-red-950/15 px-3 py-2 text-left font-mono text-[11px] text-error/60 transition-all hover:bg-red-950/30 hover:text-error disabled:opacity-20"
               >
-                {deleting ? 'eliminando…' : '[PELIGROSO] Eliminar tarea'}
+                {deleting ? t('taskDetail.deleting') : t('taskDetail.deleteTask')}
               </button>
             </div>
 

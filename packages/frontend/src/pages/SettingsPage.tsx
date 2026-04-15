@@ -13,6 +13,7 @@ import {
   type AppConfig,
 } from '../lib/api.ts';
 import { PROVIDERS, getModelsForProvider, getDefaultModel } from '../lib/models.ts';
+import { useT } from '../lib/i18n.tsx';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
 // ── ManagedProviderRow ────────────────────────────────────────────────────────
 
 function ManagedProviderRow({ entry }: { entry: ProviderEntry }) {
+  const { t } = useT();
   return (
     <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-4">
       <div className="flex items-center justify-between">
@@ -42,7 +44,7 @@ function ManagedProviderRow({ entry }: { entry: ProviderEntry }) {
         </span>
       </div>
       <p className="font-mono text-[10px] text-on-surface-variant/60 mt-2">
-        Preconfigurado · incluye créditos gratuitos · solo lectura
+        {t('settings.managedBlurb')}
       </p>
     </div>
   );
@@ -59,6 +61,7 @@ function ConfiguredProviderRow({
   onRemove: () => void;
   onReplaceKey: (provider: string, model: string, apiKey: string) => Promise<void>;
 }) {
+  const { t } = useT();
   const [replacing, setReplacing] = useState(false);
   const [model, setModel] = useState(entry.model);
   const [apiKey, setApiKey] = useState('');
@@ -67,7 +70,7 @@ function ConfiguredProviderRow({
   const [success, setSuccess] = useState(false);
 
   async function handleSave() {
-    if (!apiKey.trim()) { setError('La clave API es requerida'); return; }
+    if (!apiKey.trim()) { setError(t('common.apiKeyRequired')); return; }
     setSaving(true); setError(null); setSuccess(false);
     try {
       await onReplaceKey(entry.provider, model, apiKey.trim());
@@ -75,7 +78,7 @@ function ConfiguredProviderRow({
       setApiKey('');
       setReplacing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar');
+      setError(err instanceof Error ? err.message : t('common.errorSave'));
     } finally {
       setSaving(false);
     }
@@ -99,14 +102,14 @@ function ConfiguredProviderRow({
               onClick={() => { setReplacing(true); setSuccess(false); }}
               className="rounded px-2 py-1 text-[11px] font-mono text-on-surface-variant hover:text-on-surface bg-surface-container transition-colors"
             >
-              Reemplazar clave
+              {t('settings.replaceKey')}
             </button>
           )}
           <button
             onClick={onRemove}
             className="rounded px-2 py-1 text-[11px] font-mono text-error/60 hover:text-error hover:bg-error/10 transition-colors"
           >
-            Eliminar
+            {t('settings.delete')}
           </button>
         </div>
       </div>
@@ -115,7 +118,7 @@ function ConfiguredProviderRow({
         <div className="space-y-2 pt-1 border-t border-outline-variant/40">
           <div>
             <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1">
-              Modelo
+              {t('settings.model')}
             </label>
             <select
               className={`${inputCls} appearance-none`}
@@ -129,12 +132,12 @@ function ConfiguredProviderRow({
           </div>
           <div>
             <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1">
-              Nueva clave API
+              {t('settings.newApiKey')}
             </label>
             <input
               type="password"
               className={inputCls}
-              placeholder="Pega la nueva clave API"
+              placeholder={t('settings.pasteNewKey')}
               value={apiKey}
               onChange={e => { setApiKey(e.target.value); setError(null); }}
               autoComplete="off"
@@ -147,15 +150,15 @@ function ConfiguredProviderRow({
               disabled={saving}
               className="rounded bg-primary px-3 py-1.5 text-[12px] font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
-              {saving ? 'Guardando…' : 'Guardar'}
+              {saving ? t('common.saving') : t('common.save')}
             </button>
             <button
               onClick={() => { setReplacing(false); setApiKey(''); setError(null); }}
               className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
-            {success && <span className="font-mono text-[11px] text-success">Guardado</span>}
+            {success && <span className="font-mono text-[11px] text-success">{t('common.saved')}</span>}
             {error && <span className="font-mono text-[10px] text-error">{error}</span>}
           </div>
         </div>
@@ -167,6 +170,7 @@ function ConfiguredProviderRow({
 // ── SettingsPage ───────────────────────────────────────────────────────────────
 
 export function SettingsPage() {
+  const { t } = useT();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [configuredProviders, setConfiguredProviders] = useState<ProviderEntry[]>([]);
@@ -225,7 +229,7 @@ export function SettingsPage() {
   }
 
   async function handleAdd() {
-    if (!addProvider || !addModel || !addApiKey.trim()) { setAddError('Todos los campos son requeridos'); return; }
+    if (!addProvider || !addModel || !addApiKey.trim()) { setAddError(t('common.allFieldsRequired')); return; }
     setAdding(true); setAddError(null); setAddSuccess(false);
     try {
       await saveProviderSettings(addProvider, addModel, addApiKey.trim());
@@ -236,7 +240,7 @@ export function SettingsPage() {
       setAddSuccess(true);
       setAddApiKey('');
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'Error al guardar');
+      setAddError(err instanceof Error ? err.message : t('common.errorSave'));
     } finally {
       setAdding(false);
     }
@@ -250,13 +254,13 @@ export function SettingsPage() {
   }
 
   async function handleRemove(provider: string) {
-    if (!confirm(`¿Eliminar ${PROVIDER_LABELS[provider] ?? provider}? Los agentes que usan este proveedor dejarán de responder.`)) return;
+    if (!confirm(t('settings.removeConfirm', { name: PROVIDER_LABELS[provider] ?? provider }))) return;
     await removeProviderSettings(provider);
     setConfiguredProviders(prev => prev.filter(p => p.provider !== provider));
   }
 
   async function handleSearchSave() {
-    if (!braveApiKey.trim()) { setSearchError('La clave API es requerida'); return; }
+    if (!braveApiKey.trim()) { setSearchError(t('common.apiKeyRequired')); return; }
     setSearchSaving(true); setSearchError(null); setSearchSuccess(false);
     try {
       await saveSearchSettings('brave', braveApiKey.trim());
@@ -265,7 +269,7 @@ export function SettingsPage() {
       setBraveApiKey('');
       setReplacingSearch(false);
     } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Error al guardar');
+      setSearchError(err instanceof Error ? err.message : t('common.errorSave'));
     } finally {
       setSearchSaving(false);
     }
@@ -280,13 +284,13 @@ export function SettingsPage() {
       setSearchSuccess(false);
       setReplacingSearch(false);
     } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Error al restablecer');
+      setSearchError(err instanceof Error ? err.message : t('common.errorReset'));
     } finally {
       setSearchSaving(false);
     }
   }
 
-  if (loading) return <div className="text-on-surface-variant/70 font-mono text-xs p-8">cargando…</div>;
+  if (loading) return <div className="text-on-surface-variant/70 font-mono text-xs p-8">{t('common.loading')}</div>;
 
   return (
     <div className="max-w-2xl mx-auto py-6 sm:py-8 px-4">
@@ -298,16 +302,16 @@ export function SettingsPage() {
         className="flex items-center gap-1.5 mb-6 font-mono text-[12px] text-on-surface-variant hover:text-on-surface transition-colors"
       >
         <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-        Volver al agente
+        {t('settings.backToAgent')}
       </button>
 
       {/* ── Provider Settings ── */}
       <div className="mb-8">
         <h1 className="font-headline text-4xl font-bold text-on-surface">
-          <span className="highlight-marker">Configuración</span> de proveedor
+          <span className="highlight-marker">{t('settings.titleHighlight')}</span> {t('settings.titleSuffix')}
         </h1>
         <p className="font-mono text-[11px] text-on-surface-variant mt-2">
-          Configura proveedores de IA. Cada agente puede usar un proveedor diferente.
+          {t('settings.blurb')}
         </p>
       </div>
 
@@ -323,7 +327,7 @@ export function SettingsPage() {
       {/* User-configured providers */}
       {userProviders.length === 0 && managedProviders.length === 0 ? (
         <p className="font-mono text-[11px] text-warning/80 mb-4">
-          Sin proveedores configurados — los agentes no responderán hasta que agregues uno.
+          {t('settings.noProvidersWarning')}
         </p>
       ) : userProviders.length > 0 ? (
         <div className="space-y-2 mb-6">
@@ -342,13 +346,13 @@ export function SettingsPage() {
       {availableToAdd.length > 0 && (
         <div className="rounded-lg bg-surface-container-lowest border border-outline-variant/40 p-5 space-y-4">
           <p className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium">
-            Agregar proveedor
+            {t('settings.addProvider')}
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
-                Proveedor
+                {t('settings.provider')}
               </label>
               <select
                 className={`${inputCls} appearance-none`}
@@ -362,7 +366,7 @@ export function SettingsPage() {
             </div>
             <div>
               <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
-                Modelo
+                {t('settings.model')}
               </label>
               <select
                 className={`${inputCls} appearance-none`}
@@ -378,12 +382,12 @@ export function SettingsPage() {
 
           <div>
             <label className="block text-[10px] uppercase tracking-[0.14em] text-on-surface-variant font-medium mb-1.5">
-              Clave API
+              {t('settings.apiKey')}
             </label>
             <input
               type="password"
               className={inputCls}
-              placeholder="Pega tu clave API"
+              placeholder={t('settings.pasteApiKey')}
               value={addApiKey}
               onChange={e => { setAddApiKey(e.target.value); setAddError(null); setAddSuccess(false); }}
               autoComplete="off"
@@ -396,9 +400,9 @@ export function SettingsPage() {
               disabled={adding || !addApiKey.trim()}
               className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity disabled:opacity-40 hover:opacity-90"
             >
-              {adding ? 'Agregando…' : 'Agregar'}
+              {adding ? t('common.adding') : t('common.add')}
             </button>
-            {addSuccess && <span className="font-mono text-[11px] text-success">Agregado ✓</span>}
+            {addSuccess && <span className="font-mono text-[11px] text-success">{t('settings.added')}</span>}
             {addError && <span className="font-mono text-[10px] text-error">{addError}</span>}
           </div>
         </div>
@@ -406,21 +410,21 @@ export function SettingsPage() {
 
       {/* ── Web Search ── */}
       <div className="mt-8 pt-8 border-t border-outline-variant/40">
-        <h2 className="font-headline text-2xl font-bold text-on-surface mb-1">Búsqueda Web</h2>
+        <h2 className="font-headline text-2xl font-bold text-on-surface mb-1">{t('settings.webSearch')}</h2>
 
         {appConfig.showBraveSearchConfig ? (
           <>
             <p className="font-mono text-[11px] text-on-surface-variant/70 mb-6">
-              Brave Search otorga a los agentes capacidad de búsqueda web real.{' '}
+              {t('settings.braveBlurbPrefix')}{' '}
               {searchConfigured
-                ? <span className="text-success">Configurado ✓</span>
-                : <span className="text-warning">Sin configurar — los agentes no pueden buscar en la web.</span>}
+                ? <span className="text-success">{t('settings.configured')}</span>
+                : <span className="text-warning">{t('settings.notConfigured')}</span>}
             </p>
 
             <div className="space-y-4">
               <div>
                 <label className="block font-mono text-[11px] text-on-surface-variant mb-1">
-                  Clave API de Brave Search
+                  {t('settings.braveKeyLabel')}
                 </label>
                 {searchConfigured && !replacingSearch ? (
                   <div className="flex items-center gap-2">
@@ -435,14 +439,14 @@ export function SettingsPage() {
                       onClick={() => { setReplacingSearch(true); setSearchSuccess(false); }}
                       className="shrink-0 rounded px-3 py-2 text-[11px] font-mono text-on-surface-variant hover:text-on-surface bg-surface-container transition-colors"
                     >
-                      Reemplazar
+                      {t('common.replace')}
                     </button>
                   </div>
                 ) : (
                   <input
                     type="password"
                     className={inputCls}
-                    placeholder="Ingresa la clave API de Brave Search"
+                    placeholder={t('settings.enterBraveKey')}
                     value={braveApiKey}
                     onChange={e => { setBraveApiKey(e.target.value); setSearchSuccess(false); }}
                     autoComplete="off"
@@ -458,7 +462,7 @@ export function SettingsPage() {
                     disabled={searchSaving || !braveApiKey.trim()}
                     className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {searchSaving ? 'Guardando…' : 'Guardar'}
+                    {searchSaving ? t('common.saving') : t('common.save')}
                   </button>
                 )}
                 {replacingSearch && (
@@ -466,7 +470,7 @@ export function SettingsPage() {
                     onClick={() => { setReplacingSearch(false); setBraveApiKey(''); setSearchError(null); }}
                     className="rounded px-3 py-1.5 text-[12px] font-mono text-on-surface-variant hover:text-on-surface transition-colors"
                   >
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                 )}
                 {searchConfigured && (
@@ -475,18 +479,18 @@ export function SettingsPage() {
                     disabled={searchSaving}
                     className="rounded px-3 py-2 text-[12px] font-mono text-on-surface-variant hover:text-error hover:bg-error/10 transition-colors disabled:opacity-40"
                   >
-                    Eliminar
+                    {t('common.delete')}
                   </button>
                 )}
-                {searchSuccess && <span className="font-mono text-[11px] text-success">Guardado</span>}
+                {searchSuccess && <span className="font-mono text-[11px] text-success">{t('common.saved')}</span>}
                 {searchError && <span className="font-mono text-[10px] text-error">{searchError}</span>}
               </div>
             </div>
           </>
         ) : (
           <p className="font-mono text-[11px] text-on-surface-variant/70 mt-2">
-            La búsqueda web está preconfigurada para este espacio de trabajo.{' '}
-            <span className="text-success">Activo ✓</span>
+            {t('settings.braveManagedBlurb')}{' '}
+            <span className="text-success">{t('settings.active')}</span>
           </p>
         )}
       </div>

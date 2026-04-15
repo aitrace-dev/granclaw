@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { browserLiveWsUrl } from '../lib/api.ts';
+import { useT } from '../lib/i18n.tsx';
 
 // Fallback viewport — only used before the first frame arrives. After that
 // we read the actual frame dimensions from img.naturalWidth/Height so the
@@ -55,6 +56,7 @@ interface TakeoverInfo {
 }
 
 export function TakeoverPage() {
+  const { t } = useT();
   const { token } = useParams<{ token: string }>();
   const [info, setInfo] = useState<TakeoverInfo | null>(null);
   const [expired, setExpired] = useState(false);
@@ -304,13 +306,13 @@ export function TakeoverPage() {
       <div className="flex h-screen items-center justify-center bg-background font-body text-on-surface px-6">
         <div className="text-center max-w-md">
           <p className="text-[11px] font-label uppercase tracking-[0.15em] text-secondary/70 mb-2">
-            toma de control
+            {t('takeover.sessionExpiredLabel')}
           </p>
           <h1 className="font-headline text-[32px] leading-tight text-on-surface mb-3">
-            Sesión expirada
+            {t('takeover.sessionExpired')}
           </h1>
           <p className="text-[15px] leading-relaxed text-on-surface-variant italic">
-            Este enlace de toma de control ya fue usado o expiró.
+            {t('takeover.sessionExpiredBlurb')}
           </p>
         </div>
       </div>
@@ -322,13 +324,13 @@ export function TakeoverPage() {
       <div className="flex h-screen items-center justify-center bg-background font-body text-on-surface px-6">
         <div className="text-center max-w-md">
           <p className="text-[11px] font-label uppercase tracking-[0.15em] text-primary/70 mb-2">
-            completo
+            {t('takeover.completeLabel')}
           </p>
           <h1 className="font-headline text-[32px] leading-tight text-on-surface mb-3">
-            Control devuelto al agente
+            {t('takeover.controlReturned')}
           </h1>
           <p className="text-[15px] leading-relaxed text-on-surface-variant italic">
-            Puedes cerrar esta pestaña.
+            {t('takeover.closeTab')}
           </p>
         </div>
       </div>
@@ -339,7 +341,7 @@ export function TakeoverPage() {
     return (
       <div className="flex h-screen items-center justify-center bg-background font-body">
         <p className="font-mono text-[11px] text-on-surface-variant/60 animate-pulse">
-          conectando…
+          {t('takeover.connecting')}
         </p>
       </div>
     );
@@ -356,7 +358,7 @@ export function TakeoverPage() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-label uppercase tracking-[0.15em] text-primary/70 mb-1">
-            El agente necesita tu ayuda
+            {t('takeover.agentNeedsHelp')}
           </p>
           <p className="font-headline text-[17px] leading-snug text-on-surface">
             {info.reason}
@@ -391,7 +393,7 @@ export function TakeoverPage() {
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
           <span className="text-[10px] font-label uppercase tracking-[0.15em] text-secondary">
-            en vivo
+            {t('takeover.liveLabel')}
           </span>
         </div>
       </div>
@@ -424,7 +426,7 @@ export function TakeoverPage() {
           />
         ) : (
           <p className="font-mono text-[10px] text-on-surface-variant/50 animate-pulse">
-            esperando transmisión del navegador…
+            {t('takeover.waitingStream')}
           </p>
         )}
       </div>
@@ -436,7 +438,7 @@ export function TakeoverPage() {
       <div className="flex items-end gap-4 px-8 py-5 bg-surface-container-low flex-shrink-0">
         <div className="flex-1 flex flex-col">
           <label className="text-[10px] font-label uppercase tracking-[0.15em] text-on-surface-variant/70 mb-1">
-            ¿Qué hiciste? <span className="italic text-on-surface-variant/50">(opcional)</span>
+            {t('takeover.whatDidYouDo')} <span className="italic text-on-surface-variant/50">{t('takeover.optional')}</span>
           </label>
           <input
             type="text"
@@ -449,7 +451,7 @@ export function TakeoverPage() {
                 void handleComplete();
               }
             }}
-            placeholder="Describe tu acción para el agente…"
+            placeholder={t('takeover.describeActionPlaceholder')}
             disabled={submitting}
             className="bg-transparent border-0 border-b border-outline-variant/30 focus:border-primary focus:outline-none font-body text-[15px] text-on-surface placeholder:text-on-surface-variant/40 placeholder:italic px-0 py-2 disabled:opacity-50"
           />
@@ -459,7 +461,7 @@ export function TakeoverPage() {
           disabled={submitting}
           className="flex-shrink-0 rounded-sm bg-primary text-on-primary font-label text-[11px] uppercase tracking-[0.15em] px-5 py-3 hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Devolviendo…' : 'Completado'}
+          {submitting ? t('takeover.returning') : t('takeover.completed')}
         </button>
       </div>
     </div>

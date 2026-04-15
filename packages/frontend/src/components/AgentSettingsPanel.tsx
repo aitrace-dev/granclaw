@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Agent } from '../lib/api.ts';
 import { addSecret, deleteSecretApi, exportAgentUrl } from '../lib/api.ts';
+import { useT } from '../lib/i18n.tsx';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AgentSettingsPanel
@@ -135,6 +136,7 @@ export function AgentSettingsPanel({
   mainView: 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
   onViewChange: (view: 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations') => void;
 }) {
+  const { t } = useT();
   const [secretForm, setSecretForm] = useState({ name: '', value: '' });
 
   const isEditing = secretNames.includes(secretForm.name);
@@ -175,61 +177,61 @@ export function AgentSettingsPanel({
       {/* ═════════════════════  VIEW SELECTORS  ═══════════════════════════ */}
       <ViewButton
         icon="💬"
-        label="Chat"
+        label={t('agentSettings.views.chat')}
         active={mainView === 'chat'}
         onClick={() => onViewChange('chat')}
       />
       <ViewButton
         icon="▦"
-        label="Tareas"
+        label={t('agentSettings.views.tasks')}
         active={mainView === 'tasks'}
         onClick={() => onViewChange('tasks')}
       />
       <ViewButton
         icon="🌐"
-        label="Navegador"
+        label={t('agentSettings.views.browser')}
         active={mainView === 'browser'}
         onClick={() => onViewChange('browser')}
       />
       <ViewButton
         icon="📂"
-        label="Archivos"
+        label={t('agentSettings.views.files')}
         active={mainView === 'files'}
         onClick={() => onViewChange('files')}
       />
       <ViewButton
         icon="⚡"
-        label="Flujos de trabajo"
+        label={t('agentSettings.views.workflows')}
         active={mainView === 'workflows'}
         onClick={() => onViewChange('workflows')}
       />
       <ViewButton
         icon="⏰"
-        label="Programados"
+        label={t('agentSettings.views.schedules')}
         active={mainView === 'schedules'}
         onClick={() => onViewChange('schedules')}
       />
       <ViewButton
         icon="📡"
-        label="Monitor"
+        label={t('agentSettings.views.monitor')}
         active={mainView === 'monitor'}
         onClick={() => onViewChange('monitor')}
       />
       <ViewButton
         icon="📊"
-        label="Uso"
+        label={t('agentSettings.views.usage')}
         active={mainView === 'usage'}
         onClick={() => onViewChange('usage')}
       />
       <ViewButton
         icon="📋"
-        label="Registros"
+        label={t('agentSettings.views.logs')}
         active={mainView === 'logs'}
         onClick={() => onViewChange('logs')}
       />
       <ViewButton
         icon="🔌"
-        label="Integraciones"
+        label={t('agentSettings.views.integrations')}
         active={mainView === 'integrations'}
         onClick={() => onViewChange('integrations')}
       />
@@ -240,10 +242,10 @@ export function AgentSettingsPanel({
       >
         <span className="text-[13px]">🛡</span>
         <span className="text-[11px] uppercase tracking-[0.14em] font-medium text-on-surface-variant/70">
-          Guardián
+          {t('agentSettings.views.guardian')}
         </span>
         <span className="ml-auto rounded-full bg-amber-400/10 border border-amber-400/20 px-1.5 py-[1px] font-mono text-[7px] text-warning uppercase tracking-widest">
-          Pronto
+          {t('agentSettings.comingSoon')}
         </span>
       </div>
 
@@ -253,7 +255,7 @@ export function AgentSettingsPanel({
       {/* Tools and Environment sections removed — tools are configured via agents.config.json */}
 
       {/* ═════════════════════  SECRETS  ═════════════════════════════════ */}
-      <Section title="Secretos" icon={<span>🔐</span>} count={secretNames.length}>
+      <Section title={t('agentSettings.secrets')} icon={<span>🔐</span>} count={secretNames.length}>
         <div className="space-y-2.5">
           {/* Secret list — same style as environment */}
           {secretNames.length > 0 && (
@@ -290,18 +292,18 @@ export function AgentSettingsPanel({
           )}
 
           {secretNames.length === 0 && (
-            <p className="font-mono text-[10px] text-on-surface-variant italic">Sin secretos configurados</p>
+            <p className="font-mono text-[10px] text-on-surface-variant italic">{t('agentSettings.noSecrets')}</p>
           )}
 
           {/* Edit mode: update an existing secret */}
           {isEditing ? (
             <div className="flex flex-col gap-1.5">
-              <p className="font-mono text-[9px] text-primary/50">Actualizando {secretForm.name}</p>
+              <p className="font-mono text-[9px] text-primary/50">{t('agentSettings.updating', { name: secretForm.name })}</p>
               <div className="flex gap-1.5">
                 <input
                   type="password"
                   className={`${inputCls} flex-1 min-w-0`}
-                  placeholder="nuevo valor"
+                  placeholder={t('agentSettings.newValue')}
                   value={secretForm.value}
                   onChange={(e) => setSecretForm((f) => ({ ...f, value: e.target.value }))}
                 />
@@ -313,7 +315,7 @@ export function AgentSettingsPanel({
                   }}
                   disabled={!secretForm.value.trim()}
                   className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface-variant transition-all disabled:opacity-20 hover:bg-surface-container hover:text-on-surface flex-shrink-0"
-                >Guardar</button>
+                >{t('agentSettings.save')}</button>
                 <button
                   onClick={() => setSecretForm({ name: '', value: '' })}
                   className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface-variant/60 hover:text-on-surface-variant/70 transition-colors flex-shrink-0"
@@ -325,14 +327,14 @@ export function AgentSettingsPanel({
             <div className="flex gap-1.5">
               <input
                 className={`${inputCls} flex-1 min-w-0`}
-                placeholder="NOMBRE"
+                placeholder={t('agentSettings.secretNamePlaceholder')}
                 value={secretForm.name}
                 onChange={(e) => setSecretForm((f) => ({ ...f, name: e.target.value }))}
               />
               <input
                 type="password"
                 className={`${inputCls} flex-1 min-w-0`}
-                placeholder="valor"
+                placeholder={t('agentSettings.secretValuePlaceholder')}
                 value={secretForm.value}
                 onChange={(e) => setSecretForm((f) => ({ ...f, value: e.target.value }))}
               />
@@ -354,7 +356,7 @@ export function AgentSettingsPanel({
       {/* ═════════════════════  GUARDRAILS  ══════════════════════════════ */}
       {agent.guardrails && agent.guardrails.length > 0 && (
         <Section
-          title="Restricciones"
+          title={t('agentSettings.guardrails')}
           icon={<span>🛡</span>}
           count={agent.guardrails.length}
           accentClass="text-warning/60"
@@ -373,7 +375,7 @@ export function AgentSettingsPanel({
               ))}
             </div>
             <p className="font-mono text-[8px] text-on-surface-variant/20 uppercase tracking-[0.15em]">
-              Configurado via chat guardián
+              {t('agentSettings.guardrailsBlurb')}
             </p>
           </div>
         </Section>
@@ -385,16 +387,16 @@ export function AgentSettingsPanel({
           href={exportAgentUrl(agentId)}
           download
           className="block w-full rounded-md bg-surface-container-lowest px-3 py-2 font-mono text-[10px] text-on-surface-variant/70 transition-all hover:bg-surface-container-lowest border border-outline-variant/40 hover:text-on-surface-variant/70"
-          title="Descargar una copia de seguridad completa del espacio de trabajo del agente como zip"
+          title={t('agentSettings.exportTitle')}
         >
-          📦 Exportar agente
+          {t('agentSettings.exportAgent')}
         </a>
         <button
           onClick={onWipe}
           disabled={isWiping || isSending}
           className="w-full rounded-md bg-surface-container-lowest px-3 py-2 text-left font-mono text-[10px] text-error/40 transition-all hover:bg-error/10 hover:text-error disabled:opacity-20"
         >
-          {isWiping ? 'borrando…' : '🗑 Borrar agente'}
+          {isWiping ? t('agentSettings.wiping') : t('agentSettings.wipeAgent')}
         </button>
       </div>
     </aside>

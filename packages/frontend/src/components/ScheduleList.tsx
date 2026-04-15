@@ -4,6 +4,7 @@ import {
   fetchScheduleRuns, fetchScheduleRunMessages,
   type Schedule, type ScheduleRun, type ChatMessage,
 } from '../lib/api.ts';
+import { useT } from '../lib/i18n.tsx';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ function relativeTime(ms: number | null): string {
 // ── Run detail view ────────────────────────────────────────────────────────
 
 function RunMessages({ agentId, run, onBack }: { agentId: string; run: ScheduleRun; onBack: () => void }) {
+  const { t } = useT();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,18 +73,18 @@ function RunMessages({ agentId, run, onBack }: { agentId: string; run: ScheduleR
         onClick={onBack}
         className="text-[10px] text-on-surface-variant hover:text-on-surface transition-colors self-start"
       >
-        ← Volver a ejecuciones
+        {t('schedules.backToRuns')}
       </button>
 
       <div className="text-[9px] font-mono text-on-surface-variant/60">
         {new Date(run.startedAt).toLocaleString()} · {run.channelId}
       </div>
 
-      {loading && <div className="text-xs text-on-surface-variant/70">Cargando...</div>}
+      {loading && <div className="text-xs text-on-surface-variant/70">{t('schedules.loading')}</div>}
 
       {!loading && messages.length === 0 && (
         <div className="text-xs text-on-surface-variant/70 animate-pulse">
-          Esperando respuesta...
+          {t('schedules.waitingResponse')}
         </div>
       )}
 
@@ -114,6 +116,7 @@ function RunMessages({ agentId, run, onBack }: { agentId: string; run: ScheduleR
 function ScheduleRuns({
   agentId, schedule, onBack,
 }: { agentId: string; schedule: Schedule; onBack: () => void }) {
+  const { t } = useT();
   const [runs, setRuns] = useState<ScheduleRun[]>([]);
   const [selectedRun, setSelectedRun] = useState<ScheduleRun | null>(null);
   const [triggering, setTriggering] = useState(false);
@@ -161,17 +164,17 @@ function ScheduleRuns({
           disabled={triggering}
           className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-on-surface-variant/60 hover:text-on-surface transition-colors disabled:opacity-40"
         >
-          {triggering ? 'Iniciando...' : 'Ejecutar ahora'}
+          {triggering ? t('schedules.triggering') : t('schedules.runNow')}
         </button>
       </div>
 
       <span className="text-[10px] uppercase tracking-[0.14em] text-on-surface-variant/70 font-medium">
-        Historial de ejecuciones
+        {t('schedules.runHistory')}
       </span>
 
       {runs.length === 0 && (
         <p className="text-[10px] text-on-surface-variant/60">
-          Sin ejecuciones aún.
+          {t('schedules.noRuns')}
         </p>
       )}
 
@@ -196,6 +199,7 @@ function ScheduleRuns({
 // ── Main list ──────────────────────────────────────────────────────────────
 
 export function ScheduleList({ agentId }: { agentId: string }) {
+  const { t } = useT();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Schedule | null>(null);
@@ -218,7 +222,7 @@ export function ScheduleList({ agentId }: { agentId: string }) {
   }
 
   async function handleDelete(s: Schedule) {
-    if (!confirm(`¿Eliminar programado "${s.name}"?`)) return;
+    if (!confirm(t('schedules.deleteConfirm', { name: s.name }))) return;
     await deleteScheduleApi(agentId, s.id);
     load();
   }
@@ -234,7 +238,7 @@ export function ScheduleList({ agentId }: { agentId: string }) {
   }
 
   if (loading) {
-    return <div className="text-on-surface-variant/70 text-xs p-6">Cargando programados...</div>;
+    return <div className="text-on-surface-variant/70 text-xs p-6">{t('schedules.loadingList')}</div>;
   }
 
   if (schedules.length === 0) {
@@ -242,20 +246,21 @@ export function ScheduleList({ agentId }: { agentId: string }) {
       <div className="flex flex-col items-center justify-center h-full text-center p-6 gap-3">
         <span className="text-3xl opacity-30">⏰</span>
         <p className="text-on-surface-variant text-xs">
-          Sin programados aún. Pídele al agente que configure tareas recurrentes.
+          {t('schedules.emptyText')}
         </p>
       </div>
     );
   }
 
+  const activeCount = schedules.filter(s => s.status === 'active').length;
   return (
     <div className="p-3 sm:p-4 space-y-2 min-w-0">
       <div className="flex items-center justify-between mb-3">
         <span className="text-[11px] uppercase tracking-[0.14em] text-on-surface-variant/60 font-medium">
-          Programados
+          {t('schedules.title')}
         </span>
         <span className="text-[9px] font-mono text-on-surface-variant/60">
-          {schedules.filter(s => s.status === 'active').length} activo{schedules.filter(s => s.status === 'active').length !== 1 ? 's' : ''}
+          {t(activeCount === 1 ? 'schedules.activeCountOne' : 'schedules.activeCountOther', { count: activeCount })}
         </span>
       </div>
 
@@ -279,11 +284,11 @@ export function ScheduleList({ agentId }: { agentId: string }) {
             <span title={s.cron}>{cronToHuman(s.cron)}</span>
             <span>{s.timezone}</span>
             <span title={s.nextRun ? new Date(s.nextRun).toISOString() : ''}>
-              Próximo: {relativeTime(s.nextRun)}
+              {t('schedules.next', { time: relativeTime(s.nextRun) })}
             </span>
             {s.lastRun && (
               <span title={new Date(s.lastRun).toISOString()}>
-                Último: {relativeTime(s.lastRun)}
+                {t('schedules.last', { time: relativeTime(s.lastRun) })}
               </span>
             )}
           </div>
@@ -293,13 +298,13 @@ export function ScheduleList({ agentId }: { agentId: string }) {
               onClick={() => toggleStatus(s)}
               className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-on-surface-variant/60 hover:text-on-surface transition-colors"
             >
-              {s.status === 'active' ? 'Pausar' : 'Reanudar'}
+              {s.status === 'active' ? t('schedules.pause') : t('schedules.resume')}
             </button>
             <button
               onClick={() => handleDelete(s)}
               className="text-[9px] px-2 py-0.5 rounded bg-surface-container text-error/60 hover:text-error transition-colors ml-auto"
             >
-              Eliminar
+              {t('schedules.delete')}
             </button>
           </div>
         </div>

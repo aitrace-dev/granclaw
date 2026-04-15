@@ -43,10 +43,24 @@ describe('detectLanguage', () => {
   });
 
   it('does not false-positive on English containing substrings of Spanish words', () => {
-    // "para" is a Spanish stopword but must be word-anchored
+    // "para" is a Spanish stopword but must not match inside other words
     expect(detectLanguage('parachute rental')).toBe('en');
     // "este" appears inside "estate"
     expect(detectLanguage('the estate is large')).toBe('en');
+  });
+
+  it('uses the tinyld library for meaningful-length text (longer than the short-phrase set)', () => {
+    // Sentences the old hand-rolled regex list never covered — tinyld
+    // picks these up because they are statistically unambiguous.
+    expect(detectLanguage('me gustaría reservar una cita para el viernes')).toBe('es');
+    expect(detectLanguage('how are you doing today my friend')).toBe('en');
+  });
+
+  it('falls back to English for unsupported languages tinyld identifies', () => {
+    // French and German are real languages tinyld detects but we do not
+    // ship localized strings for — the ack path needs a clean fallback.
+    expect(detectLanguage('bonjour comment allez-vous aujourd hui')).toBe('en');
+    expect(detectLanguage('guten tag wie geht es dir heute')).toBe('en');
   });
 });
 

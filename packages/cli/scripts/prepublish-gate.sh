@@ -153,11 +153,15 @@ JSEOF
 
   PREV_SIZE=$(npm view granclaw dist.unpackedSize 2>/dev/null || true)
   if [ -n "$PREV_SIZE" ] && [ "$PREV_SIZE" -gt 0 ]; then
-    MAX_SIZE=$((PREV_SIZE * 120 / 100))
+    # Allow up to 300% of previous size to accommodate the one-time addition of
+    # the vendored CapMonster extension (~1.7 MB fonts/images/JS). After this
+    # release publishes the new baseline will be ~3.5 MB and the 20% guard
+    # resumes normally. Revert to 120 once beta.35+ is on npm.
+    MAX_SIZE=$((PREV_SIZE * 300 / 100))
     if [ "$ACTUAL_SIZE" -gt "$MAX_SIZE" ]; then
-      fail 4 "tarball grew by >20%: prev=$PREV_SIZE new=$ACTUAL_SIZE"
+      fail 4 "tarball grew by >300%: prev=$PREV_SIZE new=$ACTUAL_SIZE"
     fi
-    log 4 "✓ size within 20% of prev ($PREV_SIZE)"
+    log 4 "✓ size within 300% of prev ($PREV_SIZE)"
   else
     log 4 "no previous published version — skipping size delta"
   fi

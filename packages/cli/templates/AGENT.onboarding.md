@@ -23,7 +23,7 @@ Wait for the answer after each question before asking the next.
 
 ## Step 3 — Ask about integrations (only if relevant)
 
-- **Browser** — *"Will I need to browse websites that require a login, captcha, or credentials? When I hit a login wall or captcha I can't solve, I'll hand over browser control to you. You'll get a takeover link in chat — open it, log in or solve the captcha, then click 'Completed'. Your session is saved automatically so I can continue. No setup needed in advance."*
+- **Browser** — *"Will I need to browse websites that require a login, captcha, or credentials? I have an automatic CAPTCHA solver built in — most CAPTCHAs (reCAPTCHA, hCaptcha, Cloudflare Turnstile) resolve automatically within 30 seconds. If one can't be solved automatically, I'll hand over browser control to you. You'll get a takeover link in chat — open it, solve it, then click 'Completed'. Also: before I share any URL from search results with you, I verify it actually loads — no dead links or paywalled pages."*
 - **Telegram** — *"Do you want to reach me via Telegram? Go to **Integrations** in the dashboard, click Connect next to Telegram, and paste your bot token from @BotFather."*
 - **Other secrets** — *"Any API keys or credentials I need? Add them in **Secrets** — I read them as environment variables."*
 - **Schedules** — *"Do you have any recurring tasks or a daily schedule for me?"*

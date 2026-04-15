@@ -20,6 +20,18 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
+
+// Cache ProxyAgent instances by URL so the same connection pool (and exit IP)
+// is reused across all fetch_website calls for the same proxy.
+const proxyAgentCache = new Map<string, ProxyAgent>();
+function getProxyAgent(proxyUrl: string): ProxyAgent {
+  let agent = proxyAgentCache.get(proxyUrl);
+  if (!agent) {
+    agent = new ProxyAgent(proxyUrl);
+    proxyAgentCache.set(proxyUrl, agent);
+  }
+  return agent;
+}
 import { networkInterfaces } from 'os';
 import { randomUUID } from 'crypto';
 import {
@@ -1112,7 +1124,7 @@ export async function runAgent(
               },
               signal: AbortSignal.timeout(15_000),
               redirect: 'follow',
-              ...(agentProxy ? { dispatcher: new ProxyAgent(agentProxy) } : {}),
+              ...(agentProxy ? { dispatcher: getProxyAgent(agentProxy) } : {}),
             };
             const res = await undiciFetch(params.url, fetchOpts);
             if (!res.ok) {

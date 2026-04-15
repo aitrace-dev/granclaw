@@ -83,7 +83,61 @@ export function resolveTemplatesDir(): string {
 // Pi-specific workspace bootstrap: uses AGENT.md and .agent/skills/ instead of
 // the Claude-specific CLAUDE.md and .claude/skills/ paths.
 
+// Per-process memoisation: bootstrap runs once per workspace per process.
+// Agent process startup (process.ts) calls it eagerly so the logs land in
+// docker logs before any user turn, and runAgent() calls it defensively on
+// every turn — the second call is a no-op thanks to this set.
+const bootstrappedWorkspaces = new Set<string>();
+
+/**
+ * Validate the frontmatter of a shipped SKILL.md and log a loud warning
+ * if any of the fields pi's loadSkills() cares about are missing or empty.
+ * pi silently drops skills whose description is empty (only emits a quiet
+ * diagnostic that never reaches operators), so catching it here makes
+ * bootstrap failures visible in `docker logs`.
+ *
+ * Intentionally not a full YAML parser — the format we ship is simple
+ * `key: value` lines and a regex is sufficient.
+ */
+export function validateSkillFrontmatter(skillMdPath: string, skillName: string): string[] {
+  const issues: string[] = [];
+  if (!fs.existsSync(skillMdPath)) {
+    issues.push(`missing SKILL.md at ${skillMdPath}`);
+    return issues;
+  }
+  const content = fs.readFileSync(skillMdPath, 'utf8');
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!fmMatch) {
+    issues.push(`no YAML frontmatter block — pi will silently drop this skill`);
+    return issues;
+  }
+  const fm = fmMatch[1];
+  const field = (key: string): string => {
+    // Match either a plain scalar ("description: foo") or a quoted scalar.
+    const m = fm.match(new RegExp('^' + key + ':\\s*(.*?)\\s*$', 'm'));
+    if (!m) return '';
+    let v = m[1].trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      v = v.slice(1, -1);
+    }
+    return v;
+  };
+  const descValue = field('description');
+  if (!descValue) {
+    issues.push(`empty description — pi will silently drop this skill from <available_skills>`);
+  }
+  const nameValue = field('name');
+  if (!nameValue) {
+    issues.push(`empty name field`);
+  } else if (nameValue !== skillName) {
+    issues.push(`name field "${nameValue}" does not match directory name "${skillName}" — pi may refuse it`);
+  }
+  return issues;
+}
+
 export function bootstrapWorkspace(workspaceDir: string, agentId?: string): void {
+  if (bootstrappedWorkspaces.has(workspaceDir)) return;
+  bootstrappedWorkspaces.add(workspaceDir);
   fs.mkdirSync(workspaceDir, { recursive: true });
 
   // AGENT.md — prefer AGENT.md, fall back to CLAUDE.md for existing workspaces
@@ -156,6 +210,12 @@ export function bootstrapWorkspace(workspaceDir: string, agentId?: string): void
       fs.cpSync(srcDir, destDir, { recursive: true, force: true });
       for (const file of fs.readdirSync(destDir)) {
         if (file.endsWith('.sh')) fs.chmodSync(path.join(destDir, file), 0o755);
+      }
+      const issues = validateSkillFrontmatter(path.join(destDir, 'SKILL.md'), skillName);
+      if (issues.length > 0) {
+        for (const issue of issues) {
+          console.warn(`[runner-pi] WARN skill "${skillName}": ${issue}`);
+        }
       }
       console.log(`[runner-pi] synced skill "${skillName}" to ${destDir}`);
     }

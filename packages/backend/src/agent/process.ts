@@ -21,7 +21,7 @@ import { randomUUID } from 'crypto';
 import path from 'path';
 import { getAgent, REPO_ROOT } from '../config.js';
 import { enqueue, dequeueNext, markDone, markFailed, cleanupStaleJobs } from '../agent-db.js';
-import { runAgent, stopAgent } from './runner-pi.js';
+import { runAgent, stopAgent, bootstrapWorkspace } from './runner-pi.js';
 import { saveMessage } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 import { forceCloseActiveSession } from '../browser-sessions.js';
@@ -51,6 +51,14 @@ function main() {
   }
 
   const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
+
+  // Eager bootstrap on startup: syncs skills from the image template dir
+  // BEFORE the first user turn, so "[runner-pi] synced skill ..." and any
+  // frontmatter-validation warnings land in docker logs at container start
+  // instead of only after a message has been processed. runAgent() also
+  // calls bootstrapWorkspace() defensively on every turn, but the per-
+  // process memoisation there makes it a no-op after this call.
+  bootstrapWorkspace(workspaceDir, agentId);
 
   // Clean up stale 'processing' jobs from previous crashes/restarts
   const cleaned = cleanupStaleJobs(workspaceDir);

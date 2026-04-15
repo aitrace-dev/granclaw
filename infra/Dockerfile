@@ -6,6 +6,7 @@ FROM node:20-slim
 # browser session view shows sessions with "no recording" forever.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium \
+      curl \
       ffmpeg \
       fonts-liberation \
       libasound2 \

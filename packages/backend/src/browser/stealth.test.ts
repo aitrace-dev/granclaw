@@ -54,9 +54,52 @@ describe('stealthArgv — flag composition', () => {
     __resetStealthCacheForTests();
   });
 
-  it('does NOT include --extension (stealth is injected via CDP, not extension loader)', () => {
+  it('loads the stealth extension via the repeatable --extension flag', () => {
+    // Regression: agent-browser --args is NOT repeatable — only the LAST --args
+    // value survives. Passing --args --load-extension=<dir> silently drops the
+    // stealth extension when any later --args exists, leaving navigator.webdriver
+    // detectable in production (the bug this test guards against).
     const argv = stealthArgv();
-    expect(argv).not.toContain('--extension');
+    const extIdx = argv.indexOf('--extension');
+    expect(extIdx).toBeGreaterThanOrEqual(0);
+    expect(argv[extIdx + 1]).toBe(STEALTH_EXTENSION_DIR);
+  });
+
+  it('uses at most ONE --args flag so no chromium flags are silently dropped', () => {
+    // agent-browser only applies the LAST --args value. Emitting multiple --args
+    // flags means every flag except the last is silently dropped by agent-browser
+    // before Chrome ever sees it.
+    const argv = stealthArgv();
+    const argsCount = argv.filter((x) => x === '--args').length;
+    expect(argsCount).toBeLessThanOrEqual(1);
+  });
+
+  it('includes --disable-blink-features=AutomationControlled in the combined --args', () => {
+    // This is the flag Chrome reads to decide whether to set navigator.webdriver=true.
+    // If it does not reach Chrome, the stealth extension is our only line of defence
+    // and several other automation markers stay exposed.
+    const argv = stealthArgv();
+    const argsIdx = argv.indexOf('--args');
+    expect(argsIdx).toBeGreaterThanOrEqual(0);
+    expect(argv[argsIdx + 1]).toContain('--disable-blink-features=AutomationControlled');
+  });
+
+  it('adds --headless=new to the combined --args by default', () => {
+    // agent-browser does NOT auto-add --headless=new when --extension is present,
+    // so without this the daemon tries to launch headed Chrome and errors out
+    // with "Missing X server or $DISPLAY" inside the container.
+    const argv = stealthArgv();
+    const argsIdx = argv.indexOf('--args');
+    expect(argsIdx).toBeGreaterThanOrEqual(0);
+    expect(argv[argsIdx + 1]).toContain('--headless=new');
+  });
+
+  it('omits --headless=new when headless: false (for --headed previews)', () => {
+    const argv = stealthArgv({ headless: false });
+    const argsIdx = argv.indexOf('--args');
+    if (argsIdx >= 0) {
+      expect(argv[argsIdx + 1]).not.toContain('--headless=new');
+    }
   });
 
   it('honours GRANCLAW_CHROME_PATH when the override points at a real file', () => {
@@ -92,10 +135,13 @@ describe('stealthArgv — flag composition', () => {
 
     const argv = stealthArgv();
     // Every flag should be followed by its value — no stray tokens.
+    // Values can legitimately start with '--' (e.g. the --args value is a
+    // comma-joined list of chromium switches like "--disable-blink-features=…"),
+    // so only check that each flag is followed by a defined non-flag token.
     expect(argv.length % 2).toBe(0);
     for (let i = 0; i < argv.length; i += 2) {
       expect(argv[i]).toMatch(/^--/);
-      expect(argv[i + 1]).not.toMatch(/^--/);
+      expect(argv[i + 1]).toBeDefined();
     }
   });
 });

@@ -1220,7 +1220,7 @@ export function createServer() {
         '--session', req.params.id,
         '--headed',
         '--profile', profileDir,
-        ...stealthArgv(),
+        ...stealthArgv({ headless: false }),
         'open', url,
       ];
       execFileSync('agent-browser', argv, {

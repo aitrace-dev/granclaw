@@ -5,17 +5,19 @@
  *
  *   stealthArgv() returns an argv fragment for the `agent-browser` boot command:
  *
- *   --args --load-extension=<dir>
- *     Loads the GranClaw stealth MV3 extension. The extension content script
- *     runs at document_start in world=MAIN — before any page JS — patching
- *     navigator.webdriver, UA, plugins, WebGL, canvas, audio, and more.
- *     Works in Chrome 112+ new headless mode without a display (no Xvfb needed).
+ *   --extension <dir>
+ *     Loads the GranClaw stealth MV3 extension (repeatable). The extension
+ *     content script runs at document_start in world=MAIN — before any page
+ *     JS — patching navigator.webdriver, UA, plugins, WebGL, canvas, audio.
+ *     MUST use --extension (not --args --load-extension=…): agent-browser's
+ *     --args flag is NOT repeatable and silently drops all but the LAST value,
+ *     which is how the stealth extension was leaking in production.
  *
- *   --args --enable-extensions
- *     Required to activate extension loading in headless mode.
- *
- *   --args --disable-blink-features=AutomationControlled
- *     Removes navigator.webdriver = true at the Chrome level, the #1 signal.
+ *   --args "--disable-blink-features=AutomationControlled,--headless=new,…"
+ *     ALL chromium flags must live inside a SINGLE --args value, comma-joined.
+ *     agent-browser collapses repeated --args to the last one and splits each
+ *     value on commas before forwarding to Chrome. --headless=new is required
+ *     here because agent-browser does not auto-add it when --extension is set.
  *
  *   --executable-path <path>
  *     Uses real installed Chrome/Chromium instead of Playwright's bundled
@@ -191,6 +193,12 @@ export interface StealthOptions {
   proxy?: string;
   /** CapMonster Cloud API key for automatic CAPTCHA solving. Falls back to CAPMONSTER_KEY env var. */
   capmonsterKey?: string;
+  /**
+   * Emit --headless=new inside --args. Default true (daemon boot for agent work).
+   * Set false when the caller also passes --headed (headed preview previews in
+   * the orchestrator) — the two modes conflict and Chrome refuses to launch.
+   */
+  headless?: boolean;
 }
 
 /**
@@ -201,27 +209,45 @@ export interface StealthOptions {
 export function stealthArgv(options: StealthOptions = {}): string[] {
   if (process.env.GRANCLAW_STEALTH_DISABLED === '1') return [];
 
-  const argv: string[] = [
-    '--args', '--disable-blink-features=AutomationControlled',
-    '--args', '--enable-extensions',
-    // Enable the V8 heap memory API (performance.memory) — disabled by default in headless.
-    '--args', '--enable-precise-memory-info',
+  const argv: string[] = [];
+
+  // All Chromium command-line switches MUST live inside a single --args value.
+  // agent-browser's --args flag is NOT repeatable: only the LAST value survives,
+  // and that value is comma-split before being forwarded to Chrome. Emitting
+  // several --args flags was how every stealth switch except the last silently
+  // vanished in production, leaving navigator.webdriver detectable.
+  const chromeFlags: string[] = [
+    '--disable-blink-features=AutomationControlled',
+    // V8 heap memory API (performance.memory) — disabled by default in headless.
+    '--enable-precise-memory-info',
   ];
 
-  // Override the UA using agent-browser's dedicated --user-agent flag (not via
-  // --args). navigator.userAgent in Chrome 120+ has a non-configurable prototype
+  // agent-browser does not auto-add --headless=new once --extension is set,
+  // so headless contexts must request it explicitly. Headed previews must NOT
+  // include it (the orchestrator also passes --headed and Chrome refuses both).
+  if (options.headless !== false) {
+    chromeFlags.push('--headless=new');
+  }
+
+  argv.push('--args', chromeFlags.join(','));
+
+  // Override the UA using agent-browser's dedicated --user-agent flag.
+  // navigator.userAgent in Chrome 120+ has a non-configurable prototype
   // property that JS Object.defineProperty cannot patch, so the only reliable
-  // fix is to set it at the browser level. We use the top-level flag rather than
-  // --args because --args values are comma-separated and a UA string contains
+  // fix is to set it at the browser level. We use the top-level flag rather
+  // than --args because --args values are comma-split and a UA string contains
   // commas/spaces that would be mis-parsed.
   const ua = detectChromeUA();
   if (ua) {
     argv.push('--user-agent', ua);
   }
 
-  // Build extension list: stealth + optional CapMonster
-  const extDirs: string[] = [];
-  if (STEALTH_EXTENSION_DIR) extDirs.push(STEALTH_EXTENSION_DIR);
+  // Extensions go through agent-browser's dedicated (repeatable) --extension
+  // flag — NOT via --args --load-extension=… which is silently dropped by the
+  // single-value --args collapse described above.
+  if (STEALTH_EXTENSION_DIR) {
+    argv.push('--extension', STEALTH_EXTENSION_DIR);
+  }
 
   const capmonsterKey = options.capmonsterKey
     || process.env.CAPMONSTER_KEY
@@ -229,13 +255,7 @@ export function stealthArgv(options: StealthOptions = {}): string[] {
   const capmonsterEnabled = process.env.CAPMONSTER_ENABLED !== 'false';
   if (capmonsterKey && capmonsterEnabled) {
     const capmonsterDir = capmonsterExtensionDir(capmonsterKey);
-    if (capmonsterDir) extDirs.push(capmonsterDir);
-  }
-
-  if (extDirs.length > 0) {
-    const extList = extDirs.join(',');
-    argv.push('--args', `--load-extension=${extList}`);
-    argv.push('--args', `--disable-extensions-except=${extList}`);
+    if (capmonsterDir) argv.push('--extension', capmonsterDir);
   }
 
   const chrome = detectChromePath();

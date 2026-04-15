@@ -68,3 +68,4 @@ paths = [
 # PostHog project API key — intentionally bundled in client-side telemetry
 # (same model as Google Analytics tracking IDs). Not a secret.
 regexes = ['''phc_[A-Za-z0-9_\-]{43}''']
+

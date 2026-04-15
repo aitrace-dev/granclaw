@@ -1,0 +1,1 @@
+const isFirefox="undefined"!=typeof browser,getApi=()=>{if(isFirefox)return browser;if("undefined"!=typeof chrome)return chrome;throw new Error("Unsupported environment: WebExtension APIs are not available.")},api=getApi(),panelPath=isFirefox?"/devtools/panel.html":"devtools/panel.html";api.devtools.panels.create("Capmonster Cloud","",panelPath);

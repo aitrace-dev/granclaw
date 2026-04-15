@@ -13,18 +13,16 @@
   const safe = (fn) => { try { fn(); } catch (_) { /* evasion failed, keep going */ } };
 
   // ── 1. navigator.webdriver ─────────────────────────────────────────────
-  // The single biggest giveaway — Playwright/CDP sets this to true.
-  // Deleting the property (not just setting it to false) matches the shape
-  // of a real Chrome build, where the prop is absent from the prototype.
+  // Automation sets this to true. Real Chrome always exposes the property
+  // and returns false (per the W3C WebDriver spec). Deleting it or returning
+  // undefined is itself a detectable signal — bot-detector.rebrowser.net
+  // flags "undefined" as "you deleted it manually". Always return false.
   safe(() => {
-    if (navigator.webdriver === false) {
-      delete Object.getPrototypeOf(navigator).webdriver;
-    } else {
-      Object.defineProperty(Navigator.prototype, 'webdriver', {
-        get: () => undefined,
-        configurable: true,
-      });
-    }
+    Object.defineProperty(Navigator.prototype, 'webdriver', {
+      get: () => false,
+      configurable: true,
+      enumerable: true,
+    });
   });
 
   // ── 2. navigator.languages ─────────────────────────────────────────────
@@ -243,34 +241,81 @@
   });
 
   // ── 11. navigator.userAgentData — Client Hints API ─────────────────────
-  // The modern Client Hints UA API also leaks "Headless" in its brand list.
-  // Patch brands to strip the "Headless" prefix so sites using getHighEntropyValues
-  // or brands directly see a normal Chrome brand string.
+  // The modern Client Hints UA API leaks "Headless" in its brand list, or may
+  // be entirely absent when the UA is overridden via CDP (Emulation.setUserAgentOverride
+  // without userAgentMetadata strips userAgentData from the page). We either
+  // patch the existing object or create a synthetic one from scratch so that
+  // navigator.userAgentData.brands returns a plausible Chrome brand list.
   safe(() => {
-    if (typeof navigator.userAgentData === 'undefined') return;
-    const uad = navigator.userAgentData;
-    const brands = (uad.brands || []).map((b) => ({
-      brand: b.brand.replace(/^Headless/i, ''),
-      version: b.version,
-    }));
-    const patchedUad = new Proxy(uad, {
-      get(target, prop) {
-        if (prop === 'brands') return brands;
-        if (prop === 'mobile') return false;
-        const val = Reflect.get(target, prop);
-        return typeof val === 'function' ? val.bind(target) : val;
-      },
-    });
-    try {
-      Object.defineProperty(Navigator.prototype, 'userAgentData', {
-        get: () => patchedUad,
-        configurable: true,
+    // Parse Chrome major version from the (possibly overridden) UA.
+    const uaVersion = navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] || '120';
+    const platform = navigator.platform === 'Win32' ? 'Windows'
+      : navigator.platform.includes('Mac') ? 'macOS' : 'Linux';
+
+    // Realistic brand list: "Google Chrome" + "Chromium" + GREASE placeholder.
+    const brands = [
+      { brand: 'Google Chrome', version: uaVersion },
+      { brand: 'Chromium',      version: uaVersion },
+      { brand: 'Not/A)Brand',   version: '8' },
+    ];
+
+    // Full-entropy values returned by getHighEntropyValues().
+    const highEntropy = {
+      architecture: 'x86',
+      bitness: '64',
+      brands,
+      fullVersionList: brands.map(b => ({ brand: b.brand, version: `${b.version}.0.0.0` })),
+      mobile: false,
+      model: '',
+      platform,
+      platformVersion: platform === 'Windows' ? '15.0.0' : platform === 'macOS' ? '10_15_7' : '6.1.0',
+      uaFullVersion: `${uaVersion}.0.0.0`,
+    };
+
+    const syntheticUad = {
+      brands,
+      mobile: false,
+      platform,
+      getHighEntropyValues: (_hints) => Promise.resolve(highEntropy),
+      toJSON: () => ({ brands, mobile: false, platform }),
+    };
+
+    if (typeof navigator.userAgentData === 'undefined') {
+      // CDP UA override stripped userAgentData entirely — create it from scratch.
+      try {
+        Object.defineProperty(Navigator.prototype, 'userAgentData', {
+          get: () => syntheticUad,
+          configurable: true,
+        });
+      } catch (_) {
+        Object.defineProperty(navigator, 'userAgentData', {
+          get: () => syntheticUad,
+          configurable: true,
+        });
+      }
+    } else {
+      // userAgentData exists but may have "Headless" in brands — patch in place.
+      const uad = navigator.userAgentData;
+      const patchedUad = new Proxy(uad, {
+        get(target, prop) {
+          if (prop === 'brands') return brands;
+          if (prop === 'mobile') return false;
+          if (prop === 'getHighEntropyValues') return (_hints) => Promise.resolve(highEntropy);
+          const val = Reflect.get(target, prop);
+          return typeof val === 'function' ? val.bind(target) : val;
+        },
       });
-    } catch (_) {
-      Object.defineProperty(navigator, 'userAgentData', {
-        get: () => patchedUad,
-        configurable: true,
-      });
+      try {
+        Object.defineProperty(Navigator.prototype, 'userAgentData', {
+          get: () => patchedUad,
+          configurable: true,
+        });
+      } catch (_) {
+        Object.defineProperty(navigator, 'userAgentData', {
+          get: () => patchedUad,
+          configurable: true,
+        });
+      }
     }
   });
 

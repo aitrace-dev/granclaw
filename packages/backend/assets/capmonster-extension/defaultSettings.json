@@ -1,0 +1,62 @@
+{
+  "isEnabled": true,
+  "clientKey": "b26b3bc0e26f3d093e4ea64d9ccb24f7",
+  "captchaList": [
+    "ReCaptcha2",
+    "ReCaptcha3",
+    "ReCaptchaEnterprise",
+    "HCaptcha",
+    "GeeTest",
+    "ImageToText",
+    "Turnstile",
+    "BLS",
+    "Binance"
+  ],
+  "captchaExtra": {
+    "ReCaptcha2": 1,
+    "HCaptcha": 1,
+    "ReCaptchaEnterprise": 0
+  },
+  "repeatsCount": 0,
+  "isEnabledIgnoreList": false,
+  "ignoreList": [],
+  "proxy": {
+    "isEnabled": false,
+    "type": "http",
+    "address": "",
+    "port": 3128,
+    "login": "",
+    "password": ""
+  },
+  "isManualResolving": false,
+  "isIPv6": false,
+  "delayAfterLoadPage": 2,
+  "recaptchaClickSelector": ".recaptcha-checkbox-checkmark",
+  "hCaptchaClickSelector": "div#checkbox",
+  "globalVariable": "",
+  "delayStartCount": {
+    "ReCaptcha2": 0,
+    "ReCaptchaEnterprise": 0,
+    "HCaptcha": 0
+  },
+  "autoClick": {
+    "ReCaptcha2": true,
+    "HCaptcha": true,
+    "ReCaptchaEnterprise": true
+  },
+  "autoSolve": {
+    "ReCaptcha2": true,
+    "HCaptcha": true,
+    "ReCaptchaEnterprise": true
+  },
+  "delayBetweenClickEnabled": {
+    "ReCaptcha2": false,
+    "HCaptcha": false,
+    "ReCaptchaEnterprise": false
+  },
+  "delayBetweenClickValue": {
+    "ReCaptcha2": 0,
+    "HCaptcha": 0,
+    "ReCaptchaEnterprise": 0
+  }
+}

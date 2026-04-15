@@ -18,6 +18,20 @@ import path from 'path';
 import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { NodeHtmlMarkdown } from 'node-html-markdown';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
+
+// Cache ProxyAgent instances by URL so the same connection pool (and exit IP)
+// is reused across all fetch_website calls for the same proxy.
+const proxyAgentCache = new Map<string, ProxyAgent>();
+function getProxyAgent(proxyUrl: string): ProxyAgent {
+  let agent = proxyAgentCache.get(proxyUrl);
+  if (!agent) {
+    agent = new ProxyAgent(proxyUrl);
+    proxyAgentCache.set(proxyUrl, agent);
+  }
+  return agent;
+}
 import { networkInterfaces } from 'os';
 import { randomUUID } from 'crypto';
 import {
@@ -25,7 +39,7 @@ import {
   getTakeover,
   clearTakeover,
 } from '../takeover-state.js';
-import { AgentConfig, REPO_ROOT } from '../config.js';
+import { AgentConfig, REPO_ROOT, getAgents } from '../config.js';
 import { esmImport } from '../esm-import.js';
 import { saveSession, getSessionFile } from '../agent-db.js';
 import { logAction } from '../logs-db.js';
@@ -39,7 +53,7 @@ import {
   finalizeSession as finalizeBrowserSession,
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
-import { stealthArgv } from '../browser/stealth.js';
+import { stealthArgv, type StealthOptions } from '../browser/stealth.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -283,6 +297,34 @@ function getLanIp(): string {
     }
   }
   return 'localhost';
+}
+
+/**
+ * Stable hash of an agent ID string → non-negative integer.
+ * Used so proxy assignment is deterministic by agent ID, not config order.
+ */
+function hashAgentId(id: string): number {
+  let h = 0;
+  for (const c of id) h = (Math.imul(31, h) + c.charCodeAt(0)) | 0;
+  return Math.abs(h);
+}
+
+/**
+ * Resolve the proxy for an agent.
+ * Priority: agent.proxy config → GRANCLAW_PROXY_LIST (stable hash by agent ID) → undefined.
+ * Hash-based assignment means the same agent always gets the same proxy even if
+ * agents.config.json is reordered or new agents are added — so the Chrome daemon
+ * always restarts on the same IP.
+ * Only applies when GRANCLAW_PROXY_ENABLE=true or agent.proxy is explicitly set.
+ */
+function resolveAgentProxy(agentId: string, configProxy?: string): string | undefined {
+  if (configProxy) return configProxy;
+  if (process.env.GRANCLAW_PROXY_ENABLE !== 'true') return undefined;
+  const proxyList = process.env.GRANCLAW_PROXY_LIST;
+  if (!proxyList) return undefined;
+  const proxies = proxyList.split(',').map(p => p.trim()).filter(Boolean);
+  if (proxies.length === 0) return undefined;
+  return proxies[hashAgentId(agentId) % proxies.length];
 }
 
 export async function runAgent(
@@ -686,6 +728,55 @@ export async function runAgent(
     //
     // Privileged commands (record, close, tab close for session 0,
     // session management) are rejected — the runtime owns those.
+    /**
+     * After a navigation command, check if a CAPTCHA is blocking the page.
+     * Waits up to 30s for the CapMonster extension to auto-solve it.
+     * Returns 'clear' (no captcha / solved), 'unsolved' (still blocked after timeout).
+     */
+    async function waitForCaptchaResolution(
+      bin: string,
+      sessionId: string,
+    ): Promise<'clear' | 'unsolved'> {
+      const CAPTCHA_JS = `(function() {
+        var patterns = [
+          'iframe[src*="captcha-delivery"]',
+          'iframe[src*="geo.captcha"]',
+          'iframe[src*="recaptcha"]',
+          'iframe[src*="hcaptcha"]',
+          'iframe[src*="challenges.cloudflare"]',
+          '.g-recaptcha',
+          '.h-captcha',
+          '[class*="captcha"]',
+        ];
+        return patterns.some(function(s) {
+          return !!document.querySelector(s);
+        }) ? 'captcha' : 'clear';
+      })()`;
+
+      const evalArgv = (id: string) => ['--session', id, 'eval', CAPTCHA_JS];
+
+      const check = async () => {
+        try {
+          const { stdout } = await execFileAsync(bin, evalArgv(sessionId), { timeout: 8_000 });
+          return stdout.includes('"captcha"') || stdout.includes("'captcha'") || stdout.trim() === 'captcha';
+        } catch {
+          return false;
+        }
+      };
+
+      // Initial check — short delay to let page settle
+      await new Promise(r => setTimeout(r, 1500));
+      if (!await check()) return 'clear';
+
+      // CAPTCHA detected — wait up to 30s for auto-solve
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 2_000));
+        if (!await check()) return 'clear';
+      }
+      return 'unsolved';
+    }
+
     extensionFactories.push((pi: any) => {
       const agentBrowserBin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
       const profileDir = path.join(workspaceDir, '.browser-profile');
@@ -711,12 +802,15 @@ export async function runAgent(
           'or `session`, they are rejected. Every turn is recorded as a single WebM video visible in the dashboard Browser view.',
         promptSnippet: 'Control a headless browser — navigate, click, fill, snapshot, extract data',
         promptGuidelines: [
+          'Use browser for: real-time navigation, login flows, write/post/update operations (LinkedIn, Reddit, social media), pages requiring JS interaction, and multi-step forms.',
+          'Do NOT use browser to just read a webpage — use fetch_website instead (faster, lighter, no screenshot overhead).',
           'Core loop: open → snapshot → interact → re-snapshot. Refs from snapshot are invalidated by navigation.',
           'For visual reasoning use `snapshot --annotate -i` (annotated screenshot with numbered refs).',
           'For data extraction use `snapshot` (plain accessibility tree) or `text --ref <ref>`.',
           'Do not call `record start`, `record stop`, `close`, or `session` — the runtime manages those.',
           'You do not need to screenshot for audit — the whole session is recorded as video automatically.',
           'Saved logins persist automatically when the user has set up a profile via the dashboard Browser view.',
+          'CAPTCHA handling: if a page returns a CAPTCHA, wait — the browser has an automatic solver extension. If it is not resolved after ~30 seconds, use request_human_browser_takeover to let the user solve it.',
           'Examples: {"command":"open","args":["https://example.com"]}, {"command":"click","args":["--ref","e12"]}, {"command":"fill","args":["--ref","e5","Alice"]}',
         ],
         parameters: {
@@ -772,7 +866,11 @@ export async function runAgent(
           if (fs.existsSync(profileDir)) {
             argv.push('--profile', profileDir);
           }
-          argv.push(...stealthArgv());
+          const stealthOpts: StealthOptions = {
+            proxy: resolveAgentProxy(agent.id, agent.proxy),
+            capmonsterKey: agent.capmonsterKey,
+          };
+          argv.push(...stealthArgv(stealthOpts));
           argv.push(command, ...args);
 
           try {
@@ -783,6 +881,22 @@ export async function runAgent(
             });
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
             const out = stdout.trim() || stderr.trim() || 'ok';
+
+            // After navigation, check for CAPTCHA and wait up to 30s for the
+            // CapMonster extension to auto-solve it before returning to the agent.
+            if (command === 'open' || command === 'reload') {
+              const captchaResult = await waitForCaptchaResolution(agentBrowserBin, agent.id);
+              if (captchaResult === 'unsolved') {
+                return {
+                  content: [{
+                    type: 'text' as const,
+                    text: out + '\n\n⚠️ CAPTCHA detected and not auto-solved after 30s. ' +
+                      'Use request_human_browser_takeover to let the user solve it, or try a different URL.',
+                  }],
+                };
+              }
+            }
+
             return { content: [{ type: 'text' as const, text: out }] };
           } catch (err) {
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
@@ -889,6 +1003,7 @@ export async function runAgent(
             'Use for any question about recent events, current prices, live data, or information past your training cutoff.',
             'Prefer specific, focused queries over vague ones.',
             'You can call this tool multiple times to refine results.',
+            'After getting results, verify URLs with fetch_website before sharing with the user — confirms the page loads and is not paywalled or broken.',
           ],
           parameters: {
             type: 'object',
@@ -924,6 +1039,111 @@ export async function runAgent(
         });
       });
     }
+
+    // fetch_website tool: fetches a URL and returns clean trimmed markdown.
+    // Normal mode: plain HTTP GET. Unblocker mode: Bright Data Web Unlocker API.
+    // Always registered — no key required for basic usage.
+    extensionFactories.push((pi: any) => {
+      const nhm = new NodeHtmlMarkdown();
+      function htmlToMarkdown(html: string, maxChars = 4000): string {
+        let md = nhm.translate(html).replace(/\n{3,}/g, '\n\n').trim();
+        if (md.length > maxChars) {
+          md = md.slice(0, maxChars) + `\n\n[...truncated at ${maxChars} chars]`;
+        }
+        return md;
+      }
+
+      pi.registerTool({
+        name: 'fetch_website',
+        label: 'Fetch Website',
+        description:
+          'Fetch a webpage and return its content as trimmed markdown. ' +
+          'Use to read web pages, verify URLs from search results, or scrape public content. ' +
+          'Set unblocker=true if the site blocks normal requests (bot-detection, Cloudflare, DataDome). ' +
+          'Prefer this over browser for read-only operations — it is faster and uses less context.',
+        promptSnippet: 'Fetch and read a webpage as markdown',
+        promptGuidelines: [
+          'Use fetch_website (not browser) when you only need to read a page — faster and no screenshot overhead.',
+          'Use fetch_website to verify URLs from web_search results before sharing with the user.',
+          'Set unblocker=true only after being blocked (captcha/403) on the same domain with unblocker=false.',
+          'Output is truncated at 4000 chars. For interactive or login-gated pages, use browser instead.',
+        ],
+        parameters: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'The URL to fetch' },
+            unblocker: {
+              type: 'boolean',
+              description: 'Route through Bright Data Web Unlocker to bypass bot protection (default: false)',
+            },
+          },
+          required: ['url'],
+        },
+        async execute(_toolCallId: string, params: { url: string; unblocker?: boolean }) {
+          const useUnblocker = !!params.unblocker;
+
+          if (useUnblocker) {
+            const unblockerKey = process.env.BRIGHTDATA_UNBLOCKER_KEY;
+            const unblockerEnabled = process.env.BRIGHTDATA_UNBLOCKER_ENABLED !== 'false';
+            if (!unblockerKey || !unblockerEnabled) {
+              return {
+                content: [{
+                  type: 'text' as const,
+                  text: 'fetch_website: Bright Data unblocker not configured. Set BRIGHTDATA_UNBLOCKER_KEY and BRIGHTDATA_UNBLOCKER_ENABLED=true.',
+                }],
+              };
+            }
+            try {
+              const res = await fetch('https://api.brightdata.com/request', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${unblockerKey}`,
+                },
+                body: JSON.stringify({ zone: 'web_unlocker1', url: params.url, format: 'raw' }),
+                signal: AbortSignal.timeout(30_000),
+              });
+              if (!res.ok) {
+                return { content: [{ type: 'text' as const, text: `fetch_website (unblocker): HTTP ${res.status} ${res.statusText}` }] };
+              }
+              const html = await res.text();
+              const md = htmlToMarkdown(html);
+              return { content: [{ type: 'text' as const, text: md }] };
+            } catch (err) {
+              return { content: [{ type: 'text' as const, text: `fetch_website (unblocker) error: ${err instanceof Error ? err.message : String(err)}` }] };
+            }
+          }
+
+          // Plain HTTP fetch — route through proxy if configured
+          try {
+            const agentProxy = resolveAgentProxy(agent.id, agent.proxy);
+            const fetchOpts: Parameters<typeof undiciFetch>[1] = {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; GranClaw/1.0; +https://granclaw.com)',
+                'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9',
+              },
+              signal: AbortSignal.timeout(15_000),
+              redirect: 'follow',
+              ...(agentProxy ? { dispatcher: getProxyAgent(agentProxy) } : {}),
+            };
+            const res = await undiciFetch(params.url, fetchOpts);
+            if (!res.ok) {
+              return { content: [{ type: 'text' as const, text: `fetch_website: HTTP ${res.status} ${res.statusText}. Try unblocker=true if blocked.` }] };
+            }
+            const contentType = res.headers.get('content-type') ?? '';
+            const body = await res.text();
+            if (!contentType.includes('html')) {
+              const out = body.length > 4000 ? body.slice(0, 4000) + '\n\n[...truncated]' : body;
+              return { content: [{ type: 'text' as const, text: out }] };
+            }
+            const md = htmlToMarkdown(body);
+            return { content: [{ type: 'text' as const, text: md }] };
+          } catch (err) {
+            return { content: [{ type: 'text' as const, text: `fetch_website error: ${err instanceof Error ? err.message : String(err)}` }] };
+          }
+        },
+      });
+    });
 
     // Build resource loader. Must call reload() before passing to createAgentSession —
     // when the sdk receives a pre-built resourceLoader it skips reload().

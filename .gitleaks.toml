@@ -63,6 +63,10 @@ paths = [
 
   # Claude Code local settings — machine-specific, gitignored, never shipped
   '''\.claude/settings\.local\.json$''',
+
+  # Vendored CapMonster browser extension — third-party bundled JS assets,
+  # not GranClaw source code. clientKey is patched at runtime from env var.
+  '''^packages/backend/assets/capmonster-extension/''',
 ]
 
 # PostHog project API key — intentionally bundled in client-side telemetry

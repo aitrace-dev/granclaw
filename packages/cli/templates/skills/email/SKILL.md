@@ -1,30 +1,176 @@
 ---
 name: email
-description: Send and read email. Gmail uses OAuth 2.0 via the bundled gmcli; any other provider (Outlook, Fastmail, Zoho, Yahoo, self-hosted) uses SMTP/IMAP with an app password. Credentials always live in the user's secrets vault — never ask the user to paste a password in chat.
+description: Send and read email. The default and recommended path is SMTP/IMAP with an app password — it works with Gmail, Outlook, Fastmail, Zoho, Yahoo, Proton Bridge, and any self-hosted provider, and takes 3 minutes to set up. For Gmail users who need labels, drafts, or threading, there is an advanced OAuth 2.0 path via the bundled gmcli. Credentials always live in the user's secrets vault — never ask the user to paste a password in chat.
 user-invocable: false
 allowed-tools: [bash, read, write]
 ---
 
 # Email
 
-Send and read mail on behalf of the user. Two branches, one skill:
+Send and read mail on behalf of the user. One skill, two paths — **the user picks**.
 
-- **Gmail / Google Workspace** → OAuth 2.0 via `gmcli` (bundled in the image)
-- **Everything else** → Generic SMTP/IMAP via Python stdlib helpers
+## Which path to use
 
-Pick the branch by asking the user which provider their mailbox is on.
+| Situation | Path | Why |
+|---|---|---|
+| User wants to send/receive email for the first time, any provider including Gmail | **SMTP/IMAP with app password** (default) | Works everywhere, 3 minutes to set up, no Google Cloud Console, no OAuth consent screens. This is the one you should suggest by default. |
+| User specifically needs Gmail labels, drafts, threading, or advanced search | **Gmail via OAuth (gmcli)** (advanced) | Only Gmail exposes these features through the Gmail API. IMAP cannot touch them. |
+| User has no 2FA enabled and will not enable it | **Gmail via OAuth (gmcli)** | App passwords require 2FA. OAuth is the escape hatch — though the user should really just enable 2FA. |
+| User is on Google Workspace with an admin who disabled app passwords | **Gmail via OAuth (gmcli)** | Workspace admins can globally disable app-password access. |
+
+**Rule of thumb:** ask the user which mail provider they use, then suggest the SMTP/IMAP branch unless one of the "advanced" conditions above applies.
 
 ---
 
 ## Golden security rules
 
 1. **Never accept a password, app password, OAuth token, or client secret in chat.** The user pastes credentials into the Secrets panel in the GranClaw sidebar; the runtime injects them into your environment on startup. Your job is to tell the user what to put there, not to handle the value yourself.
-2. **Never echo a secret's value back.** Refer to secrets by name (`GMAIL_CREDENTIALS`, `SMTP_PASS`) and never print `$GMAIL_CREDENTIALS` or paste it back to the user.
+2. **Never echo a secret's value back.** Refer to secrets by name (`SMTP_PASS`, `GMAIL_CREDENTIALS`) and never print `$SMTP_PASS` or paste it back to the user.
 3. **Never commit a secret to disk outside `$GRANCLAW_WORKSPACE_DIR/.gmcli/`** (and those files are rebuilt from env on every call anyway).
 
 ---
 
-## Gmail branch
+## SMTP/IMAP branch (default, works for any provider including Gmail)
+
+This is the path you should offer first.
+
+### First-time setup
+
+Ask the user to add the following secrets in the **Secrets** panel. Required for sending:
+
+| Secret | Example | Notes |
+|---|---|---|
+| `SMTP_HOST` | `smtp.gmail.com`, `smtp.fastmail.com`, `smtp-mail.outlook.com` | Provider's SMTP host |
+| `SMTP_PORT` | `587` (STARTTLS) or `465` (implicit TLS) | 587 is the modern default |
+| `SMTP_USER` | `alice@gmail.com` | Full email address |
+| `SMTP_PASS` | `abcdabcdabcdabcd` (16 chars) | **App password, not the real account password** |
+
+Required for reading (optional if the user only wants to send):
+
+| Secret | Example |
+|---|---|
+| `IMAP_HOST` | `imap.gmail.com` |
+| `IMAP_PORT` | `993` (SSL — almost always) |
+| `IMAP_USER` | same as `SMTP_USER` |
+| `IMAP_PASS` | same app password as `SMTP_PASS` |
+
+### Provider-specific setup walkthroughs
+
+Figure out which provider the user is on, then copy-paste the relevant block:
+
+**Gmail / Google Workspace (recommended path for most users):**
+
+> To give me Gmail access the secure way:
+>
+> 1. **Enable 2-Step Verification** on your Google Account if you haven't already: <https://myaccount.google.com/signinoptions/twosv>. This is required — Google won't let you generate an app password without it.
+> 2. Go to <https://myaccount.google.com/apppasswords>. Sign in again if asked.
+> 3. Where it says "App name", type something like `GranClaw` and click **Create**.
+> 4. Google will show you a **16-character password** (with spaces — ignore the spaces). Copy it.
+> 5. Open the **Secrets** panel in the GranClaw sidebar and add these four secrets:
+>    - `SMTP_HOST` = `smtp.gmail.com`
+>    - `SMTP_PORT` = `587`
+>    - `SMTP_USER` = your full Gmail address
+>    - `SMTP_PASS` = the 16-character password (spaces can be there or not, both work)
+> 6. If you also want me to read mail, add four more:
+>    - `IMAP_HOST` = `imap.gmail.com`
+>    - `IMAP_PORT` = `993`
+>    - `IMAP_USER` = same as `SMTP_USER`
+>    - `IMAP_PASS` = same 16-character password
+> 7. Save and tell me when done.
+
+**Outlook / Microsoft 365:**
+
+> 1. Enable 2-Step Verification: <https://account.microsoft.com/proofs/Manage/additional> (required).
+> 2. Go to <https://account.microsoft.com/security> → **Advanced security options** → **App passwords** → **Create a new app password**.
+> 3. Open Secrets in the sidebar and add:
+>    - `SMTP_HOST` = `smtp-mail.outlook.com`, `SMTP_PORT` = `587`
+>    - `IMAP_HOST` = `outlook.office365.com`, `IMAP_PORT` = `993`
+>    - `SMTP_USER` / `IMAP_USER` = your full Outlook email
+>    - `SMTP_PASS` / `IMAP_PASS` = the app password
+> 4. Save and tell me when done.
+
+**Fastmail:**
+
+> 1. Go to <https://app.fastmail.com/settings/security/apps>.
+> 2. Click **New app password**, name it `GranClaw`, grant **Mail** access, click **Generate**.
+> 3. Add these secrets in the sidebar: `SMTP_HOST=smtp.fastmail.com`, `SMTP_PORT=587`, `IMAP_HOST=imap.fastmail.com`, `IMAP_PORT=993`, `SMTP_USER` and `IMAP_USER` = your Fastmail address, `SMTP_PASS` and `IMAP_PASS` = the generated app password.
+> 4. Save and tell me when done.
+
+**Zoho:** <https://accounts.zoho.com/home#security/app_passwords>. Hosts: `smtp.zoho.com:465` (implicit TLS) and `imap.zoho.com:993`.
+
+**Yahoo:** <https://login.yahoo.com/account/security> → App passwords. Hosts: `smtp.mail.yahoo.com:465` and `imap.mail.yahoo.com:993`.
+
+**Proton Bridge:** install the Bridge app locally, copy the Bridge-issued password it shows. Hosts: `127.0.0.1` with the ports Bridge displays.
+
+**Self-hosted / custom:** ask the user for the SMTP and IMAP host+port pair and walk them through creating an app-specific password in their admin panel (most mail servers support this).
+
+Do **not** accept the user's regular account password. If they try to paste it, refuse and explain why.
+
+### Sending
+
+```bash
+python3 .pi/skills/email/send-smtp.py \
+  --to alice@example.com \
+  --subject "Subject line" \
+  --body "Plain text body"
+
+# HTML body
+python3 .pi/skills/email/send-smtp.py \
+  --to alice@example.com \
+  --subject "Hi" \
+  --html "<p>Hello <b>world</b></p>"
+
+# CC, BCC, multiple recipients
+python3 .pi/skills/email/send-smtp.py \
+  --to "alice@example.com,bob@example.com" \
+  --cc "carol@example.com" \
+  --bcc "boss@example.com" \
+  --subject "Team sync" \
+  --body "..."
+```
+
+The helper uses STARTTLS on port 587 and implicit TLS on 465. It exits non-zero and prints to stderr if the env vars are missing or the server rejects auth.
+
+### Reading
+
+```bash
+# Recent messages from a mailbox
+python3 .pi/skills/email/read-imap.py list --mailbox INBOX --max 20
+
+# IMAP search (syntax is DIFFERENT from Gmail search — see below)
+python3 .pi/skills/email/read-imap.py search \
+  --mailbox INBOX \
+  --query 'UNSEEN FROM "boss@example.com"' \
+  --max 20
+
+# Fetch a message by UID
+python3 .pi/skills/email/read-imap.py fetch --mailbox INBOX --uid 12345
+
+# List all mailboxes
+python3 .pi/skills/email/read-imap.py mailboxes
+```
+
+IMAP search keys (note: uppercase, no colons, quoted strings for values):
+
+- `UNSEEN`, `SEEN`, `ANSWERED`, `FLAGGED`, `DELETED`
+- `FROM "alice@example.com"`, `TO "bob@..."`, `CC "..."`, `BCC "..."`
+- `SUBJECT "meeting"`
+- `BODY "phrase"`
+- `SINCE 1-Jan-2026`, `BEFORE 31-Dec-2026`
+- `LARGER 10000`, `SMALLER 100000` (bytes)
+- Combine with spaces (implicit AND): `UNSEEN FROM "boss@..." SUBJECT "urgent"`
+- OR: `OR (UNSEEN) (FLAGGED)`
+
+**Important — Gmail IMAP quirks:**
+- Use label names instead of folder names: the `INBOX` mailbox is the inbox, but `[Gmail]/Sent Mail`, `[Gmail]/Drafts`, `[Gmail]/All Mail`, `[Gmail]/Spam`, `[Gmail]/Trash` are the special mailboxes. Run `python3 .pi/skills/email/read-imap.py mailboxes` to see them.
+- `X-GM-RAW` is a Gmail-specific extension that lets you use Gmail search syntax inside an IMAP search: `X-GM-RAW "from:boss@company.com has:attachment"`. Supported by our `--query` passthrough.
+- Gmail does NOT delete messages when you copy them to `[Gmail]/Trash` unless you also expunge — but our reader is read-only so this won't bite you.
+
+---
+
+## Gmail via OAuth (advanced — only when the user needs it)
+
+This path uses `@mariozechner/gmcli` bundled in the image and unlocks the Gmail API: labels, drafts, threads, and Gmail-native search. It takes ~15 minutes to set up (Google Cloud Console project, OAuth consent screen, OAuth client download) versus ~3 minutes for the SMTP app-password path above, so **only suggest it if the user explicitly asks for Gmail-specific features** or one of the "advanced" conditions in the decision table at the top of this file applies.
 
 ### First-time setup (once per agent, per Gmail address)
 
@@ -111,100 +257,6 @@ All Gmail operations go through the wrapper, never raw `gmcli`:
 Gmail search operators you'll use most: `in:inbox`, `in:sent`, `is:unread`, `is:starred`, `from:`, `to:`, `subject:`, `has:attachment`, `filename:pdf`, `after:YYYY/MM/DD`, `before:YYYY/MM/DD`, `label:Work`. Combine with spaces.
 
 Do not hard-code the user's email address in commands — read it from `./.pi/skills/email/gmcli.sh accounts list` or remember it from the conversation.
-
----
-
-## SMTP/IMAP branch (everything that is not Gmail)
-
-For Outlook, Fastmail, Zoho, Yahoo, Proton Bridge, or any self-hosted mail server. These providers expose standard SMTP and IMAP and support **app passwords** (a separate 16-character password the user generates in their account settings, specifically so third-party tools don't see the real account password).
-
-### First-time setup
-
-Ask the user to add the following secrets in the **Secrets** panel. Required for sending:
-
-| Secret | Example | Notes |
-|---|---|---|
-| `SMTP_HOST` | `smtp.fastmail.com`, `smtp-mail.outlook.com` | Provider's SMTP host |
-| `SMTP_PORT` | `587` (STARTTLS) or `465` (implicit TLS) | 587 is the modern default |
-| `SMTP_USER` | `alice@fastmail.com` | Full email address |
-| `SMTP_PASS` | `app-password-here` | **App password, not account password** |
-
-Required for reading:
-
-| Secret | Example |
-|---|---|
-| `IMAP_HOST` | `imap.fastmail.com` |
-| `IMAP_PORT` | `993` (SSL — almost always) |
-| `IMAP_USER` | `alice@fastmail.com` (usually same as SMTP_USER) |
-| `IMAP_PASS` | same app password as SMTP_PASS for most providers |
-
-Provider-specific app password docs — walk the user to the right one:
-
-- **Outlook/Microsoft 365**: <https://support.microsoft.com/en-us/account-billing/5896ed9b-4263-e681-128a-a6f2979a7944> (requires 2FA enabled first)
-- **Fastmail**: <https://app.fastmail.com/settings/security/apps> → "Create new app password"
-- **Zoho**: <https://accounts.zoho.com/home#security/app_passwords>
-- **Yahoo**: <https://login.yahoo.com/account/security> → App passwords
-- **Proton Bridge**: run the Bridge app, copy the password it shows (SMTP_HOST is `127.0.0.1`, port varies)
-- **Gmail via SMTP** (only if for some reason not using the Gmail branch above): <https://myaccount.google.com/apppasswords> — requires 2-Step Verification
-
-Do **not** accept the user's regular account password. If they try to paste it, refuse and explain why.
-
-### Sending
-
-```bash
-python3 .pi/skills/email/send-smtp.py \
-  --to alice@example.com \
-  --subject "Subject line" \
-  --body "Plain text body"
-
-# HTML body
-python3 .pi/skills/email/send-smtp.py \
-  --to alice@example.com \
-  --subject "Hi" \
-  --html "<p>Hello <b>world</b></p>"
-
-# CC, BCC, multiple recipients
-python3 .pi/skills/email/send-smtp.py \
-  --to "alice@example.com,bob@example.com" \
-  --cc "carol@example.com" \
-  --bcc "boss@example.com" \
-  --subject "Team sync" \
-  --body "..."
-```
-
-The helper uses STARTTLS on port 587 and implicit TLS on 465. It exits non-zero and prints to stderr if the env vars are missing or the server rejects auth.
-
-### Reading
-
-```bash
-# Recent messages from a mailbox
-python3 .pi/skills/email/read-imap.py list --mailbox INBOX --max 20
-
-# IMAP search (syntax is different from Gmail — see below)
-python3 .pi/skills/email/read-imap.py search \
-  --mailbox INBOX \
-  --query 'UNSEEN FROM "boss@example.com"' \
-  --max 20
-
-# Fetch a message by UID
-python3 .pi/skills/email/read-imap.py fetch --mailbox INBOX --uid 12345
-
-# List all mailboxes
-python3 .pi/skills/email/read-imap.py mailboxes
-```
-
-IMAP search keys (note: uppercase, no colons, quoted strings for values):
-
-- `UNSEEN`, `SEEN`, `ANSWERED`, `FLAGGED`, `DELETED`
-- `FROM "alice@example.com"`, `TO "bob@..."`, `CC "..."`, `BCC "..."`
-- `SUBJECT "meeting"`
-- `BODY "phrase"`
-- `SINCE 1-Jan-2026`, `BEFORE 31-Dec-2026`
-- `LARGER 10000`, `SMALLER 100000` (bytes)
-- Combine with spaces (implicit AND): `UNSEEN FROM "boss@..." SUBJECT "urgent"`
-- OR: `OR (UNSEEN) (FLAGGED)`
-
-The `list` command returns the latest N messages regardless of read state. Use `search` with `UNSEEN` if you want the inbox-unread flow.
 
 ---
 

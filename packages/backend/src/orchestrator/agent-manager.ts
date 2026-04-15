@@ -129,6 +129,8 @@ function spawnAgent(agent: AgentConfig, wsPort: number): ChildProcess {
     AGENT_PORT: String(wsPort),
     CONFIG_PATH: path.resolve(REPO_ROOT, 'agents.config.json'),
     GRANCLAW_API_URL: `http://localhost:${orchestratorPort}`,
+    GRANCLAW_AGENT_ID: agent.id,
+    GRANCLAW_WORKSPACE_DIR: workspaceDir,
   };
 
   let child: ChildProcess;

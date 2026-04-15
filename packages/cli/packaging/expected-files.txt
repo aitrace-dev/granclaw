@@ -106,6 +106,10 @@ package.json
 templates/AGENT.onboarding.md
 templates/SYSTEM.md
 templates/agents.config.json
+templates/skills/email/SKILL.md
+templates/skills/email/gmcli.sh
+templates/skills/email/read-imap.py
+templates/skills/email/send-smtp.py
 templates/skills/housekeeping/SKILL.md
 templates/skills/memory/SKILL.md
 templates/skills/schedules/SKILL.md

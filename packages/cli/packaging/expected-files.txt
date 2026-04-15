@@ -113,4 +113,6 @@ templates/skills/email/send-smtp.py
 templates/skills/housekeeping/SKILL.md
 templates/skills/memory/SKILL.md
 templates/skills/schedules/SKILL.md
+templates/skills/whatsapp/SKILL.md
+templates/skills/whatsapp/whatsapp.sh
 templates/skills/workflows/SKILL.md

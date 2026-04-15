@@ -1093,7 +1093,8 @@ export async function runAgent(
                   'Authorization': `Bearer ${unblockerKey}`,
                 },
                 body: JSON.stringify({ zone: 'web_unlocker1', url: params.url, format: 'raw' }),
-                signal: AbortSignal.timeout(30_000),
+                // Bright Data needs 20–45s to solve Cloudflare challenges on hard targets.
+                signal: AbortSignal.timeout(60_000),
               });
               if (!res.ok) {
                 return { content: [{ type: 'text' as const, text: `fetch_website (unblocker): HTTP ${res.status} ${res.statusText}` }] };
@@ -1114,7 +1115,7 @@ export async function runAgent(
                 'User-Agent': 'Mozilla/5.0 (compatible; GranClaw/1.0; +https://granclaw.com)',
                 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9',
               },
-              signal: AbortSignal.timeout(15_000),
+              signal: AbortSignal.timeout(60_000),
               redirect: 'follow',
               ...(agentProxy ? { dispatcher: getProxyAgent(agentProxy) } : {}),
             };

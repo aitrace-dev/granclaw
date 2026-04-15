@@ -272,13 +272,27 @@ export function ChatPage() {
     setIsSending(true);
 
     let agentReply = '';
+    // Track the last streamed chunk type so we can insert a paragraph
+    // break between successive text blocks that are separated by tool
+    // calls. Without this, the agent's narration between tool_use blocks
+    // renders as one giant smashed-together paragraph (e.g. 53 tool
+    // calls in a debug loop produces one unreadable wall of text).
+    let lastChunkType: 'text' | 'tool_call' | null = null;
 
     sendMessage(text, (chunk) => {
       if (chunk.type === 'text') {
-        agentReply += chunk.text;
+        // If the previous chunk in this turn was a tool_call, we're
+        // starting a new text block — separate it from the previous
+        // one with a blank line so markdown renders it as its own
+        // paragraph. Skip the separator if the message is still empty
+        // (leading tool calls with no prior text).
+        const needsBreak = lastChunkType === 'tool_call' && agentReply.length > 0;
+        const piece = needsBreak ? `\n\n${chunk.text}` : chunk.text;
+        agentReply += piece;
         setMessages((prev) =>
-          prev.map((m) => m.id === agentMsgId ? { ...m, text: m.text + chunk.text } : m)
+          prev.map((m) => m.id === agentMsgId ? { ...m, text: m.text + piece } : m)
         );
+        lastChunkType = 'text';
       } else if (chunk.type === 'tool_call') {
         setMessages((prev) =>
           prev.map((m) =>
@@ -287,6 +301,7 @@ export function ChatPage() {
               : m
           )
         );
+        lastChunkType = 'tool_call';
       } else if (chunk.type === 'pending_approval') {
         setPendingApproval({ reason: chunk.reason });
         setMessages((prev) =>

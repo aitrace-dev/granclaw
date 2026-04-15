@@ -1,12 +1,22 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const backendPort = process.env.GRANCLAW_BACKEND_PORT ?? '3001';
 const backendUrl = `http://localhost:${backendPort}`;
 const backendWsUrl = `ws://localhost:${backendPort}`;
 
+const cliPkg = JSON.parse(
+  readFileSync(resolve(__dirname, '../cli/package.json'), 'utf8')
+);
+const granclawVersion = cliPkg.version ?? '0.0.0';
+
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __GRANCLAW_VERSION__: JSON.stringify(granclawVersion),
+  },
   server: {
     port: 5173,
     // Listen on all interfaces so the takeover URL (http://<lan-ip>:5173/...)

@@ -1,5 +1,7 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
+declare const __GRANCLAW_VERSION__: string;
+
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -16,6 +18,9 @@ export function AppShell() {
           <img src="/granclaw-logo.png" alt="GranClaw" className="h-6 w-6 rounded flex-shrink-0" />
           <span className="font-display font-semibold text-on-surface tracking-tight truncate">
             GranClaw
+          </span>
+          <span className="text-xs font-mono text-on-surface/60 flex-shrink-0">
+            v{__GRANCLAW_VERSION__}
           </span>
         </button>
         <span className="flex items-center gap-1.5 rounded-full bg-secondary-container/20 px-2 sm:px-3 py-1 text-xs font-mono text-secondary flex-shrink-0">

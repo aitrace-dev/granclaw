@@ -37,7 +37,7 @@ import { randomUUID } from 'crypto';
 import {
   setTakeover,
   getTakeover,
-  clearTakeover,
+  clearTakeoverMemoryOnly,
 } from '../takeover-state.js';
 import { AgentConfig, REPO_ROOT, getAgents } from '../config.js';
 import { esmImport } from '../esm-import.js';
@@ -348,7 +348,7 @@ export async function runAgent(
   const pendingTakeover = getTakeover(agent.id);
   if (pendingTakeover) {
     browserState.handle = pendingTakeover.handle;
-    clearTakeover(agent.id); // timer already cancelled by process.ts
+    clearTakeoverMemoryOnly(agent.id); // DB row owned by /resolve + 10min timeout
   }
 
   // ── Provider / API key ──────────────────────────────────────────────────

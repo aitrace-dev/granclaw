@@ -199,16 +199,49 @@ export async function startRecording(handle: BrowserSessionHandle): Promise<bool
     }
   };
 
-  const ok = await tryStart();
-  if (ok) {
-    const meta = readMeta(handle.metaPath);
-    if (meta) {
-      meta.video = 'recording.webm';
-      writeMeta(handle.metaPath, meta);
-    }
-    handle.recordingStarted = true;
+  const started = await tryStart();
+  if (!started) return false;
+
+  // agent-browser's `record start` spawns ffmpeg as a child and returns
+  // success (exit 0, prints "✓ Recording started") even when ffmpeg is
+  // missing from the host — the ffmpeg failure only surfaces later on
+  // `record stop`. Without this check the session ends up with
+  // `video: "recording.webm"` in meta.json but no file on disk, and the
+  // replay view shows a dead "no recording" card forever.
+  //
+  // Poll for the WebM file to appear. ffmpeg typically writes the EBML
+  // header within ~100ms of launch. If nothing shows up within the
+  // window below, treat the start as failed and leave meta.video = null
+  // so the frontend has an honest signal.
+  const FILE_APPEAR_TIMEOUT_MS = 1500;
+  const FILE_APPEAR_POLL_MS = 100;
+  const deadline = Date.now() + FILE_APPEAR_TIMEOUT_MS;
+  let fileOk = false;
+  while (Date.now() < deadline) {
+    try {
+      const st = fs.statSync(recordingPath);
+      if (st.size > 0) { fileOk = true; break; }
+    } catch { /* not yet */ }
+    await new Promise((r) => setTimeout(r, FILE_APPEAR_POLL_MS));
   }
-  return ok;
+
+  if (!fileOk) {
+    console.warn(
+      `[browser/session-manager] record start succeeded but ${recordingPath} did not materialize within ${FILE_APPEAR_TIMEOUT_MS}ms — is ffmpeg installed on the host?`,
+    );
+    // Best-effort stop so we don't leave a zombie record-state that would
+    // make the next session's tryStart hit "already active".
+    try { await execFileAsync(bin, stopArgv, { cwd: handle.workspaceDir, timeout: 5000 }); } catch { /* ignore */ }
+    return false;
+  }
+
+  const meta = readMeta(handle.metaPath);
+  if (meta) {
+    meta.video = 'recording.webm';
+    writeMeta(handle.metaPath, meta);
+  }
+  handle.recordingStarted = true;
+  return true;
 }
 
 /**

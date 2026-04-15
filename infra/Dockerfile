@@ -1,8 +1,12 @@
 FROM node:20-slim
 
-# Install Chromium and dependencies for agent-browser
+# Install Chromium and dependencies for agent-browser.
+# ffmpeg is required by agent-browser's `record` command — without it,
+# `record start` prints a success line but produces no .webm file, so the
+# browser session view shows sessions with "no recording" forever.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium \
+      ffmpeg \
       fonts-liberation \
       libasound2 \
       libatk-bridge2.0-0 \

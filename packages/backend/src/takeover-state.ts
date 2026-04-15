@@ -124,6 +124,29 @@ export function clearTakeover(agentId: string): void {
   dbDeleteByAgent(agentId);
 }
 
+/**
+ * Drop the in-memory takeover entry for an agent WITHOUT touching the SQLite
+ * row. Used by runner-pi when it grabs the browser handle back at the start
+ * of a new turn: the handle needs to be consumed so the next turn does not
+ * re-restore the same stale handle, but the DB row must stay alive so the
+ * orchestrator's GET /api/takeover/:token endpoint still finds it if the
+ * user has not clicked the link yet.
+ *
+ * Removing the DB row here used to happen via clearTakeover() and caused the
+ * "link always says expired" bug: any job dequeued after the takeover was
+ * emitted (scheduler tick, telegram message, follow-up user prompt) would
+ * enter runAgent, hit the restore path, and wipe the row before the user
+ * ever had a chance to click. The DB row is now owned exclusively by the
+ * /resolve endpoint (user clicks Completed) and the 10-minute timeout.
+ */
+export function clearTakeoverMemoryOnly(agentId: string): void {
+  const entry = byAgent.get(agentId);
+  if (!entry) return;
+  if (entry.timer) clearTimeout(entry.timer);
+  byToken.delete(entry.token);
+  byAgent.delete(agentId);
+}
+
 export function updateTakeoverTimer(
   agentId: string,
   timer: ReturnType<typeof setTimeout>,

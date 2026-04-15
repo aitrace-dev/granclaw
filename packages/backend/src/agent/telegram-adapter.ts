@@ -23,6 +23,7 @@
  */
 
 import telegramifyMarkdown from 'telegramify-markdown';
+import { flattenMarkdownTables } from '../lib/flatten-markdown-tables.js';
 import { TelegramHttpClient } from './telegram-http-client.js';
 import { enqueue } from '../agent-db.js';
 import {
@@ -287,33 +288,66 @@ export class TelegramAdapter {
   private async sendReply(chatId: number, text: string): Promise<void> {
     const MAX = 4000;
 
-    // Convert standard markdown → Telegram MarkdownV2. Fall back to plain
-    // text if conversion throws (e.g. deeply malformed LLM output).
-    let body: string;
-    let parseMode: 'MarkdownV2' | undefined;
-    try {
-      body = telegramifyMarkdown(text, 'escape');
-      parseMode = 'MarkdownV2';
-    } catch {
-      body = text;
-      parseMode = undefined;
-    }
+    // Pre-process: flatten markdown tables into "key: value" lines. Telegram
+    // MarkdownV2 has no table support — telegramify-markdown treats tables as
+    // plain-text unknowns and escapes every special character inside the
+    // cells, including link brackets/parens, and the pipe escape sequence
+    // `\|` is actually NOT a valid MarkdownV2 escape, so Telegram rejects
+    // the whole message, the .catch() fallback re-sends the escape-soup as
+    // plain text, and users see a wall of backslashes. Strip tables first.
+    const flattened = flattenMarkdownTables(text);
 
-    const send = (chunk: string) =>
-      this.bot
-        .sendMessage(chatId, chunk, parseMode ? { parse_mode: parseMode } : undefined)
-        .catch(() => this.bot.sendMessage(chatId, chunk, {})); // plain-text fallback
-
-    if (body.length <= MAX) {
-      await send(body);
-      return;
-    }
-    let remaining = body;
-    while (remaining.length > 0) {
+    // Chunk the ORIGINAL (flattened) text at newline boundaries BEFORE
+    // escaping. We then try to send each chunk as MarkdownV2 and, on any
+    // Telegram API error, fall back to sending that chunk's original
+    // unescaped form — never the escaped body. Previously the fallback
+    // used the escaped chunk, which is why users saw `\!` / `\.` / `\|`
+    // characters in their messages when MarkdownV2 parsing failed.
+    const chunks: string[] = [];
+    let remaining = flattened;
+    while (remaining.length > MAX) {
       const slice = remaining.slice(0, MAX);
       const splitAt = slice.lastIndexOf('\n') > MAX / 2 ? slice.lastIndexOf('\n') : MAX;
-      await send(remaining.slice(0, splitAt));
+      chunks.push(remaining.slice(0, splitAt));
       remaining = remaining.slice(splitAt).trimStart();
+    }
+    if (remaining.length > 0) chunks.push(remaining);
+    if (chunks.length === 0) return;
+
+    for (const chunk of chunks) {
+      await this.sendChunkWithFallback(chatId, chunk);
+    }
+  }
+
+  /**
+   * Send one chunk as MarkdownV2, falling back to the ORIGINAL unescaped
+   * chunk as plain text on any Telegram error. Logs the failure reason so
+   * operators can diagnose why MarkdownV2 rendering was rejected.
+   */
+  private async sendChunkWithFallback(chatId: number, original: string): Promise<void> {
+    let escaped: string;
+    try {
+      escaped = telegramifyMarkdown(original, 'escape');
+    } catch (err) {
+      // telegramify-markdown itself crashed — go straight to plain text.
+      console.warn(
+        `[telegram-adapter] telegramify-markdown threw, sending plain text: ${(err as Error).message}`,
+      );
+      await this.bot.sendMessage(chatId, original).catch(() => { /* give up */ });
+      return;
+    }
+    try {
+      await this.bot.sendMessage(chatId, escaped, { parse_mode: 'MarkdownV2' });
+    } catch (err) {
+      // Typical causes: unsupported escape sequence (e.g. `\|` which is not
+      // a valid MarkdownV2 escape), nesting limits, or link URLs with an
+      // unescaped `)`. Log the reason and send the unescaped ORIGINAL so
+      // the user sees a clean message instead of backslash-soup.
+      const msg = (err as Error).message ?? String(err);
+      console.warn(
+        `[telegram-adapter] MarkdownV2 send failed, falling back to plain text: ${msg}`,
+      );
+      await this.bot.sendMessage(chatId, original).catch(() => { /* give up */ });
     }
   }
 

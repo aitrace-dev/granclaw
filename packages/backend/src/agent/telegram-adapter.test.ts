@@ -192,7 +192,13 @@ describe('TelegramAdapter', () => {
     expect(currentFakeBot.sendMessage.mock.calls.length).toBeGreaterThan(preFlushSendCount);
     const lastSend = currentFakeBot.sendMessage.mock.calls.at(-1)!;
     expect(lastSend[0]).toBe(333);
-    expect(lastSend[1]).toBe('Hello! Here is the answer.');
+    // The reply is sent via telegramify-markdown → MarkdownV2, which
+    // escapes `!` and `.` per Telegram's spec. The test used to expect
+    // the unescaped original, which made no sense — the mock is being
+    // called with what we'd send to the Telegram API, and the API needs
+    // the escaped form for MarkdownV2 parse_mode.
+    expect(lastSend[1]).toBe('Hello\\! Here is the answer\\.\n');
+    expect(lastSend[2]).toEqual({ parse_mode: 'MarkdownV2' });
 
     adapter.stop();
   });

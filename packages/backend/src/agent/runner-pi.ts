@@ -979,8 +979,14 @@ export async function runAgent(
         description:
           'Stop the agent loop and let the user interact with the browser directly. ' +
           'Use when you hit a captcha, 2FA prompt, login wall, or need the user to ' +
-          'review/edit content before submitting. Tell the user what URL to open and ' +
-          'what to do. Include the takeover URL from the tool result in your message. ' +
+          'review/edit content before submitting. When this tool returns, COPY THE ' +
+          '`takeoverMarkdown` FIELD FROM THE TOOL RESULT VERBATIM into your user-facing ' +
+          'message. It is pre-formatted as a bounded markdown link `[...](...)` so the ' +
+          'URL is unambiguous under Telegram MarkdownV2 and any other renderer. ' +
+          'Do NOT paste the raw URL inline, do NOT put any text on the same line as ' +
+          'the URL, and do NOT add Spanish/French/other punctuation like `¡`, `¿`, `!` ' +
+          'immediately after the URL — the LLM-written text that comes after will get ' +
+          'absorbed into the URL by Telegram\'s auto-linker and the link will break. ' +
           'The agent resumes automatically when the user replies in chat.',
         promptSnippet: 'Request human browser control for captcha, review, or auth prompts',
         parameters: {
@@ -1033,10 +1039,21 @@ export async function runAgent(
             takeoverUrl,
           } as any);
 
+          // Emit the URL wrapped in a markdown link so trailing text
+          // that the LLM might append (e.g. `¡Verás la sesión en vivo!`)
+          // cannot be absorbed into the URL by Telegram's auto-linker.
+          // The LLM is instructed (in the tool description) to copy the
+          // `takeoverMarkdown` line verbatim into its user-facing reply,
+          // not to paste the raw URL inline.
+          const takeoverMarkdown = `[Abrir sesión del navegador ↗](${takeoverUrl})`;
           return {
             content: [{
               type: 'text' as const,
-              text: `Browser handed to user. Takeover URL: ${takeoverUrl}\nI will resume automatically when they reply in chat.`,
+              text:
+                `Browser handed to user. I will resume automatically when they reply in chat.\n\n` +
+                `Include this EXACT line (don't reformat it, don't inline the URL) in your reply to the user:\n\n` +
+                `${takeoverMarkdown}\n\n` +
+                `Raw URL (for logs only, do NOT paste directly in chat): ${takeoverUrl}`,
             }],
           };
         },

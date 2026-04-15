@@ -80,24 +80,9 @@ When the user pastes the redirect URL, complete the exchange. gmcli's `--manual`
 echo '<redirect-url>' | ./.pi/skills/email/gmcli.sh accounts add <user-email> --manual
 ```
 
-On success gmcli writes the refresh token to `$GRANCLAW_WORKSPACE_DIR/.gmcli/accounts.json`.
+On success gmcli writes the refresh token to `$GRANCLAW_WORKSPACE_DIR/.gmcli/accounts.json`. That file lives on the agent's persistent workspace volume, so it survives container restarts and redeploys — there is no second secret to manage. Run `./.pi/skills/email/gmcli.sh accounts list` to confirm the account shows up with `ok` status, then you're done with setup and can move on to **Using it**.
 
-**Step 5 — Persist accounts.json to the vault.**
-
-The workspace volume normally survives container restarts, but to make rotations and cross-instance restores clean, ask the user to copy the generated file into a second secret:
-
-```bash
-cat "$GRANCLAW_WORKSPACE_DIR/.gmcli/accounts.json"
-```
-
-> OAuth successful. For the refresh token to survive container rebuilds, please:
->
-> 1. Open the **Secrets** panel again.
-> 2. Add a new secret named exactly `GMAIL_ACCOUNTS`.
-> 3. Paste everything I just printed as the value.
-> 4. Save and tell me when it's done.
-
-From this point on, the skill is fully vault-backed — every future call materializes both `credentials.json` and `accounts.json` from env.
+If the workspace volume is ever wiped (new instance, manual reset), just re-run Steps 3–4 to regenerate the token. `GMAIL_CREDENTIALS` in the vault stays untouched.
 
 ### Using it
 

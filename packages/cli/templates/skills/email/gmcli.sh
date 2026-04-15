@@ -3,13 +3,14 @@
 #
 # Wraps @mariozechner/gmcli so each agent gets its own isolated ~/.gmcli/
 # under its workspace (gmcli hard-codes os.homedir() at module load — no
-# GMCLI_HOME env var upstream), and so OAuth credentials + refresh tokens
-# live in the GranClaw secrets vault instead of on disk.
+# GMCLI_HOME env var upstream).
 #
-# Every invocation rebuilds credentials.json and accounts.json from the
-# GMAIL_CREDENTIALS and GMAIL_ACCOUNTS env vars (which the orchestrator
-# injects from the vault on agent spawn), so rotating a secret in the UI
-# is picked up on the next call with zero ceremony.
+# Every invocation rebuilds ~/.gmcli/credentials.json from the
+# GMAIL_CREDENTIALS vault secret so rotating the OAuth client in the UI
+# is picked up immediately. The refresh token file (accounts.json) lives
+# under the workspace volume and is written once by gmcli's `accounts add`
+# flow — the workspace volume persists across container restarts, so
+# there is no second vault secret to manage.
 set -eu
 
 WORKSPACE="${GRANCLAW_WORKSPACE_DIR:-$PWD}"
@@ -49,13 +50,6 @@ if not out["clientId"] or not out["clientSecret"]:
 with open(dst, "w") as f:
     json.dump(out, f)
 PYEOF
-fi
-
-# GMAIL_ACCOUNTS holds the gmcli-written accounts.json (refresh tokens).
-# Only overwrite when the secret is set — during first-time onboarding it
-# won't be, and we want gmcli's own `accounts add` flow to write the file.
-if [ -n "${GMAIL_ACCOUNTS-}" ]; then
-  printf '%s' "$GMAIL_ACCOUNTS" > "$HOME/.gmcli/accounts.json"
 fi
 
 exec gmcli "$@"

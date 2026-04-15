@@ -1020,11 +1020,33 @@ export async function runAgent(
                 return `http://${getLanIp()}:${frontendPort}/takeover/${token}`;
               })();
 
+          // Auto-capture the browser's current URL from the running daemon
+          // if the agent did not pass one explicitly. This means the takeover
+          // page can render the URL bar correctly AND the attach logic can
+          // re-navigate the live view if the daemon has been restarted
+          // between the tool call and the user click (container hot-restart,
+          // OOM, manual `close --all`, etc.) — which is the primary source of
+          // the "takeover page shows about:blank" complaint.
+          let capturedUrl = params.url;
+          if (!capturedUrl) {
+            try {
+              const { stdout } = await execFileAsync(
+                agentBrowserBin,
+                ['--session', agent.id, 'get', 'url'],
+                { cwd: workspaceDir, timeout: 5000 },
+              );
+              const maybe = stdout.trim();
+              if (maybe && maybe !== 'about:blank' && /^https?:\/\//.test(maybe)) {
+                capturedUrl = maybe;
+              }
+            } catch { /* best effort — leave capturedUrl undefined */ }
+          }
+
           setTakeover(agent.id, {
             agentId: agent.id,
             channelId,
             reason: params.reason ?? 'Human assistance needed',
-            url: params.url,
+            url: capturedUrl,
             handle: browserState.handle,
             token,
             requestedAt: Date.now(),
@@ -1035,7 +1057,7 @@ export async function runAgent(
           onChunk({
             type: 'takeover_requested' as any,
             reason: params.reason,
-            url: params.url,
+            url: capturedUrl,
             takeoverUrl,
           } as any);
 

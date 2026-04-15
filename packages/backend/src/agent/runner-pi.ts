@@ -19,6 +19,7 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { networkInterfaces } from 'os';
 import { randomUUID } from 'crypto';
 import {
@@ -1090,16 +1091,19 @@ export async function runAgent(
             }
           }
 
-          // Plain HTTP fetch
+          // Plain HTTP fetch — route through proxy if configured
           try {
-            const res = await fetch(params.url, {
+            const agentProxy = resolveAgentProxy(agent.id, agent.proxy);
+            const fetchOpts: Parameters<typeof undiciFetch>[1] = {
               headers: {
                 'User-Agent': 'Mozilla/5.0 (compatible; GranClaw/1.0; +https://granclaw.com)',
                 'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9',
               },
               signal: AbortSignal.timeout(15_000),
               redirect: 'follow',
-            });
+              ...(agentProxy ? { dispatcher: new ProxyAgent(agentProxy) } : {}),
+            };
+            const res = await undiciFetch(params.url, fetchOpts);
             if (!res.ok) {
               return { content: [{ type: 'text' as const, text: `fetch_website: HTTP ${res.status} ${res.statusText}. Try unblocker=true if blocked.` }] };
             }

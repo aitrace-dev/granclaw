@@ -54,6 +54,7 @@ import {
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
 import { stealthArgv, type StealthOptions } from '../browser/stealth.js';
+import { CAPTCHA_DETECT_JS } from './captcha-detect.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -729,31 +730,22 @@ export async function runAgent(
     // Privileged commands (record, close, tab close for session 0,
     // session management) are rejected — the runtime owns those.
     /**
-     * After a navigation command, check if a CAPTCHA is blocking the page.
-     * Waits up to 30s for the CapMonster extension to auto-solve it.
+     * After a navigation command, check whether the page is blocked by any
+     * bot/captcha wall (widget captcha OR Cloudflare-style JS interstitial)
+     * and poll until CapMonster + the stealth extension have cleared it.
+     *
+     * Budget is 45s — Cloudflare's "Just a moment..." managed challenge often
+     * takes 15–20s on a cold datacenter IP, and CapMonster-solved widgets can
+     * take another pass, so shorter deadlines were causing real unblocks to
+     * be reported as "unsolved" (regression verified on mariados 2026-04-15).
+     *
      * Returns 'clear' (no captcha / solved), 'unsolved' (still blocked after timeout).
      */
     async function waitForCaptchaResolution(
       bin: string,
       sessionId: string,
     ): Promise<'clear' | 'unsolved'> {
-      const CAPTCHA_JS = `(function() {
-        var patterns = [
-          'iframe[src*="captcha-delivery"]',
-          'iframe[src*="geo.captcha"]',
-          'iframe[src*="recaptcha"]',
-          'iframe[src*="hcaptcha"]',
-          'iframe[src*="challenges.cloudflare"]',
-          '.g-recaptcha',
-          '.h-captcha',
-          '[class*="captcha"]',
-        ];
-        return patterns.some(function(s) {
-          return !!document.querySelector(s);
-        }) ? 'captcha' : 'clear';
-      })()`;
-
-      const evalArgv = (id: string) => ['--session', id, 'eval', CAPTCHA_JS];
+      const evalArgv = (id: string) => ['--session', id, 'eval', CAPTCHA_DETECT_JS];
 
       const check = async () => {
         try {
@@ -768,8 +760,8 @@ export async function runAgent(
       await new Promise(r => setTimeout(r, 1500));
       if (!await check()) return 'clear';
 
-      // CAPTCHA detected — wait up to 30s for auto-solve
-      const deadline = Date.now() + 30_000;
+      // Challenge detected — poll every 2s until the page clears or 45s elapses.
+      const deadline = Date.now() + 45_000;
       while (Date.now() < deadline) {
         await new Promise(r => setTimeout(r, 2_000));
         if (!await check()) return 'clear';
@@ -810,7 +802,7 @@ export async function runAgent(
           'Do not call `record start`, `record stop`, `close`, or `session` — the runtime manages those.',
           'You do not need to screenshot for audit — the whole session is recorded as video automatically.',
           'Saved logins persist automatically when the user has set up a profile via the dashboard Browser view.',
-          'CAPTCHA handling: if a page returns a CAPTCHA, wait — the browser has an automatic solver extension. If it is not resolved after ~30 seconds, use request_human_browser_takeover to let the user solve it.',
+          'CAPTCHA & Cloudflare handling: the browser ships an automatic CapMonster extension plus a stealth extension. After `open` or `reload` the runtime automatically polls for up to ~45 seconds while any captcha widget OR Cloudflare JS interstitial ("Just a moment...", "Checking your browser…", "Attention Required") clears — do NOT bail out early, do NOT call request_human_browser_takeover just because the first snapshot shows the interstitial. If, after your tool call returns, the response still contains the "CAPTCHA detected and not auto-solved" warning, THEN call request_human_browser_takeover.',
           'Examples: {"command":"open","args":["https://example.com"]}, {"command":"click","args":["--ref","e12"]}, {"command":"fill","args":["--ref","e5","Alice"]}',
         ],
         parameters: {
@@ -890,7 +882,7 @@ export async function runAgent(
                 return {
                   content: [{
                     type: 'text' as const,
-                    text: out + '\n\n⚠️ CAPTCHA detected and not auto-solved after 30s. ' +
+                    text: out + '\n\n⚠️ CAPTCHA detected and not auto-solved after 45s. ' +
                       'Use request_human_browser_takeover to let the user solve it, or try a different URL.',
                   }],
                 };

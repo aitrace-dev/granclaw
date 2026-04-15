@@ -288,8 +288,21 @@ function getLanIp(): string {
 }
 
 /**
+ * Stable hash of an agent ID string → non-negative integer.
+ * Used so proxy assignment is deterministic by agent ID, not config order.
+ */
+function hashAgentId(id: string): number {
+  let h = 0;
+  for (const c of id) h = (Math.imul(31, h) + c.charCodeAt(0)) | 0;
+  return Math.abs(h);
+}
+
+/**
  * Resolve the proxy for an agent.
- * Priority: agent.proxy config → GRANCLAW_PROXY_LIST (round-robin by agent index) → undefined.
+ * Priority: agent.proxy config → GRANCLAW_PROXY_LIST (stable hash by agent ID) → undefined.
+ * Hash-based assignment means the same agent always gets the same proxy even if
+ * agents.config.json is reordered or new agents are added — so the Chrome daemon
+ * always restarts on the same IP.
  * Only applies when GRANCLAW_PROXY_ENABLE=true or agent.proxy is explicitly set.
  */
 function resolveAgentProxy(agentId: string, configProxy?: string): string | undefined {
@@ -299,9 +312,7 @@ function resolveAgentProxy(agentId: string, configProxy?: string): string | unde
   if (!proxyList) return undefined;
   const proxies = proxyList.split(',').map(p => p.trim()).filter(Boolean);
   if (proxies.length === 0) return undefined;
-  const allAgents = getAgents();
-  const idx = allAgents.findIndex(a => a.id === agentId);
-  return proxies[Math.max(0, idx) % proxies.length];
+  return proxies[hashAgentId(agentId) % proxies.length];
 }
 
 export async function runAgent(

@@ -3,8 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import {
-  ensureProfile, activate, deactivate, getActiveProfile, isEnabled,
+  ensureProfile, activate, deactivate, getActiveProfile, isEnabled, bootstrapIntegration,
 } from './service.js';
+import { getIntegration } from '../registry.js';
 import {
   setAppSecret,
   deleteAppSecret,
@@ -26,6 +27,7 @@ describe('gologin service', () => {
   beforeEach(() => {
     process.env.GRANCLAW_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'granclaw-gl-'));
     process.env.GRANCLAW_SECRET_KEY = '0'.repeat(64);
+    delete process.env.GOLOGIN_API_TOKEN;
     resetAppSecrets();
     resetRegistry();
     ws = freshWorkspace();
@@ -48,6 +50,55 @@ describe('gologin service', () => {
       setAppSecret('GOLOGIN_API_TOKEN', 'tok123');
       setIntegration('gologin', { enabled: true, config: {} });
       expect(isEnabled()).toBe(true);
+    });
+
+    it('env var alone satisfies the token requirement', () => {
+      process.env.GOLOGIN_API_TOKEN = 'tok_from_env';
+      setIntegration('gologin', { enabled: true, config: {} });
+      expect(isEnabled()).toBe(true);
+    });
+
+    it('env var takes precedence over app-secret', async () => {
+      process.env.GOLOGIN_API_TOKEN = 'tok_env_wins';
+      setAppSecret('GOLOGIN_API_TOKEN', 'tok_secret_loses');
+      setIntegration('gologin', { enabled: true, config: {} });
+
+      fetchMock.mockResolvedValueOnce({
+        ok: true, status: 200, json: async () => ({ id: 'p', name: 'x' }),
+      });
+      await ensureProfile(ws, 'agent1', 'Atlas');
+
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok_env_wins');
+      closeWorkspaceDb(ws);
+    });
+  });
+
+  describe('bootstrapIntegration', () => {
+    it('no-op when env var not set', () => {
+      bootstrapIntegration();
+      expect(getIntegration('gologin')).toBeNull();
+    });
+
+    it('creates enabled row when env var set and no existing row', () => {
+      process.env.GOLOGIN_API_TOKEN = 'tok';
+      bootstrapIntegration();
+      const row = getIntegration('gologin');
+      expect(row?.enabled).toBe(true);
+    });
+
+    it('does not overwrite an existing disabled row (operator intent wins)', () => {
+      process.env.GOLOGIN_API_TOKEN = 'tok';
+      setIntegration('gologin', { enabled: false, config: {} });
+      bootstrapIntegration();
+      expect(getIntegration('gologin')?.enabled).toBe(false);
+    });
+
+    it('does not overwrite an existing enabled row (idempotent)', () => {
+      process.env.GOLOGIN_API_TOKEN = 'tok';
+      setIntegration('gologin', { enabled: true, config: { defaultProxy: 'us' } });
+      bootstrapIntegration();
+      expect(getIntegration('gologin')?.config).toEqual({ defaultProxy: 'us' });
     });
   });
 

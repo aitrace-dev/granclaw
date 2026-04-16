@@ -13,7 +13,7 @@
  */
 
 import { getAppSecret } from '../../app-secrets.js';
-import { getIntegration } from '../registry.js';
+import { getIntegration, setIntegration } from '../registry.js';
 import {
   getAgentIntegration,
   upsertAgentIntegration,
@@ -24,7 +24,17 @@ export const INTEGRATION_ID = 'gologin';
 export const TOKEN_KEY = 'GOLOGIN_API_TOKEN';
 const API_BASE = 'https://api.gologin.com';
 
+/**
+ * Resolve the GoLogin token.
+ *
+ * Priority:
+ *   1. GOLOGIN_API_TOKEN env var — set by enterprise container provisioning.
+ *      Preferred because it's ephemeral and isn't persisted in the tenant DB.
+ *   2. app-secrets store — for local dev, configured via PUT /integrations/gologin/secret/api_token.
+ */
 function getToken(): string | null {
+  const envToken = process.env.GOLOGIN_API_TOKEN?.trim();
+  if (envToken) return envToken;
   return getAppSecret(TOKEN_KEY);
 }
 
@@ -32,6 +42,23 @@ export function isEnabled(): boolean {
   const integration = getIntegration(INTEGRATION_ID);
   if (!integration?.enabled) return false;
   return getToken() !== null;
+}
+
+/**
+ * One-time bootstrap. Called at orchestrator startup. If the env var is set
+ * AND no integration row exists yet, create one with enabled=true so the
+ * tenant container comes up with GoLogin already "on" — the admin doesn't
+ * need a post-provision curl to flip the flag.
+ *
+ * Idempotent: if a row already exists (even with enabled=false, e.g. the user
+ * manually disabled), we don't touch it. Operator intent wins.
+ */
+export function bootstrapIntegration(): void {
+  const envToken = process.env.GOLOGIN_API_TOKEN?.trim();
+  if (!envToken) return;
+  const existing = getIntegration(INTEGRATION_ID);
+  if (existing) return;
+  setIntegration(INTEGRATION_ID, { enabled: true, config: {} });
 }
 
 async function callGoLogin(pathname: string, init: RequestInit): Promise<unknown> {

@@ -16,9 +16,9 @@ describe('app-secrets', () => {
   });
 
   it('round-trips a secret', () => {
-    setAppSecret('gologin_token', 'abc123');
-    expect(getAppSecret('gologin_token')).toBe('abc123');
-    expect(hasAppSecret('gologin_token')).toBe(true);
+    setAppSecret('sample_token', 'abc123');
+    expect(getAppSecret('sample_token')).toBe('abc123');
+    expect(hasAppSecret('sample_token')).toBe(true);
   });
 
   it('returns null for missing secret', () => {
@@ -39,7 +39,7 @@ describe('app-secrets', () => {
   });
 
   it('encrypts the value on disk', () => {
-    setAppSecret('gologin_token', 'plaintext-value-xyz');
+    setAppSecret('sample_token', 'plaintext-value-xyz');
     const dbPath = path.join(process.env.GRANCLAW_HOME!, 'data', 'app-secrets.sqlite');
     const raw = fs.readFileSync(dbPath);
     // Raw file must not contain plaintext value anywhere

@@ -801,8 +801,8 @@ export async function runAgent(
 
     extensionFactories.push((pi: any) => {
       // Binary + args resolved per-turn (NOT per-factory-invocation) so agents
-      // that toggle GoLogin mid-session pick up the change on their next turn.
-      // Moved inside execute() below.
+      // that toggle a browser provider mid-session pick up the change on their
+      // next turn. Moved inside execute() below.
 
       const PRIVILEGED_COMMANDS = new Set(['record', 'close', 'session']);
       const KNOWN_COMMANDS = [
@@ -872,8 +872,8 @@ export async function runAgent(
             // The command will error out downstream if it really is invalid.
           }
 
-          // Resolve which browser backend to run (local agent-browser vs
-          // gologin-agent-browser) per-turn. Picks up toggles made since
+          // Resolve which browser backend to run per-turn (local daemon vs a
+          // provider supplied by an extension). Picks up toggles made since
           // the last turn via the integrations DB.
           const browser = resolveBrowserBinary(agent.id, workspaceDir);
 
@@ -881,15 +881,16 @@ export async function runAgent(
           if (!browserState.handle) {
             browserState.handle = createBrowserSession(agent.id, workspaceDir);
           }
-          // Recording is only supported by the local agent-browser daemon.
-          // GoLogin runs in their cloud and doesn't expose per-session WebM capture,
-          // so meta.json.video stays null and the dashboard renders "no recording".
+          // Recording is only supported by the local browser daemon. Remote
+          // providers may run in their own cloud without a per-session WebM
+          // capture — meta.json.video stays null and the dashboard renders
+          // "no recording".
           if (browser.recordingSupported && !browserState.handle.recordingStarted) {
             await startBrowserRecording(browserState.handle);
           }
 
-          // Build argv per-CLI: agent-browser wants flags BEFORE the subcommand,
-          // gologin-agent-browser wants them AFTER. buildArgv handles both.
+          // Build argv per-CLI: the local daemon wants flags BEFORE the
+          // subcommand; remote CLIs may want them AFTER. buildArgv handles both.
           const argv = buildArgv(browser, command, args);
 
           try {

@@ -21,28 +21,28 @@ describe('agent-integrations-db', () => {
   });
 
   it('returns null when no row exists', () => {
-    expect(getAgentIntegration(ws, 'gologin')).toBeNull();
+    expect(getAgentIntegration(ws, 'sample-integration')).toBeNull();
     closeWorkspaceDb(ws);
   });
 
   it('upserts and reads', () => {
-    upsertAgentIntegration(ws, 'gologin', { active: true, externalId: 'prof_123' });
-    const got = getAgentIntegration(ws, 'gologin');
-    expect(got).toMatchObject({ integrationId: 'gologin', active: true, externalId: 'prof_123' });
+    upsertAgentIntegration(ws, 'sample-integration', { active: true, externalId: 'prof_123' });
+    const got = getAgentIntegration(ws, 'sample-integration');
+    expect(got).toMatchObject({ integrationId: 'sample-integration', active: true, externalId: 'prof_123' });
     expect(got?.metadata).toEqual({});
     closeWorkspaceDb(ws);
   });
 
   it('CRITICAL INVARIANT: deactivate preserves externalId, reactivation reuses it', () => {
-    upsertAgentIntegration(ws, 'gologin', { active: true, externalId: 'prof_xyz' });
+    upsertAgentIntegration(ws, 'sample-integration', { active: true, externalId: 'prof_xyz' });
 
-    setAgentIntegrationActive(ws, 'gologin', false);
-    let got = getAgentIntegration(ws, 'gologin');
+    setAgentIntegrationActive(ws, 'sample-integration', false);
+    let got = getAgentIntegration(ws, 'sample-integration');
     expect(got?.active).toBe(false);
     expect(got?.externalId).toBe('prof_xyz');
 
-    setAgentIntegrationActive(ws, 'gologin', true);
-    got = getAgentIntegration(ws, 'gologin');
+    setAgentIntegrationActive(ws, 'sample-integration', true);
+    got = getAgentIntegration(ws, 'sample-integration');
     expect(got?.active).toBe(true);
     expect(got?.externalId).toBe('prof_xyz');
 
@@ -50,34 +50,34 @@ describe('agent-integrations-db', () => {
   });
 
   it('upsert with null externalId does NOT wipe an existing externalId', () => {
-    upsertAgentIntegration(ws, 'gologin', { active: true, externalId: 'prof_sticky' });
-    upsertAgentIntegration(ws, 'gologin', { active: false, externalId: null });
-    expect(getAgentIntegration(ws, 'gologin')?.externalId).toBe('prof_sticky');
+    upsertAgentIntegration(ws, 'sample-integration', { active: true, externalId: 'prof_sticky' });
+    upsertAgentIntegration(ws, 'sample-integration', { active: false, externalId: null });
+    expect(getAgentIntegration(ws, 'sample-integration')?.externalId).toBe('prof_sticky');
     closeWorkspaceDb(ws);
   });
 
   it('upsert with new externalId replaces previous one', () => {
-    upsertAgentIntegration(ws, 'gologin', { active: true, externalId: 'prof_old' });
-    upsertAgentIntegration(ws, 'gologin', { active: true, externalId: 'prof_new' });
-    expect(getAgentIntegration(ws, 'gologin')?.externalId).toBe('prof_new');
+    upsertAgentIntegration(ws, 'sample-integration', { active: true, externalId: 'prof_old' });
+    upsertAgentIntegration(ws, 'sample-integration', { active: true, externalId: 'prof_new' });
+    expect(getAgentIntegration(ws, 'sample-integration')?.externalId).toBe('prof_new');
     closeWorkspaceDb(ws);
   });
 
   it('stores per-integration rows independently', () => {
-    upsertAgentIntegration(ws, 'gologin', { active: true, externalId: 'gl_1' });
+    upsertAgentIntegration(ws, 'sample-integration', { active: true, externalId: 'gl_1' });
     upsertAgentIntegration(ws, 'brightdata', { active: false, externalId: 'bd_1' });
-    expect(getAgentIntegration(ws, 'gologin')?.externalId).toBe('gl_1');
+    expect(getAgentIntegration(ws, 'sample-integration')?.externalId).toBe('gl_1');
     expect(getAgentIntegration(ws, 'brightdata')?.externalId).toBe('bd_1');
     closeWorkspaceDb(ws);
   });
 
   it('round-trips metadata', () => {
-    upsertAgentIntegration(ws, 'gologin', {
+    upsertAgentIntegration(ws, 'sample-integration', {
       active: true,
       externalId: 'p1',
       metadata: { createdByAgentName: 'Atlas', fingerprint: 'lin' },
     });
-    expect(getAgentIntegration(ws, 'gologin')?.metadata).toEqual({
+    expect(getAgentIntegration(ws, 'sample-integration')?.metadata).toEqual({
       createdByAgentName: 'Atlas',
       fingerprint: 'lin',
     });

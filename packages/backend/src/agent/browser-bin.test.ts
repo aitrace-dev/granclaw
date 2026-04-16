@@ -102,10 +102,10 @@ describe('buildArgv', () => {
     expect(argv).toEqual(['--session', 'a1', 'open', 'https://example.com']);
   });
 
-  it('remote: flags after command — matches gologin-agent-browser CLI', () => {
+  it('remote: flags after command — matches remote-browser-cli CLI', () => {
     const argv = buildArgv(
       {
-        bin: 'gologin-agent-browser', env: {}, isRemote: true, recordingSupported: false,
+        bin: 'remote-browser-cli', env: {}, isRemote: true, recordingSupported: false,
         preCommandArgs: [],
         postCommandArgs: ['--session', 'a1', '--profile', 'prof_x'],
       },

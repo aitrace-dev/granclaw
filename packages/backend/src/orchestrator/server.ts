@@ -1380,7 +1380,7 @@ export function createServer() {
   app.use('/logs', logsRouter);
 
   // ── Integrations ──────────────────────────────────────────────────────────
-  // Global integration config + per-agent activation (e.g. GoLogin).
+  // Global integration config + per-agent activation.
   // Gated in the UI by appConfig.enableIntegrations — API is always exposed
   // but harmless when no integration is configured.
 

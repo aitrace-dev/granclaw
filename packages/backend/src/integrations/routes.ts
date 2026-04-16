@@ -4,7 +4,7 @@
  * Integration framework routes mounted at /integrations.
  *
  * Generic endpoints (list/configure integrations, secret storage) live here.
- * Concrete integrations (e.g. gologin) ship as extensions — they mount their
+ * Concrete integrations ship as extensions — they mount their
  * own sub-routers onto the Express app via the ExtensionContext when loaded
  * from GRANCLAW_EXTENSIONS_DIR.
  */

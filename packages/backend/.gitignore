@@ -1,0 +1,6 @@
+# Compiled output
+dist/
+# Accidental tsc output next to source (extension workspaces with wrong
+# tsconfig paths can emit here — belt-and-braces to keep src/ clean).
+src/**/*.js
+src/**/*.js.map

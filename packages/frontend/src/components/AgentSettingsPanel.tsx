@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import type { Agent } from '../lib/api.ts';
 import { addSecret, deleteSecretApi, exportAgentUrl } from '../lib/api.ts';
 import { useT } from '../lib/i18n.tsx';
+import { getRegisteredViews, subscribeViews } from '../lib/extensions.ts';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AgentSettingsPanel
@@ -133,11 +134,12 @@ export function AgentSettingsPanel({
   isWiping: boolean;
   isSending: boolean;
   onWipe: () => void;
-  mainView: 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
-  onViewChange: (view: 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations') => void;
+  mainView: string;
+  onViewChange: (view: string) => void;
 }) {
   const { t } = useT();
   const [secretForm, setSecretForm] = useState({ name: '', value: '' });
+  const extViews = useSyncExternalStore(subscribeViews, getRegisteredViews);
 
   const isEditing = secretNames.includes(secretForm.name);
 
@@ -235,6 +237,15 @@ export function AgentSettingsPanel({
         active={mainView === 'integrations'}
         onClick={() => onViewChange('integrations')}
       />
+      {extViews.map(v => (
+        <ViewButton
+          key={v.id}
+          icon={v.icon}
+          label={v.label}
+          active={mainView === v.id}
+          onClick={() => onViewChange(v.id)}
+        />
+      ))}
       {/* Guardian — Coming Soon (disabled) */}
       <div
         data-testid="guardian-coming-soon"

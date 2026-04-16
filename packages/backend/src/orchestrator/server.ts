@@ -52,7 +52,7 @@ import { startScheduler } from '../scheduler.js';
 import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
 import { listSessions, getSession as getBrowserSession, getVideoPath } from '../browser-sessions.js';
-import { handleBrowserLiveUpgrade } from './browser-live.js';
+import { handleBrowserLiveUpgrade, registerExternalCdpSession, removeExternalCdpSession } from './browser-live.js';
 import { stealthArgv } from '../browser/stealth.js';
 import { REPO_ROOT, getAgents, saveAgents, type AgentConfig } from '../config.js';
 import { listProviders, getProvider, saveProvider, removeProvider, clearProvider, getSearchApiKey, saveSearch, clearSearch } from '../providers-config.js';
@@ -1394,6 +1394,8 @@ export function createServer() {
   loadExtensions({
     app,
     registerBrowserProvider,
+    registerCdpSession: registerExternalCdpSession,
+    removeCdpSession: removeExternalCdpSession,
   }).catch((err: unknown) => {
     console.error('[server] extension loader failed (non-fatal):', err);
   });

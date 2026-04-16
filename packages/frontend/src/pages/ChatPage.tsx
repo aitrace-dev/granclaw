@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { capture } from '../lib/telemetry.ts';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -17,6 +17,7 @@ import { UsageView } from '../components/UsageView.tsx';
 import { LogsView } from '../components/LogsView.tsx';
 import { IntegrationsView } from '../components/IntegrationsView.tsx';
 import { useT } from '../lib/i18n.tsx';
+import { getRegisteredViews, subscribeViews } from '../lib/extensions.ts';
 
 type MainView = 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
 
@@ -145,12 +146,14 @@ function ToolCallsBlock({ toolCalls, isStreaming }: { toolCalls: string[]; isStr
 export function ChatPage() {
   const { t } = useT();
   const { id: agentId = '' } = useParams<{ id: string }>();
+  const extViews = useSyncExternalStore(subscribeViews, getRegisteredViews);
   // Route is `agents/:id/*` — the splat is either "chat" or "view/:view"
   const splat = (useParams() as Record<string, string>)['*'] ?? '';
   const viewParam = splat === 'chat' ? 'chat' : splat.startsWith('view/') ? splat.slice(5) : undefined;
   const navigate = useNavigate();
-  const mainView: MainView = viewParam && VALID_VIEWS.includes(viewParam as MainView) ? (viewParam as MainView) : 'chat';
-  const setMainView = (view: MainView) => {
+  const allValidViews = [...VALID_VIEWS, ...extViews.map(v => v.id)];
+  const mainView: string = viewParam && allValidViews.includes(viewParam) ? viewParam : 'chat';
+  const setMainView = (view: string) => {
     capture('chat_view_changed', { agentId, view });
     if (view === 'chat') navigate(`/agents/${agentId}/chat`, { replace: true });
     else navigate(`/agents/${agentId}/view/${view}`, { replace: true });
@@ -461,6 +464,10 @@ export function ChatPage() {
       ) : mainView === 'integrations' ? (
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <IntegrationsView agentId={agentId} secretNames={secretNames} setSecretNames={setSecretNames} />
+        </div>
+      ) : extViews.find(v => v.id === mainView) ? (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {(() => { const V = extViews.find(v => v.id === mainView)!; return <V.component agentId={agentId} />; })()}
         </div>
       ) : (
       <div className="flex flex-1 flex-col rounded-lg bg-surface-container-lowest overflow-hidden min-w-0">

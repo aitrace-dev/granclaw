@@ -46,6 +46,14 @@ export interface ExtensionContext {
    * that returns a non-null resolution wins.
    */
   registerBrowserProvider(provider: BrowserProvider): void;
+  /**
+   * Register an externally-managed CDP session with the browser-live relay.
+   * Once registered, frontend can connect to /browser-live/:agentId/:sessionId
+   * and receive screencasted frames + send input events.
+   */
+  registerCdpSession(agentId: string, sessionId: string, cdpUrl: string): void;
+  /** Remove a previously registered external CDP session. */
+  removeCdpSession(agentId: string, sessionId: string): void;
   /** Injected library API. */
   lib: LibraryApi;
 }

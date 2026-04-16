@@ -78,10 +78,25 @@ interface Stream {
   screencastSessionId: number | null;
   pollTimer: ReturnType<typeof setInterval> | null;
   disposed: boolean;
+  /** CDP flat session ID for browser-level connections (cloud browsers). */
+  flatSessionId: string | null;
 }
 
 const streams = new Map<string, Stream>();
 const wss = new WebSocketServer({ noServer: true });
+
+const externalCdpSessions = new Map<string, string>();
+
+export function registerExternalCdpSession(agentId: string, sessionId: string, cdpUrl: string): void {
+  externalCdpSessions.set(streamKey(agentId, sessionId), cdpUrl);
+}
+
+export function removeExternalCdpSession(agentId: string, sessionId: string): void {
+  const key = streamKey(agentId, sessionId);
+  externalCdpSessions.delete(key);
+  const stream = streams.get(key);
+  if (stream) disposeStream(key, stream);
+}
 
 function streamKey(agentId: string, sessionId: string): string {
   return `${agentId}::${sessionId}`;
@@ -108,6 +123,7 @@ export function relayInputToChrome(
   chromeWs: CdpSender,
   nextId: () => number,
   rawData: string,
+  flatSessionId?: string | null,
 ): void {
   let msg: Record<string, unknown>;
   try { msg = JSON.parse(rawData); } catch { return; }
@@ -117,64 +133,52 @@ export function relayInputToChrome(
     return Number.isFinite(n) ? n : fallback;
   };
 
+  const cdpSend = (method: string, params: Record<string, unknown>) => {
+    const cmd: Record<string, unknown> = { id: nextId(), method, params };
+    if (flatSessionId) cmd.sessionId = flatSessionId;
+    chromeWs.send(JSON.stringify(cmd));
+  };
+
   if (msg.type === 'mouse') {
-    const eventType = String(msg.eventType ?? 'mouseMoved');
-    const button = String(msg.button ?? 'none');
-    chromeWs.send(JSON.stringify({
-      id: nextId(),
-      method: 'Input.dispatchMouseEvent',
-      params: {
-        type: eventType,
-        x: toNum(msg.x, 0),
-        y: toNum(msg.y, 0),
-        button,
-        clickCount: toNum(msg.clickCount, 0),
-        modifiers: toNum(msg.modifiers, 0),
-      },
-    }));
+    cdpSend('Input.dispatchMouseEvent', {
+      type: String(msg.eventType ?? 'mouseMoved'),
+      x: toNum(msg.x, 0),
+      y: toNum(msg.y, 0),
+      button: String(msg.button ?? 'none'),
+      clickCount: toNum(msg.clickCount, 0),
+      modifiers: toNum(msg.modifiers, 0),
+    });
   } else if (msg.type === 'key') {
-    const eventType = String(msg.eventType ?? 'rawKeyDown');
     const key = String(msg.key ?? '');
-    const code = String(msg.code ?? '');
-    if (!key) return; // key is required
-    // windowsVirtualKeyCode is important for special keys: without it,
-    // Chromium's input handlers silently drop Backspace/Delete/Arrow keys.
-    // The takeover page computes it from a key-code map.
+    if (!key) return;
     const params: Record<string, unknown> = {
-      type: eventType,
+      type: String(msg.eventType ?? 'rawKeyDown'),
       key,
-      code,
+      code: String(msg.code ?? ''),
       modifiers: toNum(msg.modifiers, 0),
     };
     if (msg.windowsVirtualKeyCode !== undefined) {
       params.windowsVirtualKeyCode = toNum(msg.windowsVirtualKeyCode, 0);
       params.nativeVirtualKeyCode = toNum(msg.windowsVirtualKeyCode, 0);
     }
-    chromeWs.send(JSON.stringify({
-      id: nextId(),
-      method: 'Input.dispatchKeyEvent',
-      params,
-    }));
+    cdpSend('Input.dispatchKeyEvent', params);
   } else if (msg.type === 'insertText') {
-    const text = String(msg.text ?? '').slice(0, 4096); // cap at 4 KB
+    const text = String(msg.text ?? '').slice(0, 4096);
     if (!text) return;
-    chromeWs.send(JSON.stringify({
-      id: nextId(),
-      method: 'Input.insertText',
-      params: { text },
-    }));
+    cdpSend('Input.insertText', { text });
   } else if (msg.type === 'scroll') {
-    chromeWs.send(JSON.stringify({
-      id: nextId(),
-      method: 'Input.dispatchMouseEvent',
-      params: {
-        type: 'mouseWheel',
-        x: toNum(msg.x, 0),
-        y: toNum(msg.y, 0),
-        deltaX: 0,
-        deltaY: toNum(msg.deltaY, 0),
-      },
-    }));
+    cdpSend('Input.dispatchMouseEvent', {
+      type: 'mouseWheel',
+      x: toNum(msg.x, 0),
+      y: toNum(msg.y, 0),
+      deltaX: 0,
+      deltaY: toNum(msg.deltaY, 0),
+    });
+  } else if (msg.type === 'navigate') {
+    const url = String(msg.url ?? '');
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+      cdpSend('Page.navigate', { url });
+    }
   }
 }
 
@@ -512,27 +516,141 @@ async function raiseViewport(agentId: string, workspaceDir: string): Promise<voi
 }
 
 /**
+ * Attach to a browser-level CDP WebSocket (e.g. GoLogin cloud connect URL).
+ * Uses Target.getTargets + Target.attachToTarget with flatten:true to reach
+ * a page, then starts the screencast through the flattened session.
+ */
+function attachBrowserLevelCdp(stream: Stream, wsUrl: string): void {
+  const chromeWs = new WebSocket(wsUrl);
+  stream.chromeWs = chromeWs;
+  stream.currentTargetId = 'browser-level';
+  stream.screencastSessionId = null;
+  stream.flatSessionId = null;
+
+  chromeWs.on('open', () => {
+    if (stream.disposed) { try { chromeWs.close(); } catch {} return; }
+
+    chromeWs.send(JSON.stringify({
+      id: ++stream.cdpMessageId,
+      method: 'Target.getTargets',
+    }));
+  });
+
+  chromeWs.on('message', (buf) => {
+    let msg: { id?: number; method?: string; params?: Record<string, unknown>; result?: Record<string, unknown>; sessionId?: string };
+    try { msg = JSON.parse(buf.toString()); } catch { return; }
+
+    // Response to Target.getTargets — find first page and attach
+    if (msg.result && (msg.result as any).targetInfos) {
+      const targets = (msg.result as any).targetInfos as Array<{
+        targetId: string; type: string; url: string; title: string;
+      }>;
+      const page = targets.find(t => t.type === 'page');
+      if (page) {
+        chromeWs.send(JSON.stringify({
+          id: ++stream.cdpMessageId,
+          method: 'Target.attachToTarget',
+          params: { targetId: page.targetId, flatten: true },
+        }));
+        sendToSubscribers(stream, {
+          type: 'attached',
+          targetId: page.targetId,
+          url: page.url,
+          title: page.title,
+        });
+      } else {
+        sendToSubscribers(stream, { type: 'error', reason: 'no page targets in cloud browser' });
+      }
+      return;
+    }
+
+    // Response to Target.attachToTarget — start screencast
+    if (msg.result && typeof (msg.result as any).sessionId === 'string') {
+      stream.flatSessionId = (msg.result as any).sessionId;
+      chromeWs.send(JSON.stringify({
+        id: ++stream.cdpMessageId,
+        method: 'Page.startScreencast',
+        params: {
+          format: 'jpeg',
+          quality: 60,
+          maxWidth: LIVE_VIEW_WIDTH,
+          maxHeight: LIVE_VIEW_HEIGHT,
+          everyNthFrame: 1,
+        },
+        sessionId: stream.flatSessionId,
+      }));
+      return;
+    }
+
+    // Screencast frames from the flattened session
+    if (msg.method === 'Page.screencastFrame' && msg.params) {
+      const data = msg.params.data as string;
+      const scSessionId = msg.params.sessionId as number;
+      stream.screencastSessionId = scSessionId;
+      sendToSubscribers(stream, { type: 'frame', data, timestamp: Date.now() });
+      try {
+        const ack: Record<string, unknown> = {
+          id: ++stream.cdpMessageId,
+          method: 'Page.screencastFrameAck',
+          params: { sessionId: scSessionId },
+        };
+        if (stream.flatSessionId) ack.sessionId = stream.flatSessionId;
+        chromeWs.send(JSON.stringify(ack));
+      } catch { /* chrome disconnected */ }
+    }
+  });
+
+  chromeWs.on('close', () => {
+    if (!stream.disposed && stream.chromeWs === chromeWs) {
+      sendToSubscribers(stream, { type: 'detached', reason: 'cloud browser disconnected' });
+    }
+  });
+
+  chromeWs.on('error', () => {
+    if (!stream.disposed && stream.chromeWs === chromeWs) {
+      sendToSubscribers(stream, { type: 'error', reason: 'cloud browser cdp error' });
+    }
+  });
+}
+
+/**
  * Initial attach: discover the daemon, raise the viewport, find the active
  * tab, bind screencast, start the poll loop.
  */
 async function attachChrome(stream: Stream): Promise<string | null> {
-  const browserCdp = await discoverCdpUrl(stream.agentId, stream.workspaceDir);
-  if (!browserCdp) return 'agent-browser not running or CDP unavailable';
-  stream.browserCdpUrl = browserCdp;
+  const key = streamKey(stream.agentId, stream.sessionId);
+  const externalCdp = externalCdpSessions.get(key);
 
-  await raiseViewport(stream.agentId, stream.workspaceDir);
+  if (externalCdp) {
+    stream.browserCdpUrl = externalCdp;
+  } else {
+    const browserCdp = await discoverCdpUrl(stream.agentId, stream.workspaceDir);
+    if (!browserCdp) return 'agent-browser not running or CDP unavailable';
+    stream.browserCdpUrl = browserCdp;
+    await raiseViewport(stream.agentId, stream.workspaceDir);
+  }
 
-  const active = await getActiveTab(stream.agentId, stream.workspaceDir);
-  const pages = await fetchCdpPages(browserCdp);
+  const active = externalCdp ? null : await getActiveTab(stream.agentId, stream.workspaceDir);
+  const pages = await fetchCdpPages(stream.browserCdpUrl);
+
+  if (pages.length === 0 && externalCdp) {
+    // External CDP sessions (e.g. GoLogin cloud) don't expose /json/list.
+    // Connect to the browser-level WS and use Target.attachToTarget to
+    // reach a page. This handles cloud browser proxies that only provide
+    // a single browser-level WebSocket endpoint.
+    attachBrowserLevelCdp(stream, externalCdp);
+    return null;
+  }
+
   if (pages.length === 0) return 'no page targets available';
 
   const target = active
     ? pickCdpPageForTab(pages, active.url)
-    : pickCdpPageForTab(pages, ''); // triggers the "newest non-inert" fallback
+    : pickCdpPageForTab(pages, '');
   if (!target) return 'no suitable page target';
 
   attachPageCdp(stream, target);
-  startPollLoop(stream);
+  if (!externalCdp) startPollLoop(stream);
   return null;
 }
 
@@ -582,6 +700,7 @@ export function handleBrowserLiveUpgrade(
         screencastSessionId: null,
         pollTimer: null,
         disposed: false,
+        flatSessionId: null,
       };
       streams.set(key, stream);
 
@@ -601,7 +720,7 @@ export function handleBrowserLiveUpgrade(
     ws.on('message', (data) => {
       const s = streams.get(key);
       if (!s?.chromeWs || s.chromeWs.readyState !== WebSocket.OPEN) return;
-      relayInputToChrome(s.chromeWs, () => ++s.cdpMessageId, data.toString());
+      relayInputToChrome(s.chromeWs, () => ++s.cdpMessageId, data.toString(), s.flatSessionId);
     });
 
     ws.on('close', () => {

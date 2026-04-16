@@ -1,26 +1,13 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
 import { useT, LanguageSwitcher } from '../lib/i18n.tsx';
-import { fetchAppConfig, type AppConfig } from '../lib/api.ts';
 
 declare const __GRANCLAW_VERSION__: string;
-
-const APP_CONFIG_INITIAL: AppConfig = {
-  showWorkspaceDirConfig: true,
-  showBraveSearchConfig: true,
-  enableIntegrations: false,
-};
 
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const isChat = location.pathname.includes('/chat');
   const { t } = useT();
-
-  const [appConfig, setAppConfig] = useState<AppConfig>(APP_CONFIG_INITIAL);
-  useEffect(() => {
-    fetchAppConfig().then(setAppConfig).catch(() => { /* fall back to defaults */ });
-  }, []);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface">
@@ -39,18 +26,6 @@ export function AppShell() {
           </span>
         </button>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {appConfig.enableIntegrations && (
-            <button
-              onClick={() => navigate('/integrations')}
-              className={`hidden sm:inline-block rounded px-2 py-1 text-xs font-mono transition-colors ${
-                location.pathname.startsWith('/integrations')
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-on-surface-variant hover:bg-surface-container'
-              }`}
-            >
-              Integrations
-            </button>
-          )}
           <LanguageSwitcher />
           <span className="flex items-center gap-1.5 rounded-full bg-secondary-container/20 px-2 sm:px-3 py-1 text-xs font-mono text-secondary flex-shrink-0">
             <span className="h-1.5 w-1.5 rounded-full bg-secondary animate-pulse flex-shrink-0" />

@@ -43,7 +43,7 @@ import {
 } from '../browser/session-manager.js';
 import { stealthArgv } from '../browser/stealth.js';
 import { CAPTCHA_DETECT_JS } from './captcha-detect.js';
-import { resolveBrowserBinary } from './browser-bin.js';
+import { resolveBrowserBinary, buildArgv } from './browser-bin.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -873,7 +873,7 @@ export async function runAgent(
           }
 
           // Resolve which browser backend to run (local agent-browser vs
-          // gologin-agent-browser-cli) per-turn. Picks up toggles made since
+          // gologin-agent-browser) per-turn. Picks up toggles made since
           // the last turn via the integrations DB.
           const browser = resolveBrowserBinary(agent.id, workspaceDir);
 
@@ -888,11 +888,9 @@ export async function runAgent(
             await startBrowserRecording(browserState.handle);
           }
 
-          // Build argv: [launch flags...] <command> <args...>
-          // Launch flags only apply on the command that boots the daemon —
-          // subsequent commands are no-ops there. They're kept as belt-and-
-          // braces in case recording failed to start first.
-          const argv: string[] = [...browser.launchArgs, command, ...args];
+          // Build argv per-CLI: agent-browser wants flags BEFORE the subcommand,
+          // gologin-agent-browser wants them AFTER. buildArgv handles both.
+          const argv = buildArgv(browser, command, args);
 
           try {
             const { stdout, stderr } = await execFileAsync(browser.bin, argv, {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { addSecret, deleteSecretApi } from '../lib/api.ts';
 import { useT } from '../lib/i18n.tsx';
+import { GoLoginCard } from './GoLoginCard.tsx';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -223,6 +224,7 @@ export function IntegrationsView({
       </div>
 
       <div className="space-y-3">
+        <GoLoginCard agentId={agentId} />
         {INTEGRATIONS.map(def => (
           <IntegrationCard
             key={def.id}

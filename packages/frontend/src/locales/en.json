@@ -249,9 +249,20 @@
     "uptime": "Uptime"
   },
   "integrations": {
-    "title": "Integrations",
-    "blurb": "Connect external services. Each integration stores a token as a secret and activates automatically.",
-    "moreSoon": "More integrations coming soon. For other API keys and credentials, use the Secrets section in the sidebar.",
+    "title": "Social Logins",
+    "blurb": "Link this agent to the browsers and accounts it needs. Each link is stored privately to this agent.",
+    "moreSoon": "More services coming soon. For other API keys and credentials, use the Secrets section in the sidebar.",
+    "gologin": {
+      "name": "GoLogin Browser",
+      "description": "Give this agent its own fingerprinted browser with persistent cookies, so logins survive across turns.",
+      "notConfigured": "GoLogin is not configured on this GranClaw instance. Ask an admin to set GOLOGIN_API_TOKEN.",
+      "activate": "Activate browser",
+      "activating": "Creating profile…",
+      "deactivate": "Deactivate",
+      "active": "Active",
+      "profileLabel": "Profile:",
+      "reuseHint": "Deactivating keeps the profile — reactivation reuses it."
+    },
     "connected": "Connected",
     "disconnect": "Disconnect",
     "connect": "Connect",
@@ -319,7 +330,7 @@
       "monitor": "Monitor",
       "usage": "Usage",
       "logs": "Logs",
-      "integrations": "Integrations",
+      "integrations": "Social Logins",
       "guardian": "Guardian"
     },
     "comingSoon": "Soon",

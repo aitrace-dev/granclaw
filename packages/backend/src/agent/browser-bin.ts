@@ -22,15 +22,27 @@ import { stealthArgv } from '../browser/stealth.js';
 export interface BrowserBinaryResolution {
   /** Executable name or absolute path. */
   bin: string;
-  /** Argv to prepend to the agent's subcommand + args. */
-  launchArgs: string[];
+  /** Args that go BEFORE the subcommand (agent-browser convention). */
+  preCommandArgs: string[];
+  /** Args that go AFTER the subcommand and its args (gologin-agent-browser convention). */
+  postCommandArgs: string[];
   /** Environment overrides to merge into the child process env. */
   env: Record<string, string>;
   /** True when running under GoLogin. Callers use this to skip WebM recording
-   *  (gologin-agent-browser-cli does not support per-session recording yet). */
+   *  (gologin-agent-browser does not support per-session recording yet). */
   isGoLogin: boolean;
   /** Whether local WebM recording should be attempted for this session. */
   recordingSupported: boolean;
+}
+
+/**
+ * Build argv for the browser subprocess. Handles the per-CLI flag-position
+ * difference:
+ *   - agent-browser expects: <bin> --session X --profile /path <command> <args>
+ *   - gologin-agent-browser expects: <bin> <command> <args> --session X --profile P
+ */
+export function buildArgv(res: BrowserBinaryResolution, command: string, args: string[]): string[] {
+  return [...res.preCommandArgs, command, ...args, ...res.postCommandArgs];
 }
 
 export function resolveBrowserBinary(agentId: string, workspaceDir: string): BrowserBinaryResolution {
@@ -38,7 +50,8 @@ export function resolveBrowserBinary(agentId: string, workspaceDir: string): Bro
   if (gl) {
     return {
       bin: 'gologin-agent-browser',
-      launchArgs: ['--session', agentId, '--profile', gl.profileId],
+      preCommandArgs: [],
+      postCommandArgs: ['--session', agentId, '--profile', gl.profileId],
       env: {
         GOLOGIN_TOKEN: gl.token,
         GOLOGIN_PROFILE_ID: gl.profileId,
@@ -50,15 +63,16 @@ export function resolveBrowserBinary(agentId: string, workspaceDir: string): Bro
 
   const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
   const profileDir = path.join(workspaceDir, '.browser-profile');
-  const launchArgs: string[] = ['--session', agentId];
+  const preCommandArgs: string[] = ['--session', agentId];
   if (fs.existsSync(profileDir)) {
-    launchArgs.push('--profile', profileDir);
+    preCommandArgs.push('--profile', profileDir);
   }
-  launchArgs.push(...stealthArgv());
+  preCommandArgs.push(...stealthArgv());
 
   return {
     bin,
-    launchArgs,
+    preCommandArgs,
+    postCommandArgs: [],
     env: {},
     isGoLogin: false,
     recordingSupported: true,

@@ -249,9 +249,20 @@
     "uptime": "Tiempo activo"
   },
   "integrations": {
-    "title": "Integraciones",
-    "blurb": "Conecta servicios externos. Cada integración almacena un token como secreto y se activa automáticamente.",
-    "moreSoon": "Más integraciones próximamente. Para otras claves API y credenciales, usa la sección de Secretos en la barra lateral.",
+    "title": "Inicios de sesión",
+    "blurb": "Conecta este agente a los navegadores y cuentas que necesita. Cada enlace se guarda solo para este agente.",
+    "moreSoon": "Más servicios próximamente. Para otras claves API y credenciales, usa la sección de Secretos en la barra lateral.",
+    "gologin": {
+      "name": "Navegador GoLogin",
+      "description": "Dale a este agente su propio navegador con huella digital y cookies persistentes, para que los inicios de sesión sobrevivan entre turnos.",
+      "notConfigured": "GoLogin no está configurado en esta instancia. Pide al administrador que establezca GOLOGIN_API_TOKEN.",
+      "activate": "Activar navegador",
+      "activating": "Creando perfil…",
+      "deactivate": "Desactivar",
+      "active": "Activo",
+      "profileLabel": "Perfil:",
+      "reuseHint": "Desactivar conserva el perfil — reactivar lo reutiliza."
+    },
     "connected": "Conectado",
     "disconnect": "Desconectar",
     "connect": "Conectar",
@@ -319,7 +330,7 @@
       "monitor": "Monitor",
       "usage": "Uso",
       "logs": "Registros",
-      "integrations": "Integraciones",
+      "integrations": "Inicios de sesión",
       "guardian": "Guardián"
     },
     "comingSoon": "Pronto",

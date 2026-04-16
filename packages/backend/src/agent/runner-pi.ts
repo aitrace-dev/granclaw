@@ -1251,6 +1251,7 @@ export async function runAgent(
     // pi emits AgentEvent (from pi-agent-core) and AgentSessionEvent
     // (extended by pi-coding-agent). We translate the subset we care about
     // into StreamChunk.
+    let errorEmitted = false;
     session.subscribe((event: any) => {
       try {
         switch (event.type) {
@@ -1294,6 +1295,7 @@ export async function runAgent(
             if (Array.isArray(messages)) {
               const last = messages[messages.length - 1];
               if (last?.role === 'assistant' && last.errorMessage) {
+                errorEmitted = true;
                 onChunk({ type: 'error', message: last.errorMessage });
                 logAction(agent.id, 'error', null, { message: last.errorMessage });
               }
@@ -1346,7 +1348,9 @@ export async function runAgent(
       }
     }
 
-    onChunk({ type: 'done', sessionId });
+    if (!errorEmitted) {
+      onChunk({ type: 'done', sessionId });
+    }
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

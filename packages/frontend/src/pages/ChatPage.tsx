@@ -20,6 +20,23 @@ import { useT } from '../lib/i18n.tsx';
 
 type MainView = 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
 
+function classifyError(msg: string): string {
+  const lower = msg.toLowerCase();
+  if (lower.includes('key limit') || lower.includes('credit') || lower.includes('insufficient_quota') || lower.includes('quota exceeded') || lower.includes('billing'))
+    return 'creditLimit';
+  if (lower.includes('rate limit') || lower.includes('rate_limit') || lower.includes('too many requests') || lower.includes('429'))
+    return 'rateLimit';
+  if (lower.includes('401') || lower.includes('invalid api key') || lower.includes('invalid_api_key') || lower.includes('authentication'))
+    return 'auth';
+  if (lower.includes('no provider configured'))
+    return 'noProvider';
+  if (lower.includes('api key missing'))
+    return 'noKey';
+  if (lower.includes('timeout') || lower.includes('timed out'))
+    return 'timeout';
+  return 'generic';
+}
+
 const VALID_VIEWS: MainView[] = ['chat', 'files', 'tasks', 'browser', 'workflows', 'schedules', 'monitor', 'usage', 'logs', 'integrations'];
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -323,13 +340,30 @@ export function ChatPage() {
         setIsSending(false);
       } else if (chunk.type === 'agent_ready') {
         setAgentDisplayName(chunk.name);
-      } else if (chunk.type === 'done' || chunk.type === 'error') {
-        const errorText = chunk.type === 'error' ? `⚠ ${chunk.message}` : '';
-        const finalText = agentReply + (errorText ? `\n\n${errorText}` : '');
+      } else if (chunk.type === 'error') {
+        const errClass = classifyError(chunk.message);
+        const errorMap: Record<string, string> = {
+          creditLimit: t('chat.errorCreditLimit'),
+          rateLimit: t('chat.errorRateLimit'),
+          auth: t('chat.errorAuth'),
+          noProvider: t('chat.errorNoProvider'),
+          noKey: t('chat.errorNoKey'),
+          timeout: t('chat.errorTimeout'),
+        };
+        const errorText = `⚠ ${errorMap[errClass] ?? t('chat.errorGeneric', { message: chunk.message })}`;
+        const finalText = agentReply ? `${agentReply}\n\n${errorText}` : errorText;
         setPendingApproval(null);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === agentMsgId ? { ...m, isStreaming: false, text: finalText } : m
+          )
+        );
+        setIsSending(false);
+      } else if (chunk.type === 'done') {
+        setPendingApproval(null);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === agentMsgId ? { ...m, isStreaming: false, text: m.text || agentReply } : m
           )
         );
         setIsSending(false);

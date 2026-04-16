@@ -104,7 +104,14 @@
     "guardianBlurb1": "Configura un agente guardián para controlar lo que puede hacer tu agente principal.",
     "guardianBlurb2": "Define restricciones, bloquea acciones y exige aprobación antes de operaciones sensibles.",
     "guardianChatBlurb": "Chat del guardián.<br />Configura restricciones aquí.",
-    "guardianDisconnected": "○ desconectado"
+    "guardianDisconnected": "○ desconectado",
+    "errorCreditLimit": "La clave API ha alcanzado su límite de gasto. Recarga créditos o aumenta el límite de la clave en el panel de tu proveedor.",
+    "errorRateLimit": "Límite de solicitudes excedido. El proveedor está limitando las peticiones — intenta de nuevo en unos segundos.",
+    "errorAuth": "Autenticación fallida. La clave API puede ser inválida o estar expirada — revisa Configuración.",
+    "errorNoProvider": "Sin proveedor configurado. Ve a Configuración para agregar uno.",
+    "errorNoKey": "Falta la clave API del proveedor. Ve a Configuración para reconfigurar.",
+    "errorTimeout": "El agente tardó demasiado en responder. Intenta de nuevo o simplifica tu solicitud.",
+    "errorGeneric": "Algo salió mal: {message}"
   },
   "takeover": {
     "sessionExpiredLabel": "toma de control",

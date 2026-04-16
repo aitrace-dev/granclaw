@@ -104,7 +104,14 @@
     "guardianBlurb1": "Configure a guardian agent to control what your main agent can do.",
     "guardianBlurb2": "Define restrictions, block actions, and require approval before sensitive operations.",
     "guardianChatBlurb": "Guardian chat.<br />Configure restrictions here.",
-    "guardianDisconnected": "○ disconnected"
+    "guardianDisconnected": "○ disconnected",
+    "errorCreditLimit": "The API key has reached its spending limit. Top up credits or raise the key limit at your provider's dashboard.",
+    "errorRateLimit": "Rate limit exceeded. The provider is throttling requests — try again in a few seconds.",
+    "errorAuth": "Authentication failed. The API key may be invalid or expired — check Settings.",
+    "errorNoProvider": "No provider configured. Go to Settings to add a provider.",
+    "errorNoKey": "Provider API key missing. Go to Settings to reconfigure.",
+    "errorTimeout": "The agent took too long to respond. Try again or simplify your request.",
+    "errorGeneric": "Something went wrong: {message}"
   },
   "takeover": {
     "sessionExpiredLabel": "takeover",

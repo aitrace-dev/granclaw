@@ -151,8 +151,9 @@ export function relayInputToChrome(
   } else if (msg.type === 'key') {
     const key = String(msg.key ?? '');
     if (!key) return;
+    const eventType = String(msg.eventType ?? 'rawKeyDown');
     const params: Record<string, unknown> = {
-      type: String(msg.eventType ?? 'rawKeyDown'),
+      type: eventType,
       key,
       code: String(msg.code ?? ''),
       modifiers: toNum(msg.modifiers, 0),
@@ -160,6 +161,9 @@ export function relayInputToChrome(
     if (msg.windowsVirtualKeyCode !== undefined) {
       params.windowsVirtualKeyCode = toNum(msg.windowsVirtualKeyCode, 0);
       params.nativeVirtualKeyCode = toNum(msg.windowsVirtualKeyCode, 0);
+    }
+    if (key === 'Enter' && eventType === 'rawKeyDown') {
+      params.text = '\r';
     }
     cdpSend('Input.dispatchKeyEvent', params);
   } else if (msg.type === 'insertText') {
@@ -564,9 +568,20 @@ function attachBrowserLevelCdp(stream: Stream, wsUrl: string): void {
       return;
     }
 
-    // Response to Target.attachToTarget — start screencast
+    // Response to Target.attachToTarget — set viewport, then start screencast
     if (msg.result && typeof (msg.result as any).sessionId === 'string') {
       stream.flatSessionId = (msg.result as any).sessionId;
+      chromeWs.send(JSON.stringify({
+        id: ++stream.cdpMessageId,
+        method: 'Emulation.setDeviceMetricsOverride',
+        params: {
+          width: LIVE_VIEW_WIDTH,
+          height: LIVE_VIEW_HEIGHT,
+          deviceScaleFactor: 1,
+          mobile: false,
+        },
+        sessionId: stream.flatSessionId,
+      }));
       chromeWs.send(JSON.stringify({
         id: ++stream.cdpMessageId,
         method: 'Page.startScreencast',

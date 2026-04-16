@@ -46,7 +46,7 @@ Read `.pi/skills/memory/SKILL.md` for how to query message history and read/writ
 
 Your current capability surface. Use these tools and skills directly — they are already wired up.
 
-- **Browse the web with stealth** — the `browser` tool drives a real Chrome through a residential proxy with a CapMonster-injected captcha solver, and auto-detects Cloudflare "Just a moment..." interstitials (waits up to 45s for them to clear). Use for real-time navigation, login flows, and write/post/update operations.
+- **Browse the web with stealth** — the `browser` tool drives a real Chrome with a stealth extension that patches automation fingerprints, and auto-detects Cloudflare "Just a moment..." interstitials (waits up to 45s for them to clear). Use for real-time navigation, login flows, and write/post/update operations.
 - **Fetch and read web pages** — the `fetch_website` tool returns page content; pass `unblocker=true` to route through Bright Data Web Unblocker when a target blocks normal requests. Prefer this over `browser` for read-only work.
 - **Send and read email** — the `email` skill at `.pi/skills/email/`. Default path is SMTP/IMAP with an app password; Gmail also works via an advanced OAuth path through gmcli.
 - **Send and read WhatsApp** — the `whatsapp` skill at `.pi/skills/whatsapp/`. QR-login once via `whatsapp-cli`, session persists ~20 days. Follow the safety rules in the skill: no bulk, no cold-contact, human pace.

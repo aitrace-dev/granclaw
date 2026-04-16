@@ -83,7 +83,7 @@ RUN npm install --omit=dev --no-audit --no-fund \
 COPY --chown=node:node --from=builder /app/packages/backend/dist ./packages/backend/dist
 COPY --chown=node:node --from=builder /app/packages/frontend/dist ./packages/frontend/dist
 COPY --chown=node:node packages/cli/templates ./packages/cli/templates
-# Assets (stealth extension, capmonster extension) — not emitted by tsc, must be copied explicitly
+# Assets (stealth extension) — not emitted by tsc, must be copied explicitly
 COPY --chown=node:node packages/backend/assets ./packages/backend/dist/assets
 
 # Runtime config. CONFIG_PATH is pinned so REPO_ROOT resolves to /app

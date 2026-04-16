@@ -29,7 +29,6 @@
  */
 
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { execFileSync } from 'child_process';
 
@@ -53,57 +52,6 @@ function resolveExtensionDir(): string | null {
 }
 
 export const STEALTH_EXTENSION_DIR = resolveExtensionDir();
-
-// ── CapMonster extension ──────────────────────────────────────────────────────
-
-/**
- * Resolve the CapMonster extension directory (bundled in assets).
- * Returns null if not found.
- */
-function resolveCapmonsterExtensionDir(): string | null {
-  const candidates = [
-    path.resolve(__dirname, '../../assets/capmonster-extension'),
-    path.resolve(__dirname, '../assets/capmonster-extension'),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(path.join(candidate, 'manifest.json'))) return candidate;
-  }
-  return null;
-}
-
-const CAPMONSTER_BASE_DIR = resolveCapmonsterExtensionDir();
-
-/**
- * Return a CapMonster extension directory pre-configured with the given API key.
- * Writes a patched copy to os.tmpdir() so the base assets stay clean.
- * Result is cached per process — re-patched only if the key changes.
- */
-let _patchedCapmonsterDir: string | null = null;
-let _patchedCapmonsterKey: string | null = null;
-
-export function capmonsterExtensionDir(apiKey: string): string | null {
-  if (!CAPMONSTER_BASE_DIR) return null;
-  if (_patchedCapmonsterDir && _patchedCapmonsterKey === apiKey) {
-    return _patchedCapmonsterDir;
-  }
-  try {
-    const dest = path.join(os.tmpdir(), 'granclaw-capmonster-ext');
-    // Copy base extension
-    fs.cpSync(CAPMONSTER_BASE_DIR, dest, { recursive: true });
-    // Patch defaultSettings.json with the API key
-    const settingsPath = path.join(dest, 'defaultSettings.json');
-    if (fs.existsSync(settingsPath)) {
-      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      settings.clientKey = apiKey;
-      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
-    }
-    _patchedCapmonsterDir = dest;
-    _patchedCapmonsterKey = apiKey;
-    return dest;
-  } catch {
-    return null;
-  }
-}
 
 // ── Chrome binary detection + UA derivation ───────────────────────────────────
 
@@ -189,10 +137,6 @@ function detectChromeUA(): string | null {
 // ── argv builder ──────────────────────────────────────────────────────────────
 
 export interface StealthOptions {
-  /** HTTP/SOCKS proxy URL, e.g. "http://user:pass@host:port". Falls back to GRANCLAW_PROXY env var. */
-  proxy?: string;
-  /** CapMonster Cloud API key for automatic CAPTCHA solving. Falls back to CAPMONSTER_KEY env var. */
-  capmonsterKey?: string;
   /**
    * Emit --headless=new inside --args. Default true (daemon boot for agent work).
    * Set false when the caller also passes --headed (headed preview previews in
@@ -249,24 +193,9 @@ export function stealthArgv(options: StealthOptions = {}): string[] {
     argv.push('--extension', STEALTH_EXTENSION_DIR);
   }
 
-  const capmonsterKey = options.capmonsterKey
-    || process.env.CAPMONSTER_KEY
-    || process.env.CAPMONSTER_API_KEY;
-  const capmonsterEnabled = process.env.CAPMONSTER_ENABLED !== 'false';
-  if (capmonsterKey && capmonsterEnabled) {
-    const capmonsterDir = capmonsterExtensionDir(capmonsterKey);
-    if (capmonsterDir) argv.push('--extension', capmonsterDir);
-  }
-
   const chrome = detectChromePath();
   if (chrome) {
     argv.push('--executable-path', chrome);
-  }
-
-  // Route browser traffic through the agent's proxy if configured
-  const proxy = options.proxy || process.env.GRANCLAW_PROXY;
-  if (proxy) {
-    argv.push('--proxy', proxy);
   }
 
   return argv;

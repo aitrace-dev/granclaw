@@ -19,19 +19,7 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { NodeHtmlMarkdown } from 'node-html-markdown';
-import { ProxyAgent, fetch as undiciFetch } from 'undici';
-
-// Cache ProxyAgent instances by URL so the same connection pool (and exit IP)
-// is reused across all fetch_website calls for the same proxy.
-const proxyAgentCache = new Map<string, ProxyAgent>();
-function getProxyAgent(proxyUrl: string): ProxyAgent {
-  let agent = proxyAgentCache.get(proxyUrl);
-  if (!agent) {
-    agent = new ProxyAgent(proxyUrl);
-    proxyAgentCache.set(proxyUrl, agent);
-  }
-  return agent;
-}
+import { fetch as undiciFetch } from 'undici';
 import { networkInterfaces } from 'os';
 import { randomUUID } from 'crypto';
 import {
@@ -53,7 +41,7 @@ import {
   finalizeSession as finalizeBrowserSession,
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
-import { stealthArgv, type StealthOptions } from '../browser/stealth.js';
+import { stealthArgv } from '../browser/stealth.js';
 import { CAPTCHA_DETECT_JS } from './captcha-detect.js';
 
 const execFileAsync = promisify(execFile);
@@ -367,33 +355,6 @@ function getLanIp(): string {
   return 'localhost';
 }
 
-/**
- * Stable hash of an agent ID string → non-negative integer.
- * Used so proxy assignment is deterministic by agent ID, not config order.
- */
-function hashAgentId(id: string): number {
-  let h = 0;
-  for (const c of id) h = (Math.imul(31, h) + c.charCodeAt(0)) | 0;
-  return Math.abs(h);
-}
-
-/**
- * Resolve the proxy for an agent.
- * Priority: agent.proxy config → GRANCLAW_PROXY_LIST (stable hash by agent ID) → undefined.
- * Hash-based assignment means the same agent always gets the same proxy even if
- * agents.config.json is reordered or new agents are added — so the Chrome daemon
- * always restarts on the same IP.
- * Only applies when GRANCLAW_PROXY_ENABLE=true or agent.proxy is explicitly set.
- */
-function resolveAgentProxy(agentId: string, configProxy?: string): string | undefined {
-  if (configProxy) return configProxy;
-  if (process.env.GRANCLAW_PROXY_ENABLE !== 'true') return undefined;
-  const proxyList = process.env.GRANCLAW_PROXY_LIST;
-  if (!proxyList) return undefined;
-  const proxies = proxyList.split(',').map(p => p.trim()).filter(Boolean);
-  if (proxies.length === 0) return undefined;
-  return proxies[hashAgentId(agentId) % proxies.length];
-}
 
 export async function runAgent(
   agent: AgentConfig,
@@ -797,41 +758,42 @@ export async function runAgent(
     // Privileged commands (record, close, tab close for session 0,
     // session management) are rejected — the runtime owns those.
     /**
-     * After a navigation command, check whether the page is blocked by any
-     * bot/captcha wall (widget captcha OR Cloudflare-style JS interstitial)
-     * and poll until CapMonster + the stealth extension have cleared it.
+     * After a navigation command, check whether the page is blocked.
      *
-     * Budget is 45s — Cloudflare's "Just a moment..." managed challenge often
-     * takes 15–20s on a cold datacenter IP, and CapMonster-solved widgets can
-     * take another pass, so shorter deadlines were causing real unblocks to
-     * be reported as "unsolved" (regression verified on mariados 2026-04-15).
-     *
-     * Returns 'clear' (no captcha / solved), 'unsolved' (still blocked after timeout).
+     * 'interstitial' → Cloudflare JS challenge; stealth can clear it, poll up to 45s.
+     * 'captcha'       → Actual captcha widget; no auto-solver, request takeover immediately.
+     * 'clear'         → No challenge detected.
      */
     async function waitForCaptchaResolution(
       bin: string,
       sessionId: string,
-    ): Promise<'clear' | 'unsolved'> {
+    ): Promise<'clear' | 'captcha' | 'unsolved'> {
       const evalArgv = (id: string) => ['--session', id, 'eval', CAPTCHA_DETECT_JS];
 
-      const check = async () => {
+      const check = async (): Promise<'clear' | 'captcha' | 'interstitial'> => {
         try {
           const { stdout } = await execFileAsync(bin, evalArgv(sessionId), { timeout: 8_000 });
-          return stdout.includes('"captcha"') || stdout.includes("'captcha'") || stdout.trim() === 'captcha';
+          const out = stdout.trim();
+          if (out.includes('captcha')) return 'captcha';
+          if (out.includes('interstitial')) return 'interstitial';
+          return 'clear';
         } catch {
-          return false;
+          return 'clear';
         }
       };
 
-      // Initial check — short delay to let page settle
       await new Promise(r => setTimeout(r, 1500));
-      if (!await check()) return 'clear';
+      const initial = await check();
+      if (initial === 'clear') return 'clear';
+      if (initial === 'captcha') return 'captcha';
 
-      // Challenge detected — poll every 2s until the page clears or 45s elapses.
+      // Cloudflare interstitial — poll every 2s until cleared or 45s elapses.
       const deadline = Date.now() + 45_000;
       while (Date.now() < deadline) {
         await new Promise(r => setTimeout(r, 2_000));
-        if (!await check()) return 'clear';
+        const result = await check();
+        if (result === 'clear') return 'clear';
+        if (result === 'captcha') return 'captcha';
       }
       return 'unsolved';
     }
@@ -869,7 +831,7 @@ export async function runAgent(
           'Do not call `record start`, `record stop`, `close`, or `session` — the runtime manages those.',
           'You do not need to screenshot for audit — the whole session is recorded as video automatically.',
           'Saved logins persist automatically when the user has set up a profile via the dashboard Browser view.',
-          'CAPTCHA & Cloudflare handling: the browser ships an automatic CapMonster extension plus a stealth extension. After `open` or `reload` the runtime automatically polls for up to ~45 seconds while any captcha widget OR Cloudflare JS interstitial ("Just a moment...", "Checking your browser…", "Attention Required") clears — do NOT bail out early, do NOT call request_human_browser_takeover just because the first snapshot shows the interstitial. If, after your tool call returns, the response still contains the "CAPTCHA detected and not auto-solved" warning, THEN call request_human_browser_takeover.',
+          'CAPTCHA & Cloudflare handling: the browser ships a stealth extension that handles Cloudflare JS interstitials ("Just a moment…") automatically (waits up to ~45s). If an actual CAPTCHA widget is detected (reCAPTCHA, hCaptcha, Turnstile, etc.), the runtime returns immediately with a warning — call request_human_browser_takeover right away.',
           'Examples: {"command":"open","args":["https://example.com"]}, {"command":"click","args":["--ref","e12"]}, {"command":"fill","args":["--ref","e5","Alice"]}',
         ],
         parameters: {
@@ -925,11 +887,7 @@ export async function runAgent(
           if (fs.existsSync(profileDir)) {
             argv.push('--profile', profileDir);
           }
-          const stealthOpts: StealthOptions = {
-            proxy: resolveAgentProxy(agent.id, agent.proxy),
-            capmonsterKey: agent.capmonsterKey,
-          };
-          argv.push(...stealthArgv(stealthOpts));
+          argv.push(...stealthArgv());
           argv.push(command, ...args);
 
           try {
@@ -941,15 +899,22 @@ export async function runAgent(
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
             const out = stdout.trim() || stderr.trim() || 'ok';
 
-            // After navigation, check for CAPTCHA and wait up to 30s for the
-            // CapMonster extension to auto-solve it before returning to the agent.
             if (command === 'open' || command === 'reload') {
               const captchaResult = await waitForCaptchaResolution(agentBrowserBin, agent.id);
+              if (captchaResult === 'captcha') {
+                return {
+                  content: [{
+                    type: 'text' as const,
+                    text: out + '\n\n⚠️ CAPTCHA detected. ' +
+                      'Use request_human_browser_takeover to let the user solve it, or try a different URL.',
+                  }],
+                };
+              }
               if (captchaResult === 'unsolved') {
                 return {
                   content: [{
                     type: 'text' as const,
-                    text: out + '\n\n⚠️ CAPTCHA detected and not auto-solved after 45s. ' +
+                    text: out + '\n\n⚠️ Cloudflare interstitial not cleared after 45s. ' +
                       'Use request_human_browser_takeover to let the user solve it, or try a different URL.',
                   }],
                 };
@@ -1214,9 +1179,7 @@ export async function runAgent(
             }
           }
 
-          // Plain HTTP fetch — route through proxy if configured
           try {
-            const agentProxy = resolveAgentProxy(agent.id, agent.proxy);
             const fetchOpts: Parameters<typeof undiciFetch>[1] = {
               headers: {
                 'User-Agent': 'Mozilla/5.0 (compatible; GranClaw/1.0; +https://granclaw.com)',
@@ -1224,7 +1187,6 @@ export async function runAgent(
               },
               signal: AbortSignal.timeout(60_000),
               redirect: 'follow',
-              ...(agentProxy ? { dispatcher: getProxyAgent(agentProxy) } : {}),
             };
             const res = await undiciFetch(params.url, fetchOpts);
             if (!res.ok) {

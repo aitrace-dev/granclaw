@@ -1,6 +1,6 @@
-# Stealth/proxy test override.
-# Adds residential proxy + CapMonster env vars that mirror the production
-# cloud instances, so you can test browser stealth locally.
+# Stealth test override.
+# Adds env vars that mirror the production cloud instances,
+# so you can test browser stealth locally.
 #
 # Usage:
 #   docker compose up --build          (this file is auto-loaded)
@@ -8,17 +8,8 @@
 
 services:
   granclaw:
-    # Secret values (proxy pool + CapMonster key) come from your local .env
-    # file — never hard-coded here. Copy .env.example to .env and populate
-    # before running `docker compose up`.
     environment:
       GRANCLAW_HOME: "/app"
-      # Residential proxy pool (mirrors mariados instance on production)
-      GRANCLAW_PROXY_ENABLE: "${GRANCLAW_PROXY_ENABLE:-true}"
-      GRANCLAW_PROXY_LIST: "${GRANCLAW_PROXY_LIST}"
-      # CapMonster anti-captcha
-      CAPMONSTER_ENABLED: "${CAPMONSTER_ENABLED:-true}"
-      CAPMONSTER_API_KEY: "${CAPMONSTER_API_KEY}"
     volumes:
       # Mount local providers.config.json so the backend can authenticate
       # with whatever provider you have configured (Anthropic, OpenRouter, etc.)

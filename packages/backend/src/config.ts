@@ -12,17 +12,6 @@ export interface AgentConfig {
   allowedTools: string[];
   /** @deprecated Guardian not yet implemented — kept for legacy configs */
   bigBrother?: { enabled: boolean };
-  /**
-   * HTTP/SOCKS proxy URL for this agent's browser sessions.
-   * Format: "http://user:pass@host:port" or "socks5://host:port"
-   * Falls back to GRANCLAW_PROXY env var if unset.
-   */
-  proxy?: string;
-  /**
-   * CapMonster Cloud API key for automatic CAPTCHA solving.
-   * Falls back to CAPMONSTER_KEY env var if unset.
-   */
-  capmonsterKey?: string;
 }
 
 interface AppConfig {

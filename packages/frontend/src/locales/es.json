@@ -249,9 +249,9 @@
     "uptime": "Tiempo activo"
   },
   "integrations": {
-    "title": "Inicios de sesión",
-    "blurb": "Conecta este agente a los navegadores y cuentas que necesita. Cada enlace se guarda solo para este agente.",
-    "moreSoon": "Más servicios próximamente. Para otras claves API y credenciales, usa la sección de Secretos en la barra lateral.",
+    "title": "Integraciones",
+    "blurb": "Conecta servicios externos. Cada integración almacena un token como secreto y se activa automáticamente.",
+    "moreSoon": "Más integraciones próximamente. Para otras claves API y credenciales, usa la sección de Secretos en la barra lateral.",
     "connected": "Conectado",
     "disconnect": "Desconectar",
     "connect": "Conectar",
@@ -319,7 +319,7 @@
       "monitor": "Monitor",
       "usage": "Uso",
       "logs": "Registros",
-      "integrations": "Inicios de sesión",
+      "integrations": "Integraciones",
       "guardian": "Guardián"
     },
     "comingSoon": "Pronto",

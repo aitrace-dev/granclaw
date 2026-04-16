@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { addSecret, deleteSecretApi } from '../lib/api.ts';
 import { useT } from '../lib/i18n.tsx';
-import { renderSlot } from '../lib/slots.tsx';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -224,9 +223,6 @@ export function IntegrationsView({
       </div>
 
       <div className="space-y-3">
-        {/* Extension-provided cards register into this slot at boot via
-            window.__granclaw.registerSlot(). Empty in the base bundle. */}
-        {renderSlot('social-logins.cards', { agentId })}
         {INTEGRATIONS.map(def => (
           <IntegrationCard
             key={def.id}

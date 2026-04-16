@@ -249,9 +249,9 @@
     "uptime": "Uptime"
   },
   "integrations": {
-    "title": "Social Logins",
-    "blurb": "Link this agent to the browsers and accounts it needs. Each link is stored privately to this agent.",
-    "moreSoon": "More services coming soon. For other API keys and credentials, use the Secrets section in the sidebar.",
+    "title": "Integrations",
+    "blurb": "Connect external services. Each integration stores a token as a secret and activates automatically.",
+    "moreSoon": "More integrations coming soon. For other API keys and credentials, use the Secrets section in the sidebar.",
     "connected": "Connected",
     "disconnect": "Disconnect",
     "connect": "Connect",
@@ -319,7 +319,7 @@
       "monitor": "Monitor",
       "usage": "Usage",
       "logs": "Logs",
-      "integrations": "Social Logins",
+      "integrations": "Integrations",
       "guardian": "Guardian"
     },
     "comingSoon": "Soon",

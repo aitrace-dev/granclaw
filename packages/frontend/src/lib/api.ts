@@ -711,15 +711,23 @@ export async function fetchProviderSettings(): Promise<ProviderSettings> {
 export interface AppConfig {
   showWorkspaceDirConfig: boolean;
   showBraveSearchConfig: boolean;
+  enableIntegrations: boolean;
 }
+
+const APP_CONFIG_DEFAULTS: AppConfig = {
+  showWorkspaceDirConfig: true,
+  showBraveSearchConfig: true,
+  enableIntegrations: false,
+};
 
 export async function fetchAppConfig(): Promise<AppConfig> {
   try {
     const res = await fetch(`${BASE}/settings/app`);
-    if (!res.ok) return { showWorkspaceDirConfig: true, showBraveSearchConfig: true };
-    return res.json() as Promise<AppConfig>;
+    if (!res.ok) return { ...APP_CONFIG_DEFAULTS };
+    const body = await res.json() as Partial<AppConfig>;
+    return { ...APP_CONFIG_DEFAULTS, ...body };
   } catch {
-    return { showWorkspaceDirConfig: true, showBraveSearchConfig: true };
+    return { ...APP_CONFIG_DEFAULTS };
   }
 }
 

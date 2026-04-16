@@ -15,11 +15,14 @@ export interface AppConfig {
   showWorkspaceDirConfig: boolean;
   /** Show the Brave Search configuration section in Settings. Default: true. Set false in enterprise where a key is provided server-side. */
   showBraveSearchConfig: boolean;
+  /** Enable the Integrations page + dynamic-load the enterprise bundle. Default: false. Enterprise control seeds true. */
+  enableIntegrations: boolean;
 }
 
 const DEFAULTS: AppConfig = {
   showWorkspaceDirConfig: true,
   showBraveSearchConfig: true,
+  enableIntegrations: false,
 };
 
 export function getAppConfig(): AppConfig {

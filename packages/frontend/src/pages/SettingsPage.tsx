@@ -174,7 +174,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [configuredProviders, setConfiguredProviders] = useState<ProviderEntry[]>([]);
-  const [appConfig, setAppConfig] = useState<AppConfig>({ showWorkspaceDirConfig: true, showBraveSearchConfig: true });
+  const [appConfig, setAppConfig] = useState<AppConfig>({ showWorkspaceDirConfig: true, showBraveSearchConfig: true, enableIntegrations: false });
 
   // Add-provider form
   const [addProvider, setAddProvider] = useState('');

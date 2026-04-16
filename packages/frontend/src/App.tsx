@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/DashboardPage.tsx';
 import { ChatPage } from './pages/ChatPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TakeoverPage } from './pages/TakeoverPage.tsx';
+import { IntegrationsPage } from './pages/IntegrationsPage.tsx';
 
 export default function App() {
   const location = useLocation();
@@ -24,6 +25,7 @@ export default function App() {
             navigation between chat/monitor/tasks/etc. */}
         <Route path="agents/:id/*" element={<ChatPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

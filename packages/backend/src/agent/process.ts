@@ -200,7 +200,7 @@ function main() {
             // appears inline in the streaming response.
             broadcastToChannel(job.channelId, {
               type: 'chunk',
-              chunk: { type: 'text', text: `\n\n🔗 **Takeover link:** ${takeoverUrl}` },
+              chunk: { type: 'text', text: `\n\n🔗 **Takeover link:** ${takeoverUrl}\n\n` },
             });
           }
         }

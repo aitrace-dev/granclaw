@@ -382,7 +382,7 @@ export function TakeoverPage() {
             ∎
           </span>
           <span className="text-[12px] font-mono text-on-surface truncate">
-            {currentUrl || info.url || 'about:blank'}
+            {currentUrl || info.url || ''}
           </span>
           {currentTitle && (
             <span className="text-[11px] font-body italic text-on-surface-variant/70 flex-shrink-0 hidden md:inline">

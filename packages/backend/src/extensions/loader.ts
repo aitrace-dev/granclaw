@@ -24,9 +24,22 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { ExtensionContext, ExtensionFactory } from './types.js';
+import type { ExtensionContext, ExtensionFactory, LibraryApi } from './types.js';
+import * as appSecrets from '../app-secrets.js';
+import * as integrations from '../integrations/registry.js';
+import * as agentIntegrations from '../integrations/agent-integrations-db.js';
+import * as config from '../config.js';
 
-export async function loadExtensions(ctx: ExtensionContext): Promise<void> {
+/**
+ * Build the LibraryApi surface that extensions receive.
+ * Centralised here so adding a new library hook requires touching one file.
+ */
+function buildLibraryApi(): LibraryApi {
+  return { appSecrets, integrations, agentIntegrations, config };
+}
+
+export async function loadExtensions(ctx: Omit<ExtensionContext, 'lib'>): Promise<void> {
+  const fullCtx: ExtensionContext = { ...ctx, lib: buildLibraryApi() };
   const dir = process.env.GRANCLAW_EXTENSIONS_DIR?.trim();
   if (!dir) return;
 
@@ -66,7 +79,7 @@ export async function loadExtensions(ctx: ExtensionContext): Promise<void> {
         continue;
       }
 
-      await factory(ctx);
+      await factory(fullCtx);
       console.log(`[extensions] loaded ${pkg.name ?? entry.name}`);
     } catch (err) {
       console.error(`[extensions] failed to load ${entry.name}:`, err);

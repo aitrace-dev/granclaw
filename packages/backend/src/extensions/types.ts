@@ -18,6 +18,23 @@
 
 import type { Express } from 'express';
 import type { BrowserProvider } from '../agent/browser-bin.js';
+import type * as AppSecretsModule from '../app-secrets.js';
+import type * as RegistryModule from '../integrations/registry.js';
+import type * as AgentIntegrationsModule from '../integrations/agent-integrations-db.js';
+import type * as ConfigModule from '../config.js';
+
+/**
+ * Library API exposed to extensions via ExtensionContext. Extensions never
+ * import library modules directly — they receive these via DI so the
+ * extension bundle can be compiled against types only and at runtime the
+ * loader injects the real implementations.
+ */
+export interface LibraryApi {
+  appSecrets: typeof AppSecretsModule;
+  integrations: typeof RegistryModule;
+  agentIntegrations: typeof AgentIntegrationsModule;
+  config: typeof ConfigModule;
+}
 
 export interface ExtensionContext {
   /** The Express app. Extensions can mount routers here. */
@@ -29,6 +46,8 @@ export interface ExtensionContext {
    * that returns a non-null resolution wins.
    */
   registerBrowserProvider(provider: BrowserProvider): void;
+  /** Injected library API. */
+  lib: LibraryApi;
 }
 
 /** Default export of an extension module. */

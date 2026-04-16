@@ -40,7 +40,7 @@ export interface BrowserBinaryResolution {
  * Extension hook. A provider returns a resolution for an agent, or null to
  * pass (let the next provider or the default try). First non-null wins.
  */
-export type BrowserProvider = (agentId: string, workspaceDir: string) => BrowserBinaryResolution | null;
+export type BrowserProvider = (agentId: string, workspaceDir: string) => BrowserBinaryResolution | null | Promise<BrowserBinaryResolution | null>;
 
 const providers: BrowserProvider[] = [];
 
@@ -63,10 +63,10 @@ export function buildArgv(res: BrowserBinaryResolution, command: string, args: s
   return [...res.preCommandArgs, command, ...args, ...res.postCommandArgs];
 }
 
-export function resolveBrowserBinary(agentId: string, workspaceDir: string): BrowserBinaryResolution {
+export async function resolveBrowserBinary(agentId: string, workspaceDir: string): Promise<BrowserBinaryResolution> {
   // Try registered providers first (supplied by extensions).
   for (const provider of providers) {
-    const resolution = provider(agentId, workspaceDir);
+    const resolution = await provider(agentId, workspaceDir);
     if (resolution) return resolution;
   }
 

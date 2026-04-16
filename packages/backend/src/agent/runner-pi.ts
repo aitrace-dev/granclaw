@@ -875,7 +875,7 @@ export async function runAgent(
           // Resolve which browser backend to run per-turn (local daemon vs a
           // provider supplied by an extension). Picks up toggles made since
           // the last turn via the integrations DB.
-          const browser = resolveBrowserBinary(agent.id, workspaceDir);
+          const browser = await resolveBrowserBinary(agent.id, workspaceDir);
 
           // Lazily create the session on first use.
           if (!browserState.handle) {

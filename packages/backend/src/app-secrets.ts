@@ -5,7 +5,7 @@
  *
  * Scope distinction:
  *   - secrets-vault.ts  — per-agent workspace secrets (agent-facing, e.g. skill API keys)
- *   - app-secrets.ts    — per-install platform secrets (operator-facing, e.g. GoLogin API token)
+ *   - app-secrets.ts    — per-install platform secrets (operator-facing, shared across agents)
  *
  * Secrets are encrypted with AES-256-GCM when GRANCLAW_SECRET_KEY (64 hex chars = 32 bytes)
  * is set. Missing key → plaintext fallback with a loud one-shot warning; we never crash

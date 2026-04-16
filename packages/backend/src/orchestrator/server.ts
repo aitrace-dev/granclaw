@@ -31,7 +31,8 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { randomUUID } from 'crypto';
 import logsRouter from '../routes/logs.js';
 import { integrationsRouter } from '../integrations/routes.js';
-import { bootstrapIntegration as bootstrapGoLogin } from '../integrations/gologin/service.js';
+import { loadExtensions } from '../extensions/loader.js';
+import { registerBrowserProvider } from '../agent/browser-bin.js';
 import { getManagedAgents, getManagedAgent, restartAgent, startNewAgent, stopAndRemoveAgent } from './agent-manager.js';
 import { listSecretNames, setSecret, deleteSecret } from '../secrets-vault.js';
 import { getSession, enqueue, getActiveJobs, markFailed } from '../agent-db.js';
@@ -80,17 +81,6 @@ function readInstalledTools(workspaceDir: string): Record<string, unknown> | nul
 }
 
 export function createServer() {
-  // One-time integration bootstrap: when GOLOGIN_API_TOKEN is set in the
-  // container env (enterprise provisioning path), auto-create the integration
-  // row with enabled=true so the first user action after container boot is
-  // "activate for agent", not "also remember to enable the integration".
-  // No-op locally (no env var).
-  try {
-    bootstrapGoLogin();
-  } catch (err) {
-    console.error('[server] gologin bootstrap failed (non-fatal):', err);
-  }
-
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -1395,6 +1385,18 @@ export function createServer() {
   // but harmless when no integration is configured.
 
   app.use('/integrations', integrationsRouter);
+
+  // ── Extensions (enterprise-only) ──────────────────────────────────────────
+  // When GRANCLAW_EXTENSIONS_DIR is set, load each subdirectory as an
+  // extension module. Extensions can mount additional routes on `app` and
+  // register browser providers. Intentionally mounted BEFORE the SPA
+  // fallback so extension routes take precedence.
+  loadExtensions({
+    app,
+    registerBrowserProvider,
+  }).catch((err: unknown) => {
+    console.error('[server] extension loader failed (non-fatal):', err);
+  });
 
   // ── Static frontend (production / Docker) ─────────────────────────────────
   // In dev the frontend is served by vite on :5173 and proxies REST/WS here.

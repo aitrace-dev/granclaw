@@ -19,7 +19,7 @@ export interface Integration {
 export interface AgentIntegration {
   integrationId: string;
   active: boolean;
-  /** External resource id owned by the integration provider (e.g. GoLogin profile id).
+  /** External resource id owned by the integration provider (e.g. a cloud-browser profile id).
    *  Persists across deactivations so reactivation reuses the same resource. */
   externalId: string | null;
   metadata: Record<string, unknown>;

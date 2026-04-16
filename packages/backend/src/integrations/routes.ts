@@ -3,14 +3,15 @@
  *
  * Integration framework routes mounted at /integrations.
  *
- * General endpoints (list/configure integrations, secret storage) live here.
- * Integration-specific routes mount under sub-paths (e.g. /integrations/gologin).
+ * Generic endpoints (list/configure integrations, secret storage) live here.
+ * Concrete integrations (e.g. gologin) ship as extensions — they mount their
+ * own sub-routers onto the Express app via the ExtensionContext when loaded
+ * from GRANCLAW_EXTENSIONS_DIR.
  */
 
 import { Router, Request, Response } from 'express';
 import { listIntegrations, getIntegration, setIntegration } from './registry.js';
 import { setAppSecret, hasAppSecret, deleteAppSecret } from '../app-secrets.js';
-import { gologinRouter } from './gologin/routes.js';
 
 export const integrationsRouter = Router();
 
@@ -55,5 +56,3 @@ integrationsRouter.delete('/:id/secret/:name', (req: Request, res: Response) => 
   deleteAppSecret(key);
   res.status(204).end();
 });
-
-integrationsRouter.use('/gologin', gologinRouter);

@@ -6,7 +6,7 @@
  * jobs, tasks, schedules, secrets.
  *
  * CRITICAL INVARIANT: deactivation must not wipe externalId.
- * Reactivating reuses the same external resource (e.g. GoLogin profile).
+ * Reactivating reuses the same external resource (e.g. a cloud-browser profile).
  * Enforced at three layers:
  *   1. SQL — ON CONFLICT uses COALESCE(excluded.external_id, agent_integrations.external_id)
  *   2. Service — activate() checks for existing externalId before calling provider

@@ -3,20 +3,21 @@
  *
  * Resolves which browser CLI binary to run for a given agent turn, plus the
  * launch arguments and env overrides needed. Extracted from runner-pi.ts so
- * the GoLogin binary-swap logic is unit-testable and the runner stays
- * focused on session + loop management.
+ * the binary-swap logic is unit-testable and extensible.
  *
- * Two paths:
- *   - GoLogin active  → gologin-agent-browser-cli + token/profile via env
- *   - Otherwise       → local agent-browser with stealth + .browser-profile
+ * Extension hook: external modules (e.g. the enterprise GoLogin extension)
+ * register browser providers via registerBrowserProvider(). Providers are
+ * tried in registration order — the first one that returns a non-null
+ * resolution wins. If none match, the local agent-browser path is used.
  *
- * Token is passed via env (GOLOGIN_TOKEN) rather than CLI flag so it doesn't
- * appear in process listings or shell history.
+ * Flag-position note: agent-browser expects launch flags BEFORE the
+ * subcommand; gologin-agent-browser expects them AFTER. The resolution
+ * carries preCommandArgs + postCommandArgs so buildArgv() can assemble
+ * in the right order.
  */
 
 import fs from 'fs';
 import path from 'path';
-import { getActiveProfile } from '../integrations/gologin/service.js';
 import { stealthArgv } from '../browser/stealth.js';
 
 export interface BrowserBinaryResolution {
@@ -28,39 +29,48 @@ export interface BrowserBinaryResolution {
   postCommandArgs: string[];
   /** Environment overrides to merge into the child process env. */
   env: Record<string, string>;
-  /** True when running under GoLogin. Callers use this to skip WebM recording
-   *  (gologin-agent-browser does not support per-session recording yet). */
-  isGoLogin: boolean;
+  /** True when running under a remote/cloud browser. Callers use this to
+   *  skip local WebM recording (remote browsers don't support it). */
+  isRemote: boolean;
   /** Whether local WebM recording should be attempted for this session. */
   recordingSupported: boolean;
 }
 
 /**
+ * Extension hook. A provider returns a resolution for an agent, or null to
+ * pass (let the next provider or the default try). First non-null wins.
+ */
+export type BrowserProvider = (agentId: string, workspaceDir: string) => BrowserBinaryResolution | null;
+
+const providers: BrowserProvider[] = [];
+
+export function registerBrowserProvider(provider: BrowserProvider): void {
+  providers.push(provider);
+}
+
+/** Test-only: clear all registered providers. */
+export function _resetBrowserProvidersForTests(): void {
+  providers.length = 0;
+}
+
+/**
  * Build argv for the browser subprocess. Handles the per-CLI flag-position
  * difference:
- *   - agent-browser expects: <bin> --session X --profile /path <command> <args>
- *   - gologin-agent-browser expects: <bin> <command> <args> --session X --profile P
+ *   - agent-browser: <bin> --session X --profile /path <command> <args>
+ *   - gologin-agent-browser: <bin> <command> <args> --session X --profile P
  */
 export function buildArgv(res: BrowserBinaryResolution, command: string, args: string[]): string[] {
   return [...res.preCommandArgs, command, ...args, ...res.postCommandArgs];
 }
 
 export function resolveBrowserBinary(agentId: string, workspaceDir: string): BrowserBinaryResolution {
-  const gl = getActiveProfile(workspaceDir, agentId);
-  if (gl) {
-    return {
-      bin: 'gologin-agent-browser',
-      preCommandArgs: [],
-      postCommandArgs: ['--session', agentId, '--profile', gl.profileId],
-      env: {
-        GOLOGIN_TOKEN: gl.token,
-        GOLOGIN_PROFILE_ID: gl.profileId,
-      },
-      isGoLogin: true,
-      recordingSupported: false,
-    };
+  // Try registered providers first (e.g. GoLogin from the enterprise extension).
+  for (const provider of providers) {
+    const resolution = provider(agentId, workspaceDir);
+    if (resolution) return resolution;
   }
 
+  // Default: local agent-browser with stealth + workspace profile dir.
   const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
   const profileDir = path.join(workspaceDir, '.browser-profile');
   const preCommandArgs: string[] = ['--session', agentId];
@@ -74,7 +84,7 @@ export function resolveBrowserBinary(agentId: string, workspaceDir: string): Bro
     preCommandArgs,
     postCommandArgs: [],
     env: {},
-    isGoLogin: false,
+    isRemote: false,
     recordingSupported: true,
   };
 }

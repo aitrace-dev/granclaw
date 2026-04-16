@@ -1,73 +1,90 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { resolveBrowserBinary, buildArgv } from './browser-bin.js';
-
-vi.mock('../integrations/gologin/service.js', () => ({
-  getActiveProfile: vi.fn(),
-}));
-import { getActiveProfile } from '../integrations/gologin/service.js';
+import {
+  resolveBrowserBinary,
+  buildArgv,
+  registerBrowserProvider,
+  _resetBrowserProvidersForTests,
+  type BrowserBinaryResolution,
+} from './browser-bin.js';
 
 describe('resolveBrowserBinary', () => {
   let ws: string;
   beforeEach(() => {
     ws = fs.mkdtempSync(path.join(os.tmpdir(), 'granclaw-bb-'));
-    (getActiveProfile as any).mockReset();
+    _resetBrowserProvidersForTests();
     delete process.env.AGENT_BROWSER_BIN;
   });
 
-  it('returns local agent-browser when GoLogin inactive — flags go before the subcommand', () => {
-    (getActiveProfile as any).mockReturnValue(null);
+  it('returns default agent-browser when no providers registered', () => {
     const r = resolveBrowserBinary('agent1', ws);
     expect(r.bin).toBe('agent-browser');
     expect(r.preCommandArgs).toContain('--session');
     expect(r.preCommandArgs).toContain('agent1');
     expect(r.postCommandArgs).toEqual([]);
-    expect(r.env).toEqual({});
-    expect(r.isGoLogin).toBe(false);
+    expect(r.isRemote).toBe(false);
     expect(r.recordingSupported).toBe(true);
   });
 
-  it('returns gologin-agent-browser when active — flags go AFTER the subcommand', () => {
-    (getActiveProfile as any).mockReturnValue({ profileId: 'prof_x', token: 'tok_y' });
+  it('uses the first registered provider that returns non-null', () => {
+    const fakeResolution: BrowserBinaryResolution = {
+      bin: 'fake-browser',
+      preCommandArgs: [],
+      postCommandArgs: ['--profile', 'prof_x'],
+      env: { FAKE_TOKEN: 't' },
+      isRemote: true,
+      recordingSupported: false,
+    };
+    registerBrowserProvider(() => fakeResolution);
     const r = resolveBrowserBinary('agent1', ws);
-    expect(r.bin).toBe('gologin-agent-browser');
-    expect(r.preCommandArgs).toEqual([]);
-    expect(r.postCommandArgs).toEqual(['--session', 'agent1', '--profile', 'prof_x']);
-    expect(r.env).toEqual({ GOLOGIN_TOKEN: 'tok_y', GOLOGIN_PROFILE_ID: 'prof_x' });
-    expect(r.isGoLogin).toBe(true);
-    expect(r.recordingSupported).toBe(false);
+    expect(r.bin).toBe('fake-browser');
+    expect(r.postCommandArgs).toEqual(['--profile', 'prof_x']);
+    expect(r.isRemote).toBe(true);
   });
 
-  it('never leaks token into argv (no process-list leakage)', () => {
-    (getActiveProfile as any).mockReturnValue({ profileId: 'p', token: 'SECRET_TOKEN_DO_NOT_LEAK' });
+  it('falls through providers that return null', () => {
+    registerBrowserProvider(() => null);
+    registerBrowserProvider(() => null);
     const r = resolveBrowserBinary('agent1', ws);
-    const fullArgv = [...r.preCommandArgs, 'open', 'https://x', ...r.postCommandArgs].join(' ');
-    expect(fullArgv).not.toContain('SECRET_TOKEN_DO_NOT_LEAK');
+    expect(r.bin).toBe('agent-browser');
+  });
+
+  it('provider order matters — first non-null wins', () => {
+    registerBrowserProvider(() => ({
+      bin: 'first', preCommandArgs: [], postCommandArgs: [], env: {},
+      isRemote: true, recordingSupported: false,
+    }));
+    registerBrowserProvider(() => ({
+      bin: 'second', preCommandArgs: [], postCommandArgs: [], env: {},
+      isRemote: true, recordingSupported: false,
+    }));
+    expect(resolveBrowserBinary('agent1', ws).bin).toBe('first');
   });
 
   it('local path includes --profile <path> when workspace has .browser-profile dir', () => {
-    (getActiveProfile as any).mockReturnValue(null);
-    const profileDir = path.join(ws, '.browser-profile');
-    fs.mkdirSync(profileDir);
+    fs.mkdirSync(path.join(ws, '.browser-profile'));
     const r = resolveBrowserBinary('agent1', ws);
     expect(r.preCommandArgs).toContain('--profile');
-    expect(r.preCommandArgs).toContain(profileDir);
+    expect(r.preCommandArgs).toContain(path.join(ws, '.browser-profile'));
   });
 
   it('respects AGENT_BROWSER_BIN env override on local path', () => {
-    (getActiveProfile as any).mockReturnValue(null);
     process.env.AGENT_BROWSER_BIN = '/custom/path/agent-browser';
     const r = resolveBrowserBinary('agent1', ws);
     expect(r.bin).toBe('/custom/path/agent-browser');
+    delete process.env.AGENT_BROWSER_BIN;
   });
 
-  it('AGENT_BROWSER_BIN env does NOT override the GoLogin path', () => {
-    (getActiveProfile as any).mockReturnValue({ profileId: 'p', token: 't' });
+  it('AGENT_BROWSER_BIN env does NOT override when a provider matches', () => {
+    registerBrowserProvider(() => ({
+      bin: 'plugin-browser', preCommandArgs: [], postCommandArgs: [], env: {},
+      isRemote: true, recordingSupported: false,
+    }));
     process.env.AGENT_BROWSER_BIN = '/custom/agent-browser';
-    const r = resolveBrowserBinary('agent1', ws);
-    expect(r.bin).toBe('gologin-agent-browser');
+    expect(resolveBrowserBinary('agent1', ws).bin).toBe('plugin-browser');
+    delete process.env.AGENT_BROWSER_BIN;
   });
 });
 
@@ -75,7 +92,7 @@ describe('buildArgv', () => {
   it('local: flags before command — matches agent-browser CLI', () => {
     const argv = buildArgv(
       {
-        bin: 'agent-browser', env: {}, isGoLogin: false, recordingSupported: true,
+        bin: 'agent-browser', env: {}, isRemote: false, recordingSupported: true,
         preCommandArgs: ['--session', 'a1'],
         postCommandArgs: [],
       },
@@ -85,10 +102,10 @@ describe('buildArgv', () => {
     expect(argv).toEqual(['--session', 'a1', 'open', 'https://example.com']);
   });
 
-  it('gologin: flags after command — matches gologin-agent-browser CLI', () => {
+  it('remote: flags after command — matches gologin-agent-browser CLI', () => {
     const argv = buildArgv(
       {
-        bin: 'gologin-agent-browser', env: {}, isGoLogin: true, recordingSupported: false,
+        bin: 'gologin-agent-browser', env: {}, isRemote: true, recordingSupported: false,
         preCommandArgs: [],
         postCommandArgs: ['--session', 'a1', '--profile', 'prof_x'],
       },

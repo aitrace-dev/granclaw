@@ -273,7 +273,7 @@ The backend's path resolution is driven by three env vars. In dev mode, the root
 
 ## Further reading
 
-- [CLAUDE.md](./CLAUDE.md) — Claude Code-facing guide (read this before modifying anything with an agent in the loop)
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — full architecture and development reference
 - [README.md](./README.md) — user-facing install + feature overview
 - [packages/cli/README.md](./packages/cli/README.md) — the README shipped inside the npm tarball
 - [vault/index.md](./vault/index.md) — project wiki with decisions, findings, and PR notes

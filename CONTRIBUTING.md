@@ -150,7 +150,7 @@ granclaw/
 └── CLAUDE.md            # full developer guide
 ```
 
-**Read `CLAUDE.md` for the full architecture reference** — it's the single source of truth for how the pieces fit together.
+**Read [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the full architecture reference** — it's the single source of truth for how the pieces fit together.
 
 ---
 

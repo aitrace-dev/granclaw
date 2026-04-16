@@ -12,8 +12,7 @@
 ![Node 20+](https://img.shields.io/badge/node-20%2B-brightgreen)
 ![Bring your own LLM](https://img.shields.io/badge/LLM-bring%20your%20own-blueviolet)
 
-<!-- TODO: replace this screenshot with a hero GIF — agent browsing LinkedIn live while kanban cards move across Mission Control. Target path: docs/images/hero-demo.gif -->
-![GranClaw in action — chat streaming, browser takeover, live task board](docs/images/chat-streaming.png)
+![GranClaw in action — chat streaming, browser automation, live task board](docs/images/hero-demo.gif)
 
 </div>
 

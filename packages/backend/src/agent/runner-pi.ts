@@ -43,6 +43,7 @@ import {
 } from '../browser/session-manager.js';
 import { stealthArgv } from '../browser/stealth.js';
 import { CAPTCHA_DETECT_JS } from './captcha-detect.js';
+import { resolveBrowserBinary } from './browser-bin.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -799,8 +800,9 @@ export async function runAgent(
     }
 
     extensionFactories.push((pi: any) => {
-      const agentBrowserBin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
-      const profileDir = path.join(workspaceDir, '.browser-profile');
+      // Binary + args resolved per-turn (NOT per-factory-invocation) so agents
+      // that toggle GoLogin mid-session pick up the change on their next turn.
+      // Moved inside execute() below.
 
       const PRIVILEGED_COMMANDS = new Set(['record', 'close', 'session']);
       const KNOWN_COMMANDS = [
@@ -870,37 +872,40 @@ export async function runAgent(
             // The command will error out downstream if it really is invalid.
           }
 
-          // Lazily create the session + start recording on first use
+          // Resolve which browser backend to run (local agent-browser vs
+          // gologin-agent-browser-cli) per-turn. Picks up toggles made since
+          // the last turn via the integrations DB.
+          const browser = resolveBrowserBinary(agent.id, workspaceDir);
+
+          // Lazily create the session on first use.
           if (!browserState.handle) {
             browserState.handle = createBrowserSession(agent.id, workspaceDir);
           }
-          if (!browserState.handle.recordingStarted) {
+          // Recording is only supported by the local agent-browser daemon.
+          // GoLogin runs in their cloud and doesn't expose per-session WebM capture,
+          // so meta.json.video stays null and the dashboard renders "no recording".
+          if (browser.recordingSupported && !browserState.handle.recordingStarted) {
             await startBrowserRecording(browserState.handle);
           }
 
-          // Build argv: --session <id> [--profile <path>] [--extension ...] [--executable-path ...] <command> <args...>
-          // agent-browser only applies launch flags on the command that boots
-          // the daemon — under normal operation startRecording has already
-          // booted it, so these are a no-op here. They're kept as belt-and-
-          // braces in case recording ever fails to start first.
-          const argv: string[] = ['--session', agent.id];
-          if (fs.existsSync(profileDir)) {
-            argv.push('--profile', profileDir);
-          }
-          argv.push(...stealthArgv());
-          argv.push(command, ...args);
+          // Build argv: [launch flags...] <command> <args...>
+          // Launch flags only apply on the command that boots the daemon —
+          // subsequent commands are no-ops there. They're kept as belt-and-
+          // braces in case recording failed to start first.
+          const argv: string[] = [...browser.launchArgs, command, ...args];
 
           try {
-            const { stdout, stderr } = await execFileAsync(agentBrowserBin, argv, {
+            const { stdout, stderr } = await execFileAsync(browser.bin, argv, {
               cwd: workspaceDir,
               timeout: 60_000,
               maxBuffer: 10 * 1024 * 1024,
+              env: { ...process.env, ...browser.env },
             });
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
             const out = stdout.trim() || stderr.trim() || 'ok';
 
             if (command === 'open' || command === 'reload') {
-              const captchaResult = await waitForCaptchaResolution(agentBrowserBin, agent.id);
+              const captchaResult = await waitForCaptchaResolution(browser.bin, agent.id);
               if (captchaResult === 'captcha') {
                 return {
                   content: [{

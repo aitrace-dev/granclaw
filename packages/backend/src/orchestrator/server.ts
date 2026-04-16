@@ -1416,6 +1416,13 @@ export function createServer() {
   if (fs.existsSync(frontendDist)) {
     console.log(`[orchestrator] serving built frontend from ${frontendDist}`);
     app.use(express.static(frontendDist));
+
+    const extDir = process.env.GRANCLAW_EXT_DIR?.trim();
+    if (extDir && fs.existsSync(path.resolve(extDir))) {
+      console.log(`[orchestrator] serving extension UI from ${extDir}`);
+      app.use('/ext', express.static(path.resolve(extDir)));
+    }
+
     // SPA fallback: anything that wasn't matched by a REST route above and
     // asks for HTML gets index.html so client-side routing takes over. API
     // clients that send Accept: application/json fall through to 404.

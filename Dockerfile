@@ -23,14 +23,12 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/frontend/package.json ./packages/frontend/
-COPY packages/agent/package.json ./packages/agent/
+COPY packages/cli/package.json ./packages/cli/
 
 # Full install including dev deps (tsc, vite) for the build.
 RUN npm install --no-audit --no-fund
 
-# Copy source and build. `npm run build` at the root only builds backend +
-# frontend — packages/agent is a legacy standalone package that is not used
-# by the dev stack and doesn't need to ship in the container.
+# Copy source and build.
 COPY packages ./packages
 RUN npm run build
 
@@ -62,7 +60,7 @@ RUN npm install -g --no-audit --no-fund \
       agent-browser \
       gologin-agent-browser-cli \
     && agent-browser --version \
-    && gologin-agent-browser-cli --version
+    && which gologin-agent-browser
 
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     CHROME_BIN=/usr/bin/chromium \
@@ -77,8 +75,8 @@ RUN chown -R node:node /app
 # Bring in workspace manifests and install production deps only.
 COPY --chown=node:node package.json package-lock.json* ./
 COPY --chown=node:node packages/backend/package.json ./packages/backend/
-COPY --chown=node:node packages/agent/package.json ./packages/agent/
 COPY --chown=node:node packages/frontend/package.json ./packages/frontend/
+COPY --chown=node:node packages/cli/package.json ./packages/cli/
 
 USER node
 RUN npm install --omit=dev --no-audit --no-fund \
@@ -95,10 +93,14 @@ COPY --chown=node:node packages/backend/assets ./packages/backend/dist/assets
 # Runtime config. CONFIG_PATH is pinned so REPO_ROOT resolves to /app
 # regardless of where the node process was started from. HOME points to
 # the node user's home so claude CLI finds /home/node/.claude/.credentials.json.
+# GRANCLAW_STATIC_DIR is pinned to the bundled frontend dist so the static-
+# file handler keeps working when GRANCLAW_HOME is mounted somewhere else
+# (e.g. /data in enterprise provisioning, where the frontend isn't).
 ENV NODE_ENV=production \
     PORT=3001 \
     HOME=/home/node \
-    CONFIG_PATH=/app/agents.config.json
+    CONFIG_PATH=/app/agents.config.json \
+    GRANCLAW_STATIC_DIR=/app/packages/frontend/dist
 
 # The only port the container exposes. Agents run internally on 3100+.
 EXPOSE 3001

@@ -31,7 +31,7 @@ describe('resolveBrowserBinary', () => {
   it('returns gologin-agent-browser-cli when active', () => {
     (getActiveProfile as any).mockReturnValue({ profileId: 'prof_x', token: 'tok_y' });
     const r = resolveBrowserBinary('agent1', ws);
-    expect(r.bin).toBe('gologin-agent-browser-cli');
+    expect(r.bin).toBe('gologin-agent-browser');
     expect(r.launchArgs).toEqual(['--session', 'agent1', '--profile', 'prof_x']);
     expect(r.env).toEqual({ GOLOGIN_TOKEN: 'tok_y', GOLOGIN_PROFILE_ID: 'prof_x' });
     expect(r.isGoLogin).toBe(true);
@@ -64,6 +64,6 @@ describe('resolveBrowserBinary', () => {
     (getActiveProfile as any).mockReturnValue({ profileId: 'p', token: 't' });
     process.env.AGENT_BROWSER_BIN = '/custom/agent-browser';
     const r = resolveBrowserBinary('agent1', ws);
-    expect(r.bin).toBe('gologin-agent-browser-cli');
+    expect(r.bin).toBe('gologin-agent-browser');
   });
 });

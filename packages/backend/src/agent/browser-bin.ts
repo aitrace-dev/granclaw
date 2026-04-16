@@ -37,7 +37,7 @@ export function resolveBrowserBinary(agentId: string, workspaceDir: string): Bro
   const gl = getActiveProfile(workspaceDir, agentId);
   if (gl) {
     return {
-      bin: 'gologin-agent-browser-cli',
+      bin: 'gologin-agent-browser',
       launchArgs: ['--session', agentId, '--profile', gl.profileId],
       env: {
         GOLOGIN_TOKEN: gl.token,

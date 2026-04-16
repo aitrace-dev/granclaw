@@ -51,16 +51,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# agent-browser is called by the browser skill. gologin-agent-browser-cli is
-# its drop-in replacement when a GoLogin profile is active for an agent — the
-# runner swaps binaries per-turn based on the integrations DB state (see
-# packages/backend/src/agent/browser-bin.ts). Both are installed so a single
-# granclaw image supports local AND enterprise (GoLogin) deployments.
-RUN npm install -g --no-audit --no-fund \
-      agent-browser \
-      gologin-agent-browser-cli \
-    && agent-browser --version \
-    && which gologin-agent-browser
+# agent-browser is the default browser automation binary used by the browser
+# tool. Extensions (loaded via GRANCLAW_EXTENSIONS_DIR in downstream images
+# like the enterprise edition) can register alternative browser providers
+# that swap to a different binary per-turn.
+RUN npm install -g --no-audit --no-fund agent-browser \
+    && agent-browser --version
 
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     CHROME_BIN=/usr/bin/chromium \

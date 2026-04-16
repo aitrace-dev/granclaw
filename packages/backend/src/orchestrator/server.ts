@@ -30,6 +30,7 @@ import path from 'path';
 import { WebSocket, WebSocketServer } from 'ws';
 import { randomUUID } from 'crypto';
 import logsRouter from '../routes/logs.js';
+import { integrationsRouter } from '../integrations/routes.js';
 import { getManagedAgents, getManagedAgent, restartAgent, startNewAgent, stopAndRemoveAgent } from './agent-manager.js';
 import { listSecretNames, setSecret, deleteSecret } from '../secrets-vault.js';
 import { getSession, enqueue, getActiveJobs, markFailed } from '../agent-db.js';
@@ -1375,6 +1376,13 @@ export function createServer() {
   // ── Logs ───────────────────────────────────────────────────────────────────
 
   app.use('/logs', logsRouter);
+
+  // ── Integrations ──────────────────────────────────────────────────────────
+  // Global integration config + per-agent activation (e.g. GoLogin).
+  // Gated in the UI by appConfig.enableIntegrations — API is always exposed
+  // but harmless when no integration is configured.
+
+  app.use('/integrations', integrationsRouter);
 
   // ── Static frontend (production / Docker) ─────────────────────────────────
   // In dev the frontend is served by vite on :5173 and proxies REST/WS here.

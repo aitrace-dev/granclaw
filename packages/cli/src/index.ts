@@ -215,6 +215,10 @@ GranClaw requires \`agent-browser\` for browser automation.
     process.exit(1);
   }
 
+  // Enterprise images bundle their own browser (e.g. GoLogin Orbita) and the
+  // provider wires it in via CDP, so the system-Chrome check is meaningless.
+  if (process.env.GRANCLAW_SKIP_CHROME_CHECK === 'true') return;
+
   const chrome = detectSystemChrome();
   if (!chrome) {
     const platform = os.platform();

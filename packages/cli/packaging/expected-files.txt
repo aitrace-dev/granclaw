@@ -6,6 +6,7 @@ dist/backend/agent/browser-bin.js
 dist/backend/agent/process.js
 dist/backend/agent/runner-pi.js
 dist/backend/agent/telegram-adapter.js
+dist/backend/agent/telegram-chats.js
 dist/backend/agent/telegram-http-client.js
 dist/backend/app-config.js
 dist/backend/app-secrets.js

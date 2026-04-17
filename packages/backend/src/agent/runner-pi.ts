@@ -42,7 +42,6 @@ import {
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
 import { stealthArgv } from '../browser/stealth.js';
-import { CAPTCHA_DETECT_JS } from './captcha-detect.js';
 import { resolveBrowserBinary, buildArgv } from './browser-bin.js';
 
 const execFileAsync = promisify(execFile);
@@ -758,46 +757,6 @@ export async function runAgent(
     //
     // Privileged commands (record, close, tab close for session 0,
     // session management) are rejected — the runtime owns those.
-    /**
-     * After a navigation command, check whether the page is blocked.
-     *
-     * 'interstitial' → Cloudflare JS challenge; stealth can clear it, poll up to 45s.
-     * 'captcha'       → Actual captcha widget; no auto-solver, request takeover immediately.
-     * 'clear'         → No challenge detected.
-     */
-    async function waitForCaptchaResolution(
-      bin: string,
-      sessionId: string,
-    ): Promise<'clear' | 'captcha' | 'unsolved'> {
-      const evalArgv = (id: string) => ['--session', id, 'eval', CAPTCHA_DETECT_JS];
-
-      const check = async (): Promise<'clear' | 'captcha' | 'interstitial'> => {
-        try {
-          const { stdout } = await execFileAsync(bin, evalArgv(sessionId), { timeout: 8_000 });
-          const out = stdout.trim();
-          if (out.includes('captcha')) return 'captcha';
-          if (out.includes('interstitial')) return 'interstitial';
-          return 'clear';
-        } catch {
-          return 'clear';
-        }
-      };
-
-      await new Promise(r => setTimeout(r, 1500));
-      const initial = await check();
-      if (initial === 'clear') return 'clear';
-      if (initial === 'captcha') return 'captcha';
-
-      // Cloudflare interstitial — poll every 2s until cleared or 45s elapses.
-      const deadline = Date.now() + 45_000;
-      while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 2_000));
-        const result = await check();
-        if (result === 'clear') return 'clear';
-        if (result === 'captcha') return 'captcha';
-      }
-      return 'unsolved';
-    }
 
     extensionFactories.push((pi: any) => {
       // Binary + args resolved per-turn (NOT per-factory-invocation) so agents
@@ -902,28 +861,6 @@ export async function runAgent(
             });
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
             const out = stdout.trim() || stderr.trim() || 'ok';
-
-            if (command === 'open' || command === 'reload') {
-              const captchaResult = await waitForCaptchaResolution(browser.bin, agent.id);
-              if (captchaResult === 'captcha') {
-                return {
-                  content: [{
-                    type: 'text' as const,
-                    text: out + '\n\n⚠️ CAPTCHA detected. ' +
-                      'Use request_human_browser_takeover to let the user solve it, or try a different URL.',
-                  }],
-                };
-              }
-              if (captchaResult === 'unsolved') {
-                return {
-                  content: [{
-                    type: 'text' as const,
-                    text: out + '\n\n⚠️ Cloudflare interstitial not cleared after 45s. ' +
-                      'Use request_human_browser_takeover to let the user solve it, or try a different URL.',
-                  }],
-                };
-              }
-            }
 
             return { content: [{ type: 'text' as const, text: out }] };
           } catch (err) {

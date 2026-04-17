@@ -22,7 +22,7 @@ import path from 'path';
 import { getAgent, REPO_ROOT } from '../config.js';
 import { enqueue, dequeueNext, markDone, markFailed, cleanupStaleJobs } from '../agent-db.js';
 import { runAgent, stopAgent, bootstrapWorkspace } from './runner-pi.js';
-import { saveMessage } from '../messages-db.js';
+import { saveMessage, getProactiveMessagesSinceLastUser } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 import { forceCloseActiveSession } from '../browser-sessions.js';
 import {
@@ -181,6 +181,27 @@ function main() {
         messageText =
           `[User completed browser interaction]\n` +
           `User said: "${job.message}"`;
+      }
+
+      // Telegram cross-channel context: if the agent proactively sent
+      // messages to this telegram chat (via telegram_send from some OTHER
+      // channel's turn), the pi session for THIS channel doesn't know
+      // about them. Without this, a user reply like "Yes ship it" leaves
+      // the agent clueless about what "it" is. Prepend the proactive
+      // messages so the model has the full thread.
+      if (job.channelId.startsWith('telegram:')) {
+        const proactive = getProactiveMessagesSinceLastUser(agentId as string, job.channelId);
+        if (proactive.length > 0) {
+          const lines = proactive.map((m, i) => {
+            const ts = new Date(m.createdAt).toISOString().slice(11, 16) + ' UTC';
+            return `  ${i + 1}. [${ts}] ${m.content}`;
+          }).join('\n');
+          messageText =
+            `[System: since your last Telegram exchange you proactively sent the user these messages ` +
+            `(they are not in your conversation history but the user received them):\n${lines}\n` +
+            `]\n\n` +
+            `User's new reply: ${messageText}`;
+        }
       }
 
       await runAgent(agent!, messageText, (chunk) => {

@@ -35,6 +35,30 @@ export function deleteMessages(agentId: string): void {
   getDataDb().prepare('DELETE FROM messages WHERE agent_id = ?').run(agentId);
 }
 
+/** Return assistant messages on a channel that happened AFTER the most recent
+ *  user message on that channel. Use case: the agent proactively pushed
+ *  messages on a telegram channel from some OTHER channel's turn; when the
+ *  user next replies on telegram we need to remind the model what it said
+ *  since the pi session for this channel doesn't see cross-channel tool calls. */
+export function getProactiveMessagesSinceLastUser(
+  agentId: string,
+  channelId: string,
+): { content: string; createdAt: number }[] {
+  const db = getDataDb();
+  const lastUser = db.prepare(`
+    SELECT created_at FROM messages
+    WHERE agent_id = ? AND channel_id = ? AND role = 'user'
+    ORDER BY created_at DESC LIMIT 1
+  `).get(agentId, channelId) as { created_at: number } | undefined;
+  const since = lastUser?.created_at ?? 0;
+  const rows = db.prepare(`
+    SELECT content, created_at FROM messages
+    WHERE agent_id = ? AND channel_id = ? AND role = 'assistant' AND created_at > ?
+    ORDER BY created_at ASC
+  `).all(agentId, channelId, since) as { content: string; created_at: number }[];
+  return rows.map(r => ({ content: r.content, createdAt: r.created_at }));
+}
+
 export function getMessages(agentId: string, channelId = 'ui', limit = 200): Message[] {
   const db = getDataDb();
   const rows = db.prepare(`

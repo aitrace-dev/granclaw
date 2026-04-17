@@ -45,6 +45,7 @@ import { stealthArgv } from '../browser/stealth.js';
 import { resolveBrowserBinary, buildArgv } from './browser-bin.js';
 import { TelegramHttpClient } from './telegram-http-client.js';
 import { defaultChatId, isKnownChat, listKnownChats } from './telegram-chats.js';
+import { saveMessage } from '../messages-db.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -573,6 +574,7 @@ export async function runAgent(
           'If this tool returns an error saying TELEGRAM_BOT_TOKEN is missing, tell the user to add it in Settings → Secrets and to message their bot once.',
           'Keep messages concise and scannable on a phone. One topic per send.',
           'Respect the rate limit: do not loop this tool in a short window.',
+          'Be explicit when asking for confirmations (e.g. "Reply YES to ship"). When the user replies on Telegram, your next turn will include your proactive messages as context — but only if they were sent recently, so make one decisive ask rather than chains of follow-ups.',
         ],
         parameters: {
           type: 'object',
@@ -615,6 +617,19 @@ export async function runAgent(
             const res = await telegram.sendMessage(target, params.text, {
               parse_mode: params.parse_mode,
             });
+            // Persist to the target telegram channel's history so the chat
+            // view in the dashboard shows the proactive message alongside
+            // regular replies. The current turn's channel already gets a
+            // tool_call row via process.ts — this covers the destination.
+            try {
+              saveMessage({
+                id: randomUUID(),
+                agentId: agent.id,
+                channelId: `telegram:${target}`,
+                role: 'assistant',
+                content: params.text,
+              });
+            } catch { /* non-fatal */ }
             return `sent message_id=${res.message_id} to chat_id=${target}`;
           } catch (err) {
             return `error: ${err instanceof Error ? err.message : String(err)}`;

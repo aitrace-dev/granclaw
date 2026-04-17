@@ -43,6 +43,8 @@ import {
 } from '../browser/session-manager.js';
 import { stealthArgv } from '../browser/stealth.js';
 import { resolveBrowserBinary, buildArgv } from './browser-bin.js';
+import { TelegramHttpClient } from './telegram-http-client.js';
+import { defaultChatId, isKnownChat, listKnownChats } from './telegram-chats.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -537,6 +539,85 @@ export async function runAgent(
             return { content: [{ type: 'text' as const, text }] };
           } catch (err) {
             return { content: [{ type: 'text' as const, text: `recall_history error: ${err instanceof Error ? err.message : String(err)}` }] };
+          }
+        },
+      });
+    });
+
+    // telegram_send tool: outbound Telegram message from the agent.
+    // Always registered so the agent can give the user actionable guidance
+    // when Telegram isn't set up yet. Preconditions:
+    //   - TELEGRAM_BOT_TOKEN secret set (Settings → Secrets in the UI)
+    //   - User has messaged the bot at least once (so we know their chat_id)
+    // Restricted to chat_ids the user has already messaged from — the set is
+    // maintained by TelegramAdapter in <workspace>/.telegram-chats.json —
+    // so a confused agent can't cold-contact arbitrary numbers. Rate-limited
+    // to 10 sends/min per agent subprocess.
+    const sendTimestamps: number[] = [];
+    const RATE_LIMIT_PER_MIN = 10;
+    extensionFactories.push((pi: any) => {
+      pi.registerTool({
+        name: 'telegram_send',
+        label: 'Send Telegram Message',
+        description:
+          'Send a message to the user on Telegram. Use for out-of-band updates: ' +
+          'scheduled digests, async task completions, time-sensitive alerts. ' +
+          'Only sends to chats the user has already messaged from — never to cold contacts. ' +
+          'Defaults to the most-recent inbound chat if chat_id is omitted. ' +
+          'Requires TELEGRAM_BOT_TOKEN secret (Settings → Secrets in the UI) ' +
+          'and at least one inbound message from the user to the bot.',
+        promptSnippet: 'Send a Telegram message to the user',
+        promptGuidelines: [
+          'Use for proactive notifications (morning briefings, alerts, reminders) — NOT for replying to a message the user just sent in the UI.',
+          'If the user messaged you on Telegram, you already reply to them automatically — do not also call this tool.',
+          'If this tool returns an error saying TELEGRAM_BOT_TOKEN is missing, tell the user to add it in Settings → Secrets and to message their bot once.',
+          'Keep messages concise and scannable on a phone. One topic per send.',
+          'Respect the rate limit: do not loop this tool in a short window.',
+        ],
+        parameters: {
+          type: 'object',
+          required: ['text'],
+          properties: {
+            text: { type: 'string', description: 'The message body (supports Telegram MarkdownV2 if parse_mode=MarkdownV2).' },
+            chat_id: { type: 'number', description: 'Optional. Numeric Telegram chat_id. Defaults to the user\'s most-recent inbound chat.' },
+            parse_mode: { type: 'string', enum: ['MarkdownV2', 'HTML'], description: 'Optional. Telegram formatting mode.' },
+          },
+        },
+        async execute(
+          _toolCallId: string,
+          params: { text: string; chat_id?: number; parse_mode?: string },
+        ): Promise<string> {
+          const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+          if (!token) {
+            return 'error: TELEGRAM_BOT_TOKEN is not configured. Tell the user to go to Settings → Secrets and add their Telegram bot token, then message the bot once so you know the chat_id.';
+          }
+          if (!params.text || !params.text.trim()) {
+            return 'error: text is required and must be non-empty';
+          }
+          const target = params.chat_id ?? defaultChatId(workspaceDir);
+          if (target === null) {
+            return 'error: no known Telegram chat for this agent. Ask the user to message the bot at least once so I can learn their chat_id.';
+          }
+          if (!isKnownChat(workspaceDir, target)) {
+            const known = listKnownChats(workspaceDir);
+            return `error: chat_id ${target} has never messaged this agent — refusing to cold-contact. Known chats: ${JSON.stringify(known)}.`;
+          }
+          // Rate-limit: 10 sends per rolling 60s window per agent subprocess.
+          const now = Date.now();
+          while (sendTimestamps.length && now - sendTimestamps[0] > 60_000) sendTimestamps.shift();
+          if (sendTimestamps.length >= RATE_LIMIT_PER_MIN) {
+            const retryInSec = Math.ceil((60_000 - (now - sendTimestamps[0])) / 1000);
+            return `error: rate limit — max ${RATE_LIMIT_PER_MIN} Telegram sends/minute. Retry in ${retryInSec}s.`;
+          }
+          sendTimestamps.push(now);
+          try {
+            const telegram = new TelegramHttpClient(token);
+            const res = await telegram.sendMessage(target, params.text, {
+              parse_mode: params.parse_mode,
+            });
+            return `sent message_id=${res.message_id} to chat_id=${target}`;
+          } catch (err) {
+            return `error: ${err instanceof Error ? err.message : String(err)}`;
           }
         },
       });

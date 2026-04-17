@@ -41,7 +41,7 @@ describe('resolveGranclawHome', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'granclaw-test-'));
     fs.writeFileSync(
       path.join(tmp, 'agents.config.json'),
-      JSON.stringify({ agents: [{ id: 'x', name: 'x', model: 'claude-sonnet-4-5', workspaceDir: './workspaces/x', allowedTools: [] }] }),
+      JSON.stringify({ agents: [{ id: 'x', name: 'x', model: 'claude-sonnet-4-5', workspaceDir: './workspaces/x' }] }),
     );
     process.env.GRANCLAW_HOME = tmp;
     const mod = await import('./config.js?home4');

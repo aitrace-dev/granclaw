@@ -46,16 +46,6 @@ function AgentRow({ agent, onDelete }: { agent: Agent; onDelete: () => void }) {
         </div>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="hidden sm:flex flex-wrap gap-1">
-          {agent.allowedTools.slice(0, 3).map(t => (
-            <span
-              key={t}
-              className="font-mono text-[9px] text-on-surface-variant bg-surface-container rounded px-1.5 py-0.5"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className={`${buttonDanger} sm:opacity-0 sm:group-hover:opacity-100`}

@@ -25,7 +25,6 @@ interface FakeAgent {
   model: string;
   provider: string;
   workspaceDir: string;
-  allowedTools: string[];
 }
 
 interface Manifest {
@@ -104,13 +103,11 @@ describe('agent export — workspace.json manifest', () => {
         model: 'deepseek/deepseek-v3.2',
         provider: 'openrouter',
         workspaceDir: './workspaces/lucia',
-        allowedTools: ['filesystem', 'browser', 'task-manager'],
       },
     };
     expect(m.format).toBe('granclaw-agent-export-v1');
     expect(m.granclawVersion).toMatch(/^\d+\.\d+\.\d+/);
     expect(m.agent.id).toBe('lucia');
-    expect(m.agent.allowedTools).toContain('browser');
   });
 });
 
@@ -141,7 +138,6 @@ describe('agent export — zip pipeline', () => {
         model: 'test-model',
         provider: 'test-provider',
         workspaceDir: './workspaces/tester',
-        allowedTools: ['filesystem'],
       },
     };
     buildExportZip(workspaceDir, manifest, zipPath);
@@ -160,7 +156,7 @@ describe('agent export — zip pipeline', () => {
     const manifest: Manifest = {
       format: FORMAT, granclawVersion: '0.1.0', exportedAt: 1, agent: {
         id: 'tester', name: 'T', model: 'm', provider: 'p',
-        workspaceDir: './workspaces/tester', allowedTools: [],
+        workspaceDir: './workspaces/tester',
       },
     };
     buildExportZip(workspaceDir, manifest, zipPath);
@@ -174,7 +170,7 @@ describe('agent export — zip pipeline', () => {
     const manifest: Manifest = {
       format: FORMAT, granclawVersion: '0.1.0', exportedAt: 1, agent: {
         id: 'tester', name: 'T', model: 'm', provider: 'p',
-        workspaceDir: './workspaces/tester', allowedTools: [],
+        workspaceDir: './workspaces/tester',
       },
     };
     buildExportZip(workspaceDir, manifest, zipPath);
@@ -188,7 +184,7 @@ describe('agent export — zip pipeline', () => {
     const manifest: Manifest = {
       format: FORMAT, granclawVersion: '0.1.0', exportedAt: 1, agent: {
         id: 'tester', name: 'T', model: 'm', provider: 'p',
-        workspaceDir: './workspaces/tester', allowedTools: [],
+        workspaceDir: './workspaces/tester',
       },
     };
     buildExportZip(workspaceDir, manifest, zipPath);
@@ -235,7 +231,7 @@ describe('agent import — manifest validation', () => {
       format: FORMAT,
       granclawVersion: '0.1.0',
       exportedAt: 1,
-      agent: { id: 'a', name: 'A', model: 'm', provider: 'p', workspaceDir: 'w', allowedTools: [] },
+      agent: { id: 'a', name: 'A', model: 'm', provider: 'p', workspaceDir: 'w' },
     }));
     expect(result.ok).toBe(true);
   });
@@ -285,7 +281,7 @@ describe('agent export → import round-trip on disk', () => {
       format: FORMAT, granclawVersion: '0.1.0', exportedAt: Date.now(),
       agent: {
         id: 'roundtrip', name: 'Round Trip', model: 'm', provider: 'p',
-        workspaceDir: './workspaces/roundtrip', allowedTools: ['filesystem'],
+        workspaceDir: './workspaces/roundtrip',
       },
     };
     buildExportZip(sourceWorkspace, manifest, zipPath);

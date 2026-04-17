@@ -4,7 +4,6 @@ export interface Agent {
   id: string;
   name: string;
   model: string;
-  allowedTools: string[];
   bigBrother: { enabled: boolean };
   sessionId: string | null;
   /** 'active' = has ever run a session, 'idle' = never run. Retained for

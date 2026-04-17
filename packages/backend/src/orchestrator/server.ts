@@ -243,7 +243,6 @@ export function createServer() {
         id: m.config.id,
         name: agentName ?? m.config.name,
         model: m.config.model,
-        allowedTools: m.config.allowedTools,
         wsPort: m.wsPort,
         bbPort: null,
         pid: m.pid,
@@ -306,7 +305,6 @@ export function createServer() {
       model: model ?? 'claude-sonnet-4-5',
       ...(provider ? { provider } : {}),
       workspaceDir: workspaceDir?.trim() || `./workspaces/${id}`,
-      allowedTools: ['filesystem', 'browser', 'task-manager'],
     };
 
     // Save to config file
@@ -791,8 +789,7 @@ export function createServer() {
   //       "name": "Lucia",
   //       "model": "...",
   //       "provider": "...",
-  //       "workspaceDir": "./workspaces/lucia",
-  //       "allowedTools": [...]
+  //       "workspaceDir": "./workspaces/lucia"
   //     }
   //   }
   //

@@ -140,7 +140,7 @@ async function executeAgentStep(
   config: Record<string, unknown>,
   prevOutput: unknown,
   allResults: StepResult[],
-  agent: { id: string; name: string; model: string; workspaceDir: string; allowedTools: string[] },
+  agent: { id: string; name: string; model: string; workspaceDir: string },
   channelId: string
 ): Promise<unknown> {
   const rawPrompt = config.prompt as string;

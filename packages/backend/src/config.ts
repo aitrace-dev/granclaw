@@ -9,7 +9,6 @@ export interface AgentConfig {
   /** Which provider's API key to use (e.g. "google", "openrouter"). Falls back to first configured. */
   provider?: string;
   workspaceDir: string;
-  allowedTools: string[];
   /** @deprecated Guardian not yet implemented — kept for legacy configs */
   bigBrother?: { enabled: boolean };
 }

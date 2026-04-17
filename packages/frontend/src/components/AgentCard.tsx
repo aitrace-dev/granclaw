@@ -30,15 +30,6 @@ export function AgentCard({ agent }: Props) {
       {/* Model */}
       <span className="font-mono text-xs text-secondary">{agent.model}</span>
 
-      {/* Tools */}
-      <div className="flex flex-wrap gap-1">
-        {agent.allowedTools.map((t) => (
-          <span key={t} className="rounded bg-surface-container-high px-1.5 py-0.5 font-mono text-[10px] text-on-surface-variant">
-            {t}
-          </span>
-        ))}
-      </div>
-
       {/* Actions */}
       <div className="flex gap-2 pt-1">
         <Link

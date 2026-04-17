@@ -26,6 +26,7 @@ import telegramifyMarkdown from 'telegramify-markdown';
 import { flattenMarkdownTables } from '../lib/flatten-markdown-tables.js';
 import { TelegramHttpClient } from './telegram-http-client.js';
 import { enqueue } from '../agent-db.js';
+import { recordInboundChat } from './telegram-chats.js';
 import {
   detectLanguage,
   ackText,
@@ -73,6 +74,10 @@ export class TelegramAdapter {
       const chatId = msg.chat.id;
       const channelId = `telegram:${chatId}`;
       console.log(`[agent:${this.agentId}] Telegram message from chat ${chatId}`);
+
+      // Remember this chat so the telegram_send tool can default to it and
+      // refuse to send to cold (never-inbound) chat_ids.
+      recordInboundChat(this.workspaceDir, chatId);
 
       // Tear down any leftover state from a prior turn (shouldn't happen
       // because the queue is per-channel, but defensive)

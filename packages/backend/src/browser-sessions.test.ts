@@ -142,7 +142,7 @@ describe('backend reconciliation', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'granclaw-home-'));
     process.env.GRANCLAW_HOME = home;
     fs.writeFileSync(path.join(home, 'agents.config.json'), JSON.stringify({
-      agents: [{ id: 'tester', name: 'tester', model: 'claude-sonnet-4-5', workspaceDir: tmp, allowedTools: [], bigBrother: { enabled: false } }],
+      agents: [{ id: 'tester', name: 'tester', model: 'claude-sonnet-4-5', workspaceDir: tmp, bigBrother: { enabled: false } }],
     }));
 
     mod = await import('./browser-sessions.js');

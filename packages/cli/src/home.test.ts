@@ -69,7 +69,7 @@ describe('seedHomeIfNeeded', () => {
 
   it('does not overwrite existing agents.config.json', () => {
     fs.mkdirSync(tmpHome, { recursive: true });
-    fs.writeFileSync(path.join(tmpHome, 'agents.config.json'), '{"agents":[{"id":"existing","name":"existing","model":"x","workspaceDir":"./x","allowedTools":[]}]}\n');
+    fs.writeFileSync(path.join(tmpHome, 'agents.config.json'), '{"agents":[{"id":"existing","name":"existing","model":"x","workspaceDir":"./x"}]}\n');
     seedHomeIfNeeded(tmpHome, tmpTemplates);
     const content = fs.readFileSync(path.join(tmpHome, 'agents.config.json'), 'utf-8');
     expect(JSON.parse(content).agents[0].id).toBe('existing');
@@ -78,7 +78,7 @@ describe('seedHomeIfNeeded', () => {
   it('is idempotent when called twice', () => {
     seedHomeIfNeeded(tmpHome, tmpTemplates);
     // Mutate the file to prove the second call does not overwrite
-    fs.writeFileSync(path.join(tmpHome, 'agents.config.json'), '{"agents":[{"id":"mutated","name":"mutated","model":"x","workspaceDir":"./x","allowedTools":[]}]}\n');
+    fs.writeFileSync(path.join(tmpHome, 'agents.config.json'), '{"agents":[{"id":"mutated","name":"mutated","model":"x","workspaceDir":"./x"}]}\n');
     seedHomeIfNeeded(tmpHome, tmpTemplates);
     const content = fs.readFileSync(path.join(tmpHome, 'agents.config.json'), 'utf-8');
     expect(JSON.parse(content).agents[0].id).toBe('mutated');

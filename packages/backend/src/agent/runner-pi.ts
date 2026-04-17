@@ -588,28 +588,29 @@ export async function runAgent(
         async execute(
           _toolCallId: string,
           params: { text: string; chat_id?: number; parse_mode?: string },
-        ): Promise<string> {
+        ): Promise<{ content: { type: 'text'; text: string }[] }> {
+          const reply = (text: string) => ({ content: [{ type: 'text' as const, text }] });
           const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
           if (!token) {
-            return 'error: TELEGRAM_BOT_TOKEN is not configured. Tell the user to go to Settings → Secrets and add their Telegram bot token, then message the bot once so you know the chat_id.';
+            return reply('error: TELEGRAM_BOT_TOKEN is not configured. Tell the user to go to Settings → Secrets and add their Telegram bot token, then message the bot once so you know the chat_id.');
           }
           if (!params.text || !params.text.trim()) {
-            return 'error: text is required and must be non-empty';
+            return reply('error: text is required and must be non-empty');
           }
           const target = params.chat_id ?? defaultChatId(workspaceDir);
           if (target === null) {
-            return 'error: no known Telegram chat for this agent. Ask the user to message the bot at least once so I can learn their chat_id.';
+            return reply('error: no known Telegram chat for this agent. Ask the user to message the bot at least once so I can learn their chat_id.');
           }
           if (!isKnownChat(workspaceDir, target)) {
             const known = listKnownChats(workspaceDir);
-            return `error: chat_id ${target} has never messaged this agent — refusing to cold-contact. Known chats: ${JSON.stringify(known)}.`;
+            return reply(`error: chat_id ${target} has never messaged this agent — refusing to cold-contact. Known chats: ${JSON.stringify(known)}.`);
           }
           // Rate-limit: 10 sends per rolling 60s window per agent subprocess.
           const now = Date.now();
           while (sendTimestamps.length && now - sendTimestamps[0] > 60_000) sendTimestamps.shift();
           if (sendTimestamps.length >= RATE_LIMIT_PER_MIN) {
             const retryInSec = Math.ceil((60_000 - (now - sendTimestamps[0])) / 1000);
-            return `error: rate limit — max ${RATE_LIMIT_PER_MIN} Telegram sends/minute. Retry in ${retryInSec}s.`;
+            return reply(`error: rate limit — max ${RATE_LIMIT_PER_MIN} Telegram sends/minute. Retry in ${retryInSec}s.`);
           }
           sendTimestamps.push(now);
           try {
@@ -630,9 +631,9 @@ export async function runAgent(
                 content: params.text,
               });
             } catch { /* non-fatal */ }
-            return `sent message_id=${res.message_id} to chat_id=${target}`;
+            return reply(`sent message_id=${res.message_id} to chat_id=${target}`);
           } catch (err) {
-            return `error: ${err instanceof Error ? err.message : String(err)}`;
+            return reply(`error: ${err instanceof Error ? err.message : String(err)}`);
           }
         },
       });

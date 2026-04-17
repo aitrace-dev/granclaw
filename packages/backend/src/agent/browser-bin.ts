@@ -70,6 +70,29 @@ export async function resolveBrowserBinary(agentId: string, workspaceDir: string
     if (resolution) return resolution;
   }
 
+  // Extension-bridge: per-agent CDP URL file written by an orchestrator-side
+  // extension. Lets agent subprocesses (which don't load extensions) still
+  // connect to a provider-managed browser — read the file, extract the port,
+  // connect via --cdp. Enterprise (GoLogin) uses this to route agent browsing
+  // through Orbita started in the orchestrator process.
+  const cdpFile = `/tmp/granclaw-cdp-${agentId}.url`;
+  if (fs.existsSync(cdpFile)) {
+    try {
+      const wsUrl = fs.readFileSync(cdpFile, 'utf8').trim();
+      const port = new URL(wsUrl.replace('ws://', 'http://')).port;
+      if (port) {
+        return {
+          bin: process.env.AGENT_BROWSER_BIN ?? 'agent-browser',
+          preCommandArgs: ['--cdp', port, '--session', agentId],
+          postCommandArgs: [],
+          env: {},
+          isRemote: false,
+          recordingSupported: true,
+        };
+      }
+    } catch {}
+  }
+
   // Default: local agent-browser with stealth + workspace profile dir.
   const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
   const profileDir = path.join(workspaceDir, '.browser-profile');

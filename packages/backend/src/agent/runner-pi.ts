@@ -45,6 +45,7 @@ import { stealthArgv } from '../browser/stealth.js';
 import { resolveBrowserBinary, buildArgv } from './browser-bin.js';
 import { TelegramHttpClient } from './telegram-http-client.js';
 import { defaultChatId, isKnownChat, listKnownChats } from './telegram-chats.js';
+import { sendFormattedTelegramMessage } from './telegram-markdown.js';
 import { saveMessage } from '../messages-db.js';
 
 const execFileAsync = promisify(execFile);
@@ -580,14 +581,13 @@ export async function runAgent(
           type: 'object',
           required: ['text'],
           properties: {
-            text: { type: 'string', description: 'The message body (supports Telegram MarkdownV2 if parse_mode=MarkdownV2).' },
+            text: { type: 'string', description: 'The message body. Use standard markdown (bold **x**, italic *x*, lists, links, code fences). Tables are flattened; special characters are auto-escaped for Telegram MarkdownV2. Long messages auto-chunk at ~4000 chars.' },
             chat_id: { type: 'number', description: 'Optional. Numeric Telegram chat_id. Defaults to the user\'s most-recent inbound chat.' },
-            parse_mode: { type: 'string', enum: ['MarkdownV2', 'HTML'], description: 'Optional. Telegram formatting mode.' },
           },
         },
         async execute(
           _toolCallId: string,
-          params: { text: string; chat_id?: number; parse_mode?: string },
+          params: { text: string; chat_id?: number },
         ): Promise<{ content: { type: 'text'; text: string }[] }> {
           const reply = (text: string) => ({ content: [{ type: 'text' as const, text }] });
           const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -615,9 +615,11 @@ export async function runAgent(
           sendTimestamps.push(now);
           try {
             const telegram = new TelegramHttpClient(token);
-            const res = await telegram.sendMessage(target, params.text, {
-              parse_mode: params.parse_mode,
-            });
+            // Route through the shared formatter so proactive sends get the
+            // same markdown-to-MarkdownV2 escape + table-flattening + chunking
+            // pipeline that regular replies do. The agent just writes normal
+            // markdown; we handle the rest.
+            await sendFormattedTelegramMessage(telegram, target, params.text);
             // Persist to the target telegram channel's history so the chat
             // view in the dashboard shows the proactive message alongside
             // regular replies. The current turn's channel already gets a
@@ -631,7 +633,7 @@ export async function runAgent(
                 content: params.text,
               });
             } catch { /* non-fatal */ }
-            return reply(`sent message_id=${res.message_id} to chat_id=${target}`);
+            return reply(`sent to chat_id=${target}`);
           } catch (err) {
             return reply(`error: ${err instanceof Error ? err.message : String(err)}`);
           }

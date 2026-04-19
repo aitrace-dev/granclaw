@@ -312,14 +312,14 @@ describe('managed provider config', () => {
         provider: 'openrouter',
         apiKey: 'gck_usr_testuser',
         baseUrl: 'http://proxy:4002/v1',
-        defaultModel: 'google/gemini-3-flash-preview',
+        defaultModel: 'z-ai/glm-5-turbo',
         label: 'Free Tier',
       },
     }));
     const providers = listProviders();
     expect(providers[0]).toMatchObject({
       provider: 'openrouter',
-      model: 'google/gemini-3-flash-preview',
+      model: 'z-ai/glm-5-turbo',
       managed: true,
       label: 'Free Tier',
       baseUrl: 'http://proxy:4002/v1',
@@ -332,7 +332,7 @@ describe('managed provider config', () => {
         provider: 'openrouter',
         apiKey: 'gck_usr_testuser',
         baseUrl: 'http://proxy:4002/v1',
-        defaultModel: 'google/gemini-3-flash-preview',
+        defaultModel: 'z-ai/glm-5-turbo',
         label: 'Free Tier',
       },
     }));
@@ -345,7 +345,7 @@ describe('managed provider config', () => {
       llm: {
         provider: 'openrouter',
         apiKey: 'gck_usr_fallback',
-        defaultModel: 'google/gemini-3-flash-preview',
+        defaultModel: 'z-ai/glm-5-turbo',
         label: 'Free Tier',
       },
     }));
@@ -363,7 +363,7 @@ describe('managed provider config', () => {
         provider: 'openrouter',
         apiKey: 'gck_usr_testuser',
         baseUrl: 'http://proxy:4002/v1',
-        defaultModel: 'google/gemini-3-flash-preview',
+        defaultModel: 'z-ai/glm-5-turbo',
         label: 'Free Tier',
       },
     }));
@@ -376,7 +376,7 @@ describe('managed provider config', () => {
         provider: 'openrouter',
         apiKey: 'gck_usr_testuser',
         baseUrl: 'http://proxy:4002/v1',
-        defaultModel: 'google/gemini-3-flash-preview',
+        defaultModel: 'z-ai/glm-5-turbo',
         label: 'Free Tier',
       },
     }));

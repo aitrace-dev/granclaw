@@ -43,7 +43,7 @@ export const PROVIDER_MODELS: Record<string, ModelOption[]> = {
   // Enterprise-managed provider — routes through the internal LLM proxy.
   // Not listed in PROVIDERS (users cannot add it manually).
   freetier: [
-    { value: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash — fast, 1M ctx' },
+    { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo — enterprise default' },
   ],
 };
 

@@ -53,7 +53,7 @@ const TAB_POLL_INTERVAL_MS = 2000;
 const LIVE_VIEW_WIDTH = 1280;
 const LIVE_VIEW_HEIGHT = 800;
 
-interface CdpPage {
+export interface CdpPage {
   id: string;
   url: string;
   title: string;
@@ -80,6 +80,15 @@ interface Stream {
   disposed: boolean;
   /** CDP flat session ID for browser-level connections (cloud browsers). */
   flatSessionId: string | null;
+  /**
+   * Most recently created page target on this browser, as learned from
+   * Target.targetCreated events. Preferred by pickCdpPageForTab when set —
+   * disambiguates the "multiple tabs at the same URL" case (e.g. a stale
+   * login-wall tab and the agent's fresh logged-in tab both sitting at
+   * reddit.com). Null until the tracker observes its first page target.
+   */
+  preferredTargetId: string | null;
+  targetTrackerWs: WebSocket | null;
 }
 
 const streams = new Map<string, Stream>();
@@ -323,11 +332,20 @@ async function fetchCdpPages(browserCdpUrl: string): Promise<CdpPage[]> {
  *      window between a `tab new <url>` and agent-browser finishing its
  *      navigation, when the tab temporarily has a different URL.
  */
-function pickCdpPageForTab(pages: CdpPage[], activeUrl: string): CdpPage | null {
+export function pickCdpPageForTab(
+  pages: CdpPage[],
+  activeUrl: string,
+  preferredTargetId?: string | null,
+): CdpPage | null {
   if (pages.length === 0) return null;
 
+  if (preferredTargetId) {
+    const hit = pages.find((p) => p.id === preferredTargetId);
+    if (hit) return hit;
+  }
+
   const exact = pages.filter((p) => p.url === activeUrl);
-  if (exact.length > 0) return exact[0];
+  if (exact.length > 0) return exact[exact.length - 1];
 
   const isInert = (url: string): boolean =>
     !url ||
@@ -339,6 +357,53 @@ function pickCdpPageForTab(pages: CdpPage[], activeUrl: string): CdpPage | null 
 
   const real = pages.filter((p) => !isInert(p.url));
   return real.length > 0 ? real[real.length - 1] : pages[pages.length - 1];
+}
+
+/**
+ * Open a sidecar CDP connection to the browser-level endpoint and subscribe
+ * to `Target.targetCreated` so we can learn the truly newest page target
+ * (what the agent just opened). Without this, pickCdpPageForTab has to fall
+ * back to URL match — which ambiguates when two tabs share a URL (the
+ * classic bluggie "stale login wall + fresh logged-in tab" case).
+ *
+ * Best-effort: if the tracker can't connect, the picker still works via its
+ * URL heuristic, just with the duplicate-URL ambiguity.
+ */
+function startTargetTracker(stream: Stream): void {
+  if (!stream.browserCdpUrl || stream.targetTrackerWs) return;
+  let ws: WebSocket;
+  try {
+    ws = new WebSocket(stream.browserCdpUrl);
+  } catch {
+    return;
+  }
+  stream.targetTrackerWs = ws;
+  ws.on('open', () => {
+    try {
+      ws.send(JSON.stringify({ id: 1, method: 'Target.setDiscoverTargets', params: { discover: true } }));
+    } catch { /* peer already gone */ }
+  });
+  ws.on('message', (data) => {
+    try {
+      const msg = JSON.parse(data.toString()) as {
+        method?: string;
+        params?: { targetInfo?: { targetId?: string; type?: string } };
+      };
+      if (msg.method === 'Target.targetCreated' && msg.params?.targetInfo?.type === 'page' && msg.params.targetInfo.targetId) {
+        stream.preferredTargetId = msg.params.targetInfo.targetId;
+      }
+    } catch { /* malformed frame, ignore */ }
+  });
+  const clear = (): void => { if (stream.targetTrackerWs === ws) stream.targetTrackerWs = null; };
+  ws.on('close', clear);
+  ws.on('error', clear);
+}
+
+function stopTargetTracker(stream: Stream): void {
+  if (stream.targetTrackerWs) {
+    try { stream.targetTrackerWs.close(); } catch { /* already gone */ }
+    stream.targetTrackerWs = null;
+  }
 }
 
 /**
@@ -492,7 +557,7 @@ async function pollActiveTab(stream: Stream): Promise<void> {
   const pages = await fetchCdpPages(stream.browserCdpUrl);
   if (pages.length === 0) return;
 
-  const target = pickCdpPageForTab(pages, active.url);
+  const target = pickCdpPageForTab(pages, active.url, stream.preferredTargetId);
   if (!target) return;
 
   if (target.id === stream.currentTargetId) return;
@@ -673,6 +738,8 @@ async function attachChrome(stream: Stream): Promise<UnavailableReason | null> {
     await raiseViewport(stream.agentId, stream.workspaceDir);
   }
 
+  startTargetTracker(stream);
+
   const active = externalCdp ? null : await getActiveTab(stream.agentId, stream.workspaceDir);
   const pages = await fetchCdpPages(stream.browserCdpUrl);
 
@@ -687,9 +754,7 @@ async function attachChrome(stream: Stream): Promise<UnavailableReason | null> {
 
   if (pages.length === 0) return 'no_page_targets';
 
-  const target = active
-    ? pickCdpPageForTab(pages, active.url)
-    : pickCdpPageForTab(pages, '');
+  const target = pickCdpPageForTab(pages, active?.url ?? '', stream.preferredTargetId);
   if (!target) return 'no_suitable_target';
 
   attachPageCdp(stream, target);
@@ -700,6 +765,7 @@ async function attachChrome(stream: Stream): Promise<UnavailableReason | null> {
 function disposeStream(key: string, stream: Stream): void {
   stream.disposed = true;
   stopPollLoop(stream);
+  stopTargetTracker(stream);
   detachPageCdp(stream);
   streams.delete(key);
 }
@@ -744,6 +810,8 @@ export function handleBrowserLiveUpgrade(
         pollTimer: null,
         disposed: false,
         flatSessionId: null,
+        preferredTargetId: null,
+        targetTrackerWs: null,
       };
       streams.set(key, stream);
 

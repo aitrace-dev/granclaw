@@ -209,11 +209,11 @@ export async function startRecording(handle: BrowserSessionHandle): Promise<bool
   // `video: "recording.webm"` in meta.json but no file on disk, and the
   // replay view shows a dead "no recording" card forever.
   //
-  // Poll for the WebM file to appear. ffmpeg typically writes the EBML
-  // header within ~100ms of launch. If nothing shows up within the
-  // window below, treat the start as failed and leave meta.video = null
-  // so the frontend has an honest signal.
-  const FILE_APPEAR_TIMEOUT_MS = 1500;
+  // Poll for the WebM file to appear. ffmpeg cold-starts can take 2–3s
+  // under Docker with a loaded host (e.g. right after /sync-server-image
+  // recreates containers). 5s is enough headroom that a slow cold start
+  // isn't misclassified as "ffmpeg missing".
+  const FILE_APPEAR_TIMEOUT_MS = 5000;
   const FILE_APPEAR_POLL_MS = 100;
   const deadline = Date.now() + FILE_APPEAR_TIMEOUT_MS;
   let fileOk = false;
@@ -227,7 +227,7 @@ export async function startRecording(handle: BrowserSessionHandle): Promise<bool
 
   if (!fileOk) {
     console.warn(
-      `[browser/session-manager] record start succeeded but ${recordingPath} did not materialize within ${FILE_APPEAR_TIMEOUT_MS}ms — is ffmpeg installed on the host?`,
+      `[browser/session-manager] record start reported success but ${recordingPath} did not materialize within ${FILE_APPEAR_TIMEOUT_MS}ms — check that ffmpeg is installed and the host is not overloaded`,
     );
     // Best-effort stop so we don't leave a zombie record-state that would
     // make the next session's tryStart hit "already active".

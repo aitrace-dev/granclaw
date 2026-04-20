@@ -12,8 +12,9 @@
  * forever in the frontend replay view.
  *
  * After the fix, startRecording() polls for the WebM file to appear
- * within ~1.5s and returns false if it never materializes, leaving
- * meta.video as null so the frontend has an honest signal.
+ * within ~5s (bumped from 1.5s — Docker cold start under load can take
+ * 2–3s) and returns false if it never materializes, leaving meta.video
+ * as null so the frontend has an honest signal.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -68,7 +69,7 @@ describe('startRecording', () => {
 
     const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
     expect(meta.video, 'meta.video must stay null so the frontend does not falsely advertise a recording').toBeNull();
-  });
+  }, 10_000);
 
   it('returns true and sets meta.video="recording.webm" when the WebM file actually materializes', async () => {
     execFileHandler = (_bin, args) => {

@@ -123,6 +123,9 @@ describe('relayInputToChrome — CDP input relay for takeover page', () => {
       key: 'Enter',
       code: 'Enter',
       modifiers: 0,
+      // Enter rawKeyDown carries text:'\r' so CDP form submission fires
+      // (see browser-live.ts — added to fix LinkedIn / search-box submits).
+      text: '\r',
     });
   });
 

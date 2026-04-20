@@ -25,6 +25,7 @@ import { runAgent, stopAgent, bootstrapWorkspace } from './runner-pi.js';
 import { saveMessage, getProactiveMessagesSinceLastUser } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 import { forceCloseActiveSession } from '../browser-sessions.js';
+import { assembleAssistantMessage, type AssistantChunk } from './message-assembly.js';
 import {
   hasTakeover,
   cancelTakeoverTimer,
@@ -171,7 +172,10 @@ function main() {
       // user would see an empty chat while the agent was clearly still
       // working. Persisting as-they-happen makes the live state
       // refetchable. See regression A (view-switch-state.spec.ts).
-      let fullResponse = '';
+      // Buffer streamed chunks so we can assemble the final assistant message
+      // with proper paragraph breaks between text blocks bracketing tool_calls.
+      // See agent/message-assembly.ts — fixes bluggie's "first.I can see" run-on.
+      const chunkBuffer: AssistantChunk[] = [];
       let toolCallCount = 0;
 
       // Inject context message if a human takeover was pending
@@ -207,7 +211,7 @@ function main() {
       await runAgent(agent!, messageText, (chunk) => {
         broadcastToChannel(job.channelId, { type: 'chunk', chunk });
         if (chunk.type === 'text') {
-          fullResponse += chunk.text;
+          chunkBuffer.push({ type: 'text', text: chunk.text });
           if (isTelegramJob) {
             telegramAdapter!.appendChunk(job.channelId, chunk.text);
           }
@@ -227,6 +231,7 @@ function main() {
         }
         if (chunk.type === 'tool_call') {
           const tcString = `${chunk.tool}(${JSON.stringify(chunk.input)})`;
+          chunkBuffer.push({ type: 'tool_call', tool: chunk.tool, input: chunk.input });
           toolCallCount++;
           try {
             saveMessage({
@@ -247,6 +252,7 @@ function main() {
 
       // Persist the final assistant message. tool_call rows were already
       // saved one-by-one above, so no batch here.
+      const fullResponse = assembleAssistantMessage(chunkBuffer);
       try {
         if (fullResponse) {
           saveMessage({

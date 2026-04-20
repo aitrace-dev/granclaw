@@ -95,15 +95,42 @@ function isWebmValid(filePath: string): boolean {
 }
 
 /**
+ * Named volumes survive container recreation, so a recording.webm from a
+ * previous instance's session can sit next to a fresh meta.json. If the
+ * file's mtime predates the session's createdAt, it's an orphan — treat
+ * as invalid so the replay view doesn't serve the wrong video.
+ */
+function isFileFromThisSession(filePath: string, createdAt: number): boolean {
+  try {
+    const st = fs.statSync(filePath);
+    return st.mtimeMs >= createdAt;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Reconcile an "active" session that looks abandoned. Mutates meta.json in
  * place and returns the updated value. No-op for non-active statuses.
+ *
+ * Two triggers: heartbeat too old (15 min), or the caller-supplied
+ * probeAlive says the underlying browser is dead. The probe lets enterprise
+ * flip sessions immediately when Orbita is killed, instead of waiting out
+ * the heartbeat timeout.
  */
-function reconcile(metaPath: string, meta: MetaJson): MetaJson {
+function reconcile(
+  metaPath: string,
+  meta: MetaJson,
+  probeAlive?: (sessionId: string) => boolean,
+): MetaJson {
   if (meta.status !== 'active') return meta;
+
   const hb = meta.heartbeat ?? 0;
-  if (hb === 0) return meta;
-  const age = Date.now() - hb;
-  if (age <= STALE_TIMEOUT_MS) return meta;
+  const age = hb > 0 ? Date.now() - hb : 0;
+  const heartbeatExpired = hb > 0 && age > STALE_TIMEOUT_MS;
+  const probeDead = probeAlive ? probeAlive(meta.id) === false : false;
+
+  if (!heartbeatExpired && !probeDead) return meta;
 
   const updated: MetaJson = {
     ...meta,
@@ -117,7 +144,11 @@ function reconcile(metaPath: string, meta: MetaJson): MetaJson {
 function metaToSession(meta: MetaJson, sessionDir: string): BrowserSession {
   const video = meta.video ?? null;
   const videoPath = video ? path.join(sessionDir, video) : null;
-  const videoValid = videoPath != null && fs.existsSync(videoPath) && isWebmValid(videoPath);
+  const videoValid =
+    videoPath != null &&
+    fs.existsSync(videoPath) &&
+    isWebmValid(videoPath) &&
+    isFileFromThisSession(videoPath, meta.createdAt);
   const durationMs = meta.closedAt != null ? meta.closedAt - meta.createdAt : null;
 
   return {
@@ -139,7 +170,17 @@ function metaToSession(meta: MetaJson, sessionDir: string): BrowserSession {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function listSessions(agentId: string): BrowserSession[] {
+export interface ListSessionsOptions {
+  /**
+   * Callback the reconciler uses to verify liveness when meta.json says
+   * 'active'. Returns true for alive, false for dead. Enterprise wires this
+   * to a CDP `/json/version` probe so a killed Orbita flips to 'crashed'
+   * immediately instead of waiting out the 15-min heartbeat.
+   */
+  probeAlive?: (sessionId: string) => boolean;
+}
+
+export function listSessions(agentId: string, opts?: ListSessionsOptions): BrowserSession[] {
   const sessionsDir = getSessionsDir(agentId);
   if (!fs.existsSync(sessionsDir)) return [];
 
@@ -152,14 +193,18 @@ export function listSessions(agentId: string): BrowserSession[] {
     const metaPath = path.join(sessionDir, 'meta.json');
     const raw = readMeta(metaPath);
     if (!raw) continue;
-    const meta = reconcile(metaPath, raw);
+    const meta = reconcile(metaPath, raw, opts?.probeAlive);
     sessions.push(metaToSession(meta, sessionDir));
   }
 
   return sessions.sort((a, b) => b.createdAt - a.createdAt);
 }
 
-export function getSession(agentId: string, sessionId: string): BrowserSession | null {
+export function getSession(
+  agentId: string,
+  sessionId: string,
+  opts?: ListSessionsOptions,
+): BrowserSession | null {
   const sessionsDir = getSessionsDir(agentId);
   const sessionDir = path.resolve(sessionsDir, sessionId);
   if (!sessionDir.startsWith(sessionsDir + path.sep)) return null;
@@ -170,7 +215,7 @@ export function getSession(agentId: string, sessionId: string): BrowserSession |
   const raw = readMeta(metaPath);
   if (!raw) return null;
 
-  const meta = reconcile(metaPath, raw);
+  const meta = reconcile(metaPath, raw, opts?.probeAlive);
   return metaToSession(meta, sessionDir);
 }
 
@@ -193,6 +238,43 @@ export function getVideoPath(agentId: string, sessionId: string): string | null 
   if (!isWebmValid(filePath)) return null;
 
   return filePath;
+}
+
+/**
+ * Flip every 'active' session for this agent to 'crashed' with a fresh
+ * closedAt. Called once at backend boot so sessions that were in-flight
+ * when the container died (sync-server-image does `docker rm -f` without
+ * graceful shutdown) don't advertise status:"active" forever.
+ *
+ * Returns the number of sessions flipped. Best-effort — errors on
+ * individual meta.json files are swallowed so one corrupt session doesn't
+ * block the boot finalizer.
+ */
+export function finalizeAllActiveSessions(agentId: string): number {
+  const sessionsDir = getSessionsDir(agentId);
+  if (!fs.existsSync(sessionsDir)) return 0;
+
+  let flipped = 0;
+  const now = Date.now();
+  const entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith('sess-')) continue;
+    const metaPath = path.join(sessionsDir, entry.name, 'meta.json');
+    const meta = readMeta(metaPath);
+    if (!meta || meta.status !== 'active') continue;
+    try {
+      writeMeta(metaPath, { ...meta, status: 'crashed', closedAt: now });
+      flipped += 1;
+    } catch { /* best effort */ }
+  }
+
+  try {
+    const activeFile = path.join(sessionsDir, '.active-session');
+    if (fs.existsSync(activeFile)) fs.writeFileSync(activeFile, '');
+  } catch { /* best effort */ }
+
+  return flipped;
 }
 
 /**

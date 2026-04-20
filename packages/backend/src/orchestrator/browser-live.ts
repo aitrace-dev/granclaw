@@ -102,6 +102,34 @@ function streamKey(agentId: string, sessionId: string): string {
   return `${agentId}::${sessionId}`;
 }
 
+export type UnavailableReason =
+  | 'cdp_url_missing'
+  | 'no_page_targets'
+  | 'no_suitable_target'
+  | 'agent_browser_not_running';
+
+/**
+ * Build the typed fallback frame the relay sends when it cannot attach. The
+ * frontend uses `{ type: 'unavailable', reason }` to render a useful message
+ * ("browser isn't running yet", "no open tab") instead of sitting silent.
+ *
+ * Previously the relay sent a free-form `{ type: 'error', reason: 'some string' }`
+ * and the frontend had nothing structured to match on — bluggie's empty
+ * livestream was the observable symptom of that silence.
+ */
+export function buildUnavailableFrame(opts: { reason: UnavailableReason; detail?: string }): {
+  type: 'unavailable';
+  reason: UnavailableReason;
+  detail?: string;
+} {
+  const frame: { type: 'unavailable'; reason: UnavailableReason; detail?: string } = {
+    type: 'unavailable',
+    reason: opts.reason,
+  };
+  if (opts.detail) frame.detail = opts.detail;
+  return frame;
+}
+
 /**
  * Minimal interface for the WebSocket we send CDP commands to. Lets tests
  * pass a fake `send` function without depending on the real `ws` module.
@@ -632,7 +660,7 @@ function attachBrowserLevelCdp(stream: Stream, wsUrl: string): void {
  * Initial attach: discover the daemon, raise the viewport, find the active
  * tab, bind screencast, start the poll loop.
  */
-async function attachChrome(stream: Stream): Promise<string | null> {
+async function attachChrome(stream: Stream): Promise<UnavailableReason | null> {
   const key = streamKey(stream.agentId, stream.sessionId);
   const externalCdp = externalCdpSessions.get(key);
 
@@ -640,7 +668,7 @@ async function attachChrome(stream: Stream): Promise<string | null> {
     stream.browserCdpUrl = externalCdp;
   } else {
     const browserCdp = await discoverCdpUrl(stream.agentId, stream.workspaceDir);
-    if (!browserCdp) return 'agent-browser not running or CDP unavailable';
+    if (!browserCdp) return 'cdp_url_missing';
     stream.browserCdpUrl = browserCdp;
     await raiseViewport(stream.agentId, stream.workspaceDir);
   }
@@ -657,12 +685,12 @@ async function attachChrome(stream: Stream): Promise<string | null> {
     return null;
   }
 
-  if (pages.length === 0) return 'no page targets available';
+  if (pages.length === 0) return 'no_page_targets';
 
   const target = active
     ? pickCdpPageForTab(pages, active.url)
     : pickCdpPageForTab(pages, '');
-  if (!target) return 'no suitable page target';
+  if (!target) return 'no_suitable_target';
 
   attachPageCdp(stream, target);
   if (!externalCdp) startPollLoop(stream);
@@ -719,9 +747,9 @@ export function handleBrowserLiveUpgrade(
       };
       streams.set(key, stream);
 
-      void attachChrome(stream).then((err) => {
-        if (err) {
-          sendToSubscribers(stream!, { type: 'error', reason: err });
+      void attachChrome(stream).then((reason) => {
+        if (reason) {
+          sendToSubscribers(stream!, buildUnavailableFrame({ reason }));
         }
       });
     } else {

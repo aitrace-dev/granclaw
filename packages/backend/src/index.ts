@@ -4,6 +4,8 @@ import { createServer } from './orchestrator/server.js';
 import { startAllAgents, plannedAgentPorts } from './orchestrator/agent-manager.js';
 import { startScheduler } from './scheduler.js';
 import { initTelemetry, capture, shutdownTelemetry } from './telemetry.js';
+import { getAgents } from './config.js';
+import { finalizeAllActiveSessions } from './browser-sessions.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -44,6 +46,21 @@ preflight()
   .then(() => {
     initTelemetry();
     capture('server_started', { port: PORT, nodeVersion: process.version });
+
+    // Flip any sessions left 'active' by the previous container lifecycle
+    // to 'crashed'. sync-server-image recreates containers with `docker rm -f`
+    // — no graceful shutdown, so meta.json writes never happen.
+    for (const agent of getAgents()) {
+      try {
+        const flipped = finalizeAllActiveSessions(agent.id);
+        if (flipped > 0) {
+          console.log(`[orchestrator] finalized ${flipped} leftover active session(s) for ${agent.id}`);
+        }
+      } catch (err) {
+        console.error(`[orchestrator] finalizeAllActiveSessions failed for ${agent.id}:`, err);
+      }
+    }
+
     startAllAgents();
     startScheduler();
     const server = createServer();

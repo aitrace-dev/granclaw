@@ -54,6 +54,17 @@ export interface ExtensionContext {
   registerCdpSession(agentId: string, sessionId: string, cdpUrl: string): void;
   /** Remove a previously registered external CDP session. */
   removeCdpSession(agentId: string, sessionId: string): void;
+  /**
+   * Register a listener that runs when the user clicks "Completed" on the
+   * takeover page. Listeners receive the agentId AFTER the resume message
+   * has been enqueued. Errors are swallowed — the response to the user is
+   * never delayed by listener work.
+   *
+   * Used by the enterprise GoLogin extension to upload fresh cookies from
+   * the running Orbita profile to the GoLogin cloud, so a takeover-driven
+   * login persists across machines and volume wipes.
+   */
+  registerTakeoverResolvedListener(fn: (agentId: string) => void | Promise<void>): void;
   /** Injected library API. */
   lib: LibraryApi;
 }

@@ -33,6 +33,10 @@ import logsRouter from '../routes/logs.js';
 import { integrationsRouter } from '../integrations/routes.js';
 import { loadExtensions } from '../extensions/loader.js';
 import { registerBrowserProvider } from '../agent/browser-bin.js';
+import {
+  registerTakeoverResolvedListener,
+  fireTakeoverResolved,
+} from '../takeover-listeners.js';
 import { getManagedAgents, getManagedAgent, restartAgent, startNewAgent, stopAndRemoveAgent } from './agent-manager.js';
 import { listSecretNames, setSecret, deleteSecret } from '../secrets-vault.js';
 import { getSession, enqueue, getActiveJobs, markFailed } from '../agent-db.js';
@@ -127,6 +131,9 @@ export function createServer() {
     const resumeMsg = formatTakeoverResumeMessage(req.body?.note);
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
     enqueue(workspaceDir, row.agent_id, resumeMsg, row.channel_id);
+    // Fire extension listeners (e.g. GoLogin cloud cookie sync). Fire-and-forget —
+    // a broken listener cannot delay or fail the resolve response.
+    fireTakeoverResolved(row.agent_id);
     res.json({ ok: true });
   });
 
@@ -1393,6 +1400,7 @@ export function createServer() {
     registerBrowserProvider,
     registerCdpSession: registerExternalCdpSession,
     removeCdpSession: removeExternalCdpSession,
+    registerTakeoverResolvedListener,
   }).catch((err: unknown) => {
     console.error('[server] extension loader failed (non-fatal):', err);
   });

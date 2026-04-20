@@ -66,6 +66,8 @@ export function TakeoverPage() {
   const [note, setNote] = useState('');
   const [currentUrl, setCurrentUrl] = useState<string>('');
   const [currentTitle, setCurrentTitle] = useState<string>('');
+  const [urlDraft, setUrlDraft] = useState<string>('');
+  const [urlFocused, setUrlFocused] = useState<boolean>(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -125,6 +127,21 @@ export function TakeoverPage() {
       wsRef.current.send(JSON.stringify(payload));
     }
   }, []);
+
+  // Keep the URL bar in sync with the live tab — but only while the user
+  // isn't typing, so we don't stomp half-typed URLs.
+  useEffect(() => {
+    if (!urlFocused) setUrlDraft(currentUrl || info?.url || '');
+  }, [currentUrl, info?.url, urlFocused]);
+
+  const submitUrl = useCallback(() => {
+    const raw = urlDraft.trim();
+    if (!raw) return;
+    // Prepend https:// when the user types "example.com" — matches the
+    // address-bar ergonomic every browser ships.
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    send({ type: 'navigate', url });
+  }, [urlDraft, send]);
 
   const toViewport = useCallback((clientX: number, clientY: number) => {
     const img = imgRef.current;
@@ -376,15 +393,43 @@ export function TakeoverPage() {
           <span className="w-3 h-3 rounded-full bg-primary/40" />
         </div>
         {/* URL "float" — surface-container-lowest on surface-container, the
-            classic no-border depth trick from DESIGN.md §2. */}
+            classic no-border depth trick from DESIGN.md §2. Editable: Enter
+            navigates; blur reverts to the live tab URL. */}
         <div className="flex-1 flex items-center gap-2 bg-surface-container-lowest rounded-md px-3 py-1.5 min-w-0">
           <span className="text-[11px] text-primary flex-shrink-0" aria-hidden>
             ∎
           </span>
-          <span className="text-[12px] font-mono text-on-surface truncate">
-            {currentUrl || info.url || ''}
-          </span>
-          {currentTitle && (
+          <input
+            type="text"
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onFocus={(e) => {
+              setUrlFocused(true);
+              e.target.select();
+            }}
+            onBlur={() => setUrlFocused(false)}
+            onKeyDown={(e) => {
+              // Swallow here so stage-level handlers (which forward keys
+              // over CDP) don't also type into the live browser.
+              e.stopPropagation();
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submitUrl();
+                (e.currentTarget as HTMLInputElement).blur();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setUrlDraft(currentUrl || info.url || '');
+                (e.currentTarget as HTMLInputElement).blur();
+              }
+            }}
+            onKeyUp={(e) => e.stopPropagation()}
+            onPaste={(e) => e.stopPropagation()}
+            placeholder={t('takeover.urlBarPlaceholder')}
+            spellCheck={false}
+            autoComplete="off"
+            className="flex-1 min-w-0 bg-transparent outline-none text-[12px] font-mono text-on-surface placeholder:text-on-surface-variant/50"
+          />
+          {currentTitle && !urlFocused && (
             <span className="text-[11px] font-body italic text-on-surface-variant/70 flex-shrink-0 hidden md:inline">
               — {currentTitle}
             </span>

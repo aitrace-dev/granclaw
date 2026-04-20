@@ -332,6 +332,18 @@ async function fetchCdpPages(browserCdpUrl: string): Promise<CdpPage[]> {
  *      window between a `tab new <url>` and agent-browser finishing its
  *      navigation, when the tab temporarily has a different URL.
  */
+function isInertUrl(url: string | undefined | null): boolean {
+  return (
+    !url ||
+    url === 'about:blank' ||
+    url.startsWith('chrome://') ||
+    url.startsWith('chrome-extension://') ||
+    url.startsWith('chrome-untrusted://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('view-source:')
+  );
+}
+
 export function pickCdpPageForTab(
   pages: CdpPage[],
   activeUrl: string,
@@ -339,23 +351,20 @@ export function pickCdpPageForTab(
 ): CdpPage | null {
   if (pages.length === 0) return null;
 
+  // Prefer the tracker's recorded targetId — but only if it still points at
+  // a real page. If the tracker landed on an internal target (chrome://newtab,
+  // an extension page, about:blank), fall through to URL match so the
+  // screencast doesn't bind to a target that never paints (bluggie
+  // "waiting for stream" regression).
   if (preferredTargetId) {
     const hit = pages.find((p) => p.id === preferredTargetId);
-    if (hit) return hit;
+    if (hit && !isInertUrl(hit.url)) return hit;
   }
 
   const exact = pages.filter((p) => p.url === activeUrl);
   if (exact.length > 0) return exact[exact.length - 1];
 
-  const isInert = (url: string): boolean =>
-    !url ||
-    url === 'about:blank' ||
-    url.startsWith('chrome://') ||
-    url.startsWith('chrome-untrusted://') ||
-    url.startsWith('devtools://') ||
-    url.startsWith('view-source:');
-
-  const real = pages.filter((p) => !isInert(p.url));
+  const real = pages.filter((p) => !isInertUrl(p.url));
   return real.length > 0 ? real[real.length - 1] : pages[pages.length - 1];
 }
 
@@ -387,10 +396,20 @@ function startTargetTracker(stream: Stream): void {
     try {
       const msg = JSON.parse(data.toString()) as {
         method?: string;
-        params?: { targetInfo?: { targetId?: string; type?: string } };
+        params?: { targetInfo?: { targetId?: string; type?: string; url?: string } };
       };
-      if (msg.method === 'Target.targetCreated' && msg.params?.targetInfo?.type === 'page' && msg.params.targetInfo.targetId) {
-        stream.preferredTargetId = msg.params.targetInfo.targetId;
+      // Only latch onto real page targets (http/https). Orbita and GoLogin
+      // expose chrome://newtab, chrome-extension://… pages too; those report
+      // type:'page' but don't emit useful screencast frames, so picking them
+      // leaves the takeover view frozen on "waiting for stream".
+      const info = msg.params?.targetInfo;
+      if (
+        msg.method === 'Target.targetCreated' &&
+        info?.type === 'page' &&
+        info.targetId &&
+        !isInertUrl(info.url)
+      ) {
+        stream.preferredTargetId = info.targetId;
       }
     } catch { /* malformed frame, ignore */ }
   });

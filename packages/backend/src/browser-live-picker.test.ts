@@ -93,4 +93,51 @@ describe('pickCdpPageForTab', () => {
     );
     expect(picked?.id).toBe('T_fresh');
   });
+
+  // ── Regressions ──────────────────────────────────────────────────────────
+
+  it('falls through to URL match when preferredTargetId points to an inert (chrome://) page', () => {
+    // Bluggie regression (2026-04-20, "waiting for stream"): Orbita emits
+    // Target.targetCreated for internal pages (chrome://newtab/, extension
+    // pages, etc.) as well as the agent's real tab. The tracker records
+    // the LAST page target it sees, which can be an inert one. When that
+    // happens, the picker must not stubbornly return the inert page — it
+    // should fall through to URL match so the screencast binds to a tab
+    // that actually paints.
+    const inert = page('T_inert', 'chrome://newtab/');
+    const real = page('T_real', 'https://www.reddit.com/');
+    const picked = pickCdpPageForTab(
+      [inert, real],
+      'https://www.reddit.com/',
+      'T_inert',
+    );
+    expect(picked?.id).toBe('T_real');
+  });
+
+  it('falls through when preferredTargetId points to a chrome-extension:// page', () => {
+    // GoLogin / Orbita extensions expose pages at chrome-extension://<id>/...
+    // These are pages from CDP's POV but aren't content the user wants
+    // streamed.
+    const ext = page('T_ext', 'chrome-extension://abcd/popup.html');
+    const real = page('T_real', 'https://www.linkedin.com/');
+    const picked = pickCdpPageForTab(
+      [ext, real],
+      'https://www.linkedin.com/',
+      'T_ext',
+    );
+    expect(picked?.id).toBe('T_real');
+  });
+
+  it('honours preferredTargetId when it points to a real http(s) page, even if URL differs', () => {
+    // Sanity: the inert-fallthrough must NOT trigger for ordinary pages.
+    // A real http(s) preferredTargetId still beats URL match.
+    const other = page('T_other', 'https://example.com/');
+    const fresh = page('T_fresh', 'https://www.reddit.com/r/x/');
+    const picked = pickCdpPageForTab(
+      [other, fresh],
+      'https://example.com/',
+      'T_fresh',
+    );
+    expect(picked?.id).toBe('T_fresh');
+  });
 });

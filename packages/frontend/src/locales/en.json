@@ -128,7 +128,8 @@
     "optional": "(optional)",
     "describeActionPlaceholder": "Describe your action for the agent…",
     "returning": "Returning…",
-    "completed": "Completed"
+    "completed": "Completed",
+    "urlBarPlaceholder": "Type a URL and press Enter to navigate…"
   },
   "tasks": {
     "columns": {

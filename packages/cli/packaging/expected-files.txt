@@ -3,6 +3,7 @@ README.md
 bin/granclaw.js
 dist/backend/agent-db.js
 dist/backend/agent/browser-bin.js
+dist/backend/agent/message-assembly.js
 dist/backend/agent/process.js
 dist/backend/agent/runner-pi.js
 dist/backend/agent/telegram-adapter.js

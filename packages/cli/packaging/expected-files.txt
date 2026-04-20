@@ -39,6 +39,7 @@ dist/backend/routes/logs.js
 dist/backend/scheduler.js
 dist/backend/schedules-db.js
 dist/backend/secrets-vault.js
+dist/backend/takeover-listeners.js
 dist/backend/takeover-messages.js
 dist/backend/takeover-state.js
 dist/backend/takeover-timeout.js

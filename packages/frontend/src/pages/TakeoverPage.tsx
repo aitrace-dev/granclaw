@@ -105,7 +105,11 @@ export function TakeoverPage() {
         };
         if (msg.type === 'frame' && msg.data) {
           setFrame(`data:image/jpeg;base64,${msg.data}`);
-        } else if (msg.type === 'attached' || msg.type === 'tab_changed') {
+        } else if (
+          msg.type === 'attached' ||
+          msg.type === 'tab_changed' ||
+          msg.type === 'url_changed'
+        ) {
           if (msg.url) setCurrentUrl(msg.url);
           if (msg.title) setCurrentTitle(msg.title);
         }
@@ -141,6 +145,10 @@ export function TakeoverPage() {
     // address-bar ergonomic every browser ships.
     const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     send({ type: 'navigate', url });
+    // Optimistically advance currentUrl so the blur→sync effect doesn't
+    // stomp the user's typed URL back to the stale value while the server
+    // is still mid-flight on Page.navigate.
+    setCurrentUrl(url);
   }, [urlDraft, send]);
 
   const toViewport = useCallback((clientX: number, clientY: number) => {
@@ -252,7 +260,14 @@ export function TakeoverPage() {
         modifiers: modifiers(e.nativeEvent),
         windowsVirtualKeyCode: e.key.toUpperCase().charCodeAt(0),
       });
-      send({ type: 'insertText', text: e.key });
+      // With Ctrl/Cmd held the remote browser should treat this as a
+      // shortcut (Ctrl+V paste, Ctrl+C copy, Ctrl+A select all).
+      // Sending insertText too would type a literal 'v' alongside the
+      // paste — let the native shortcut handle it via the key event,
+      // and rely on onPaste to forward the actual clipboard payload.
+      if (!e.ctrlKey && !e.metaKey) {
+        send({ type: 'insertText', text: e.key });
+      }
     } else {
       // Special keys (Enter, Backspace, Delete, Arrow*, Tab, Escape, etc.):
       // CDP needs the Windows virtual key code for Chromium to treat the

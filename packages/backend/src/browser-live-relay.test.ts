@@ -222,6 +222,39 @@ describe('relayInputToChrome — CDP input relay for takeover page', () => {
     expect(sent).toHaveLength(0);
   });
 
+  // ── Navigate (takeover URL bar → Page.navigate) ────────────────────────────
+
+  it('relays navigate with a valid https URL as Page.navigate', () => {
+    relayInputToChrome(mockWs, nextId, JSON.stringify({
+      type: 'navigate',
+      url: 'https://www.reddit.com/',
+    }));
+    expect(sent).toHaveLength(1);
+    expect(sent[0].method).toBe('Page.navigate');
+    expect(sent[0].params).toEqual({ url: 'https://www.reddit.com/' });
+  });
+
+  it('drops navigate with javascript: URL (XSS guard — user-typed URL bar must not execute code)', () => {
+    relayInputToChrome(mockWs, nextId, JSON.stringify({
+      type: 'navigate',
+      url: 'javascript:alert(1)',
+    }));
+    expect(sent).toHaveLength(0);
+  });
+
+  it('drops navigate with file: URL', () => {
+    relayInputToChrome(mockWs, nextId, JSON.stringify({
+      type: 'navigate',
+      url: 'file:///etc/passwd',
+    }));
+    expect(sent).toHaveLength(0);
+  });
+
+  it('drops navigate with empty url', () => {
+    relayInputToChrome(mockWs, nextId, JSON.stringify({ type: 'navigate', url: '' }));
+    expect(sent).toHaveLength(0);
+  });
+
   // ── Scroll (mouseWheel) ──────────────────────────────────────────────────────
 
   it('relays scroll as Input.dispatchMouseEvent type=mouseWheel', () => {

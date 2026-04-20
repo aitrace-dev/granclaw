@@ -27,6 +27,7 @@ import {
   getTakeover,
   clearTakeoverMemoryOnly,
 } from '../takeover-state.js';
+import { resolveTakeoverUrl } from '../takeover-url-resolver.js';
 import { AgentConfig, REPO_ROOT, getAgents } from '../config.js';
 import { esmImport } from '../esm-import.js';
 import { saveSession, getSessionFile } from '../agent-db.js';
@@ -984,15 +985,18 @@ export async function runAgent(
         description:
           'Stop the agent loop and let the user interact with the browser directly. ' +
           'Use when you hit a captcha, 2FA prompt, login wall, or need the user to ' +
-          'review/edit content before submitting. When this tool returns, COPY THE ' +
-          '`takeoverMarkdown` FIELD FROM THE TOOL RESULT VERBATIM into your user-facing ' +
-          'message. It is pre-formatted as a bounded markdown link `[...](...)` so the ' +
-          'URL is unambiguous under Telegram MarkdownV2 and any other renderer. ' +
-          'Do NOT paste the raw URL inline, do NOT put any text on the same line as ' +
-          'the URL, and do NOT add Spanish/French/other punctuation like `¡`, `¿`, `!` ' +
-          'immediately after the URL — the LLM-written text that comes after will get ' +
-          'absorbed into the URL by Telegram\'s auto-linker and the link will break. ' +
-          'The agent resumes automatically when the user replies in chat.',
+          'review/edit content before submitting. PRECONDITION: the browser must be ' +
+          'on a real http(s) page — if it is at about:blank the tool will refuse and ' +
+          'ask you to navigate first (so the user never lands on a blank takeover). ' +
+          'When this tool returns, COPY THE `takeoverMarkdown` FIELD FROM THE TOOL ' +
+          'RESULT VERBATIM into your user-facing message. It is pre-formatted as a ' +
+          'bounded markdown link `[...](...)` so the URL is unambiguous under Telegram ' +
+          'MarkdownV2 and any other renderer. Do NOT paste the raw URL inline, do NOT ' +
+          'put any text on the same line as the URL, and do NOT add Spanish/French/other ' +
+          'punctuation like `¡`, `¿`, `!` immediately after the URL — the LLM-written ' +
+          'text that comes after will get absorbed into the URL by Telegram\'s ' +
+          'auto-linker and the link will break. The agent resumes automatically when ' +
+          'the user replies in chat.',
         promptSnippet: 'Request human browser control for captcha, review, or auth prompts',
         parameters: {
           type: 'object',
@@ -1015,6 +1019,35 @@ export async function runAgent(
             };
           }
 
+          // Resolve the real page URL BEFORE minting a takeover token. If
+          // the browser is at about:blank and the agent didn't provide a
+          // URL, refuse — the user would otherwise land on a blank takeover
+          // page with nothing to act on (the complaint that drove this gate).
+          const capturedUrl = await resolveTakeoverUrl({
+            explicitUrl: params.url,
+            getBrowserUrl: async () => {
+              const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+              const { stdout } = await execFileAsync(
+                bin,
+                ['--session', agent.id, 'get', 'url'],
+                { cwd: workspaceDir, timeout: 5000 },
+              );
+              return stdout.trim();
+            },
+          });
+          if (!capturedUrl) {
+            return {
+              content: [{
+                type: 'text' as const,
+                text:
+                  'Cannot open a takeover session: the browser is at about:blank or has no real page loaded. ' +
+                  'Navigate the browser to the page the user needs to act on (via browser_navigate or the ' +
+                  'appropriate tool), then call request_human_browser_takeover again. Alternatively pass the ' +
+                  'target URL explicitly via the `url` parameter.',
+              }],
+            };
+          }
+
           const token = randomUUID();
           // GRANCLAW_PUBLIC_URL overrides LAN-IP detection for cloud/enterprise deployments
           // (e.g. https://myslug.host.granclaw.com). Falls back to LAN IP for local use.
@@ -1024,29 +1057,6 @@ export async function runAgent(
                 const frontendPort = process.env.FRONTEND_PORT ?? process.env.PORT ?? '5173';
                 return `http://${getLanIp()}:${frontendPort}/takeover/${token}`;
               })();
-
-          // Auto-capture the browser's current URL from the running daemon
-          // if the agent did not pass one explicitly. This means the takeover
-          // page can render the URL bar correctly AND the attach logic can
-          // re-navigate the live view if the daemon has been restarted
-          // between the tool call and the user click (container hot-restart,
-          // OOM, manual `close --all`, etc.) — which is the primary source of
-          // the "takeover page shows about:blank" complaint.
-          let capturedUrl = params.url;
-          if (!capturedUrl) {
-            try {
-              const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
-              const { stdout } = await execFileAsync(
-                bin,
-                ['--session', agent.id, 'get', 'url'],
-                { cwd: workspaceDir, timeout: 5000 },
-              );
-              const maybe = stdout.trim();
-              if (maybe && maybe !== 'about:blank' && /^https?:\/\//.test(maybe)) {
-                capturedUrl = maybe;
-              }
-            } catch { /* best effort — leave capturedUrl undefined */ }
-          }
 
           setTakeover(agent.id, {
             agentId: agent.id,

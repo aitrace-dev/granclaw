@@ -89,6 +89,13 @@ interface Stream {
    */
   preferredTargetId: string | null;
   targetTrackerWs: WebSocket | null;
+  /**
+   * Last URL we broadcast for the currently bound target. Tracked so
+   * in-page navigations (same target id, new URL — user clicks a link or
+   * submits the URL bar) still emit a url_changed event so the takeover
+   * page's URL bar stays in sync.
+   */
+  lastBroadcastUrl: string | null;
 }
 
 const streams = new Map<string, Stream>();
@@ -480,6 +487,10 @@ function attachPageCdp(stream: Stream, page: CdpPage): void {
   stream.chromeWs = chromeWs;
   stream.currentTargetId = page.id;
   stream.screencastSessionId = null;
+  // Seed the broadcast-dedup pointer to the URL we're about to announce via
+  // `attached`, so pollActiveTab doesn't re-fire `url_changed` on the very
+  // next poll with the same URL.
+  stream.lastBroadcastUrl = page.url || null;
 
   chromeWs.on('open', () => {
     if (stream.disposed) { try { chromeWs.close(); } catch {} return; }
@@ -579,11 +590,25 @@ async function pollActiveTab(stream: Stream): Promise<void> {
   const target = pickCdpPageForTab(pages, active.url, stream.preferredTargetId);
   if (!target) return;
 
-  if (target.id === stream.currentTargetId) return;
+  if (target.id === stream.currentTargetId) {
+    // Same target — the page navigated in-place (agent ran Page.navigate,
+    // user clicked a link, or the takeover URL bar submitted a new URL).
+    // Emit a url_changed event so the takeover UI refreshes the URL bar.
+    if (target.url && target.url !== stream.lastBroadcastUrl) {
+      stream.lastBroadcastUrl = target.url;
+      sendToSubscribers(stream, {
+        type: 'url_changed',
+        url: target.url,
+        title: target.title,
+      });
+    }
+    return;
+  }
 
   // Tab switch detected — detach and rebind
   detachPageCdp(stream);
   if (stream.disposed) return;
+  stream.lastBroadcastUrl = target.url;
   sendToSubscribers(stream, {
     type: 'tab_changed',
     index: active.index,
@@ -831,6 +856,7 @@ export function handleBrowserLiveUpgrade(
         flatSessionId: null,
         preferredTargetId: null,
         targetTrackerWs: null,
+        lastBroadcastUrl: null,
       };
       streams.set(key, stream);
 

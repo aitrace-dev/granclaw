@@ -78,9 +78,24 @@ export interface ChatMessage {
 }
 
 export async function fetchMessages(agentId: string, channelId = 'ui'): Promise<ChatMessage[]> {
-  const res = await fetch(`${BASE}/agents/${agentId}/messages?channelId=${channelId}&sortBy=asc&limit=200`);
+  // sortBy=desc then reverse: with a 200-row cap, we want the LATEST 200,
+  // not the oldest. On long-running agents (bluggie had 319 ui messages
+  // when this bug was caught), asc+limit silently drops everything after
+  // row 200, so the UI froze on messages from hours earlier even after a
+  // hard refresh.
+  //
+  // cache: 'no-store' — when the user has two tabs open for the same agent
+  // and sends a message from Tab B, hitting reload on Tab A must show the
+  // new rows. Without this, some browsers serve the previous response from
+  // the HTTP cache (the endpoint emits no ETag/Cache-Control headers, so
+  // cache semantics fall back to heuristic freshness) and the "stale tab
+  // never syncs even when I refresh" bug reappears.
+  const res = await fetch(`${BASE}/agents/${agentId}/messages?channelId=${channelId}&sortBy=desc&limit=200`, {
+    cache: 'no-store',
+  });
   if (!res.ok) throw new Error(`fetchMessages: ${res.status}`);
-  return res.json() as Promise<ChatMessage[]>;
+  const rows = await res.json() as ChatMessage[];
+  return rows.reverse();
 }
 
 export async function postMessage(

@@ -491,6 +491,39 @@ function injectStealthOnPage(chromeWs: WebSocket, stream: Stream): void {
 }
 
 /**
+ * Build the ordered CDP command payloads we send to a page-level target
+ * immediately after attaching the WebSocket.
+ *
+ * Order matters:
+ *   1. `Page.bringToFront` — promotes this target to the foreground tab.
+ *      In Orbita's `headless=new` mode, `Page.startScreencast` only emits
+ *      frames for the visible tab; if the picker binds to a background tab
+ *      (the bluggie stale-tab case: two tabs at the same URL, Orbita treats
+ *      one as active, Chrome only paints one) the screencast succeeds but
+ *      frames never arrive. Bringing the attached target to front forces
+ *      frames to flow regardless of which duplicate the picker chose.
+ *   2. `Page.startScreencast` — actually subscribe to frames.
+ *
+ * Exported purely so the ordering can be unit-tested without a live browser.
+ */
+export function buildAttachCdpCommands(nextId: () => number): string[] {
+  return [
+    JSON.stringify({ id: nextId(), method: 'Page.bringToFront' }),
+    JSON.stringify({
+      id: nextId(),
+      method: 'Page.startScreencast',
+      params: {
+        format: 'jpeg',
+        quality: 60,
+        maxWidth: LIVE_VIEW_WIDTH,
+        maxHeight: LIVE_VIEW_HEIGHT,
+        everyNthFrame: 1,
+      },
+    }),
+  ];
+}
+
+/**
  * Attach to a specific CDP page target and begin screencasting. Called on
  * initial attach and again whenever we need to rebind to a new tab.
  *
@@ -516,17 +549,9 @@ function attachPageCdp(stream: Stream, page: CdpPage): void {
     // no display or extension loader needed.
     injectStealthOnPage(chromeWs, stream);
 
-    chromeWs.send(JSON.stringify({
-      id: ++stream.cdpMessageId,
-      method: 'Page.startScreencast',
-      params: {
-        format: 'jpeg',
-        quality: 60,
-        maxWidth: LIVE_VIEW_WIDTH,
-        maxHeight: LIVE_VIEW_HEIGHT,
-        everyNthFrame: 1,
-      },
-    }));
+    for (const payload of buildAttachCdpCommands(() => ++stream.cdpMessageId)) {
+      chromeWs.send(payload);
+    }
 
     // Only announce the URL if it's real — guards the frontend URL bar from
     // being stomped to about:blank / chrome://… even if an inert target

@@ -65,11 +65,16 @@ describe('pickCdpPageForTab', () => {
     expect(picked?.id).toBe('T_real');
   });
 
-  it('returns a page at all cost — falls through to last page if every tab is inert', () => {
+  it('returns null when every tab is inert — never bind to about:blank / chrome://…', () => {
+    // Hard UX rule (see isInertUrl comment + §3.1 of vault/features/browser.md):
+    // the takeover view must never show about:blank or chrome://newtab, even
+    // if that's the only thing Orbita has open. Returning null lets the poll
+    // loop emit `{type:'unavailable'}` instead, so the frontend shows a
+    // loading placeholder until a real page appears.
     const blank = page('T_blank', 'about:blank');
     const chrome = page('T_chrome', 'chrome://newtab/');
     const picked = pickCdpPageForTab([blank, chrome], 'https://nope.example.com/');
-    expect(picked?.id).toBe('T_chrome');
+    expect(picked).toBeNull();
   });
 
   it('treats view-source:, devtools://, chrome-untrusted:// as inert', () => {

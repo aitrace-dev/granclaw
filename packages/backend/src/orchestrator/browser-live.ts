@@ -34,6 +34,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { STEALTH_EXTENSION_DIR } from '../browser/stealth.js';
+import { resolveBrowserBinary, buildArgv } from '../agent/browser-bin.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -245,10 +246,11 @@ function sendToSubscribers(stream: Stream, payload: object): void {
  */
 async function discoverCdpUrl(agentId: string, workspaceDir: string): Promise<string | null> {
   try {
-    const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
-    const { stdout } = await execFileAsync(bin, ['--session', agentId, 'get', 'cdp-url'], {
+    const res = await resolveBrowserBinary(agentId, workspaceDir);
+    const { stdout } = await execFileAsync(res.bin, buildArgv(res, 'get', ['cdp-url']), {
       cwd: workspaceDir,
       timeout: 5000,
+      env: { ...process.env, ...res.env },
     });
     const url = stdout.trim();
     return url.startsWith('ws://') || url.startsWith('wss://') ? url : null;
@@ -264,10 +266,11 @@ async function discoverCdpUrl(agentId: string, workspaceDir: string): Promise<st
  */
 async function getActiveTab(agentId: string, workspaceDir: string): Promise<ActiveTab | null> {
   try {
-    const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
-    const { stdout } = await execFileAsync(bin, ['--session', agentId, 'tab', '--json'], {
+    const res = await resolveBrowserBinary(agentId, workspaceDir);
+    const { stdout } = await execFileAsync(res.bin, buildArgv(res, 'tab', ['--json']), {
       cwd: workspaceDir,
       timeout: 3000,
+      env: { ...process.env, ...res.env },
     });
     const parsed = JSON.parse(stdout) as {
       success?: boolean;
@@ -368,11 +371,20 @@ export function pickCdpPageForTab(
     if (hit && !isInertUrl(hit.url)) return hit;
   }
 
-  const exact = pages.filter((p) => p.url === activeUrl);
-  if (exact.length > 0) return exact[exact.length - 1];
+  // Exact URL match only counts if the URL is real — we never want to bind
+  // the screencast to about:blank / chrome://newtab / extension pages, even
+  // if agent-browser reports that as the active tab. Hard UX rule: users
+  // must never see about:blank in the takeover view.
+  if (!isInertUrl(activeUrl)) {
+    const exact = pages.filter((p) => p.url === activeUrl);
+    if (exact.length > 0) return exact[exact.length - 1];
+  }
 
+  // Fall back to the newest real (non-inert) page target. If there's no real
+  // page, return null — the relay treats that as "unavailable" and tells the
+  // frontend to show a loading state instead of streaming about:blank.
   const real = pages.filter((p) => !isInertUrl(p.url));
-  return real.length > 0 ? real[real.length - 1] : pages[pages.length - 1];
+  return real.length > 0 ? real[real.length - 1] : null;
 }
 
 /**
@@ -481,6 +493,11 @@ function injectStealthOnPage(chromeWs: WebSocket, stream: Stream): void {
 /**
  * Attach to a specific CDP page target and begin screencasting. Called on
  * initial attach and again whenever we need to rebind to a new tab.
+ *
+ * Caller must have filtered out inert targets before reaching this function —
+ * pickCdpPageForTab returns null for "only about:blank / chrome://…" states
+ * and the poll loop sends an `unavailable` frame in that case, so we can
+ * assume `page.url` is a real http(s) URL.
  */
 function attachPageCdp(stream: Stream, page: CdpPage): void {
   const chromeWs = new WebSocket(page.webSocketDebuggerUrl);
@@ -511,10 +528,14 @@ function attachPageCdp(stream: Stream, page: CdpPage): void {
       },
     }));
 
+    // Only announce the URL if it's real — guards the frontend URL bar from
+    // being stomped to about:blank / chrome://… even if an inert target
+    // somehow slipped past the picker.
+    const announceUrl = isInertUrl(page.url) ? undefined : page.url;
     sendToSubscribers(stream, {
       type: 'attached',
       targetId: page.id,
-      url: page.url,
+      ...(announceUrl ? { url: announceUrl } : {}),
       title: page.title,
     });
   });
@@ -582,19 +603,33 @@ async function pollActiveTab(stream: Stream): Promise<void> {
   if (stream.disposed || !stream.browserCdpUrl) return;
 
   const active = await getActiveTab(stream.agentId, stream.workspaceDir);
-  if (!active) return;
-
   const pages = await fetchCdpPages(stream.browserCdpUrl);
-  if (pages.length === 0) return;
+  const target = pages.length === 0
+    ? null
+    : pickCdpPageForTab(pages, active?.url ?? '', stream.preferredTargetId);
 
-  const target = pickCdpPageForTab(pages, active.url, stream.preferredTargetId);
-  if (!target) return;
+  if (!target) {
+    // No real page to stream. If we were attached to one, that tab is gone
+    // (closed, navigated to about:blank, or Orbita restarted). Detach and
+    // tell the frontend the browser is "unavailable" so it stops showing
+    // the last frame and never renders about:blank. We'll reattach cleanly
+    // when a real page appears on a later poll.
+    if (stream.currentTargetId) {
+      detachPageCdp(stream);
+      stream.lastBroadcastUrl = null;
+      sendToSubscribers(stream, buildUnavailableFrame({ reason: 'no_suitable_target' }));
+    }
+    return;
+  }
 
   if (target.id === stream.currentTargetId) {
     // Same target — the page navigated in-place (agent ran Page.navigate,
     // user clicked a link, or the takeover URL bar submitted a new URL).
     // Emit a url_changed event so the takeover UI refreshes the URL bar.
-    if (target.url && target.url !== stream.lastBroadcastUrl) {
+    // Skip if the URL is inert — never tell the frontend the user is at
+    // about:blank / chrome://…; that violates the "users never see
+    // about:blank" rule.
+    if (target.url && target.url !== stream.lastBroadcastUrl && !isInertUrl(target.url)) {
       stream.lastBroadcastUrl = target.url;
       sendToSubscribers(stream, {
         type: 'url_changed',
@@ -609,11 +644,14 @@ async function pollActiveTab(stream: Stream): Promise<void> {
   detachPageCdp(stream);
   if (stream.disposed) return;
   stream.lastBroadcastUrl = target.url;
+  // Only announce the URL when it's real (picker already guarantees target
+  // is non-inert, but double-check to honor the "no about:blank" rule).
+  const announceUrl = isInertUrl(target.url) ? undefined : target.url;
   sendToSubscribers(stream, {
     type: 'tab_changed',
-    index: active.index,
-    url: active.url,
-    title: active.title,
+    index: active?.index ?? 0,
+    ...(announceUrl ? { url: announceUrl } : {}),
+    title: target.title,
   });
   attachPageCdp(stream, target);
 }
@@ -645,11 +683,11 @@ function stopPollLoop(stream: Stream): void {
  */
 async function raiseViewport(agentId: string, workspaceDir: string): Promise<void> {
   try {
-    const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+    const res = await resolveBrowserBinary(agentId, workspaceDir);
     await execFileAsync(
-      bin,
-      ['--session', agentId, 'set', 'viewport', String(LIVE_VIEW_WIDTH), String(LIVE_VIEW_HEIGHT)],
-      { cwd: workspaceDir, timeout: 3000 },
+      res.bin,
+      buildArgv(res, 'set', ['viewport', String(LIVE_VIEW_WIDTH), String(LIVE_VIEW_HEIGHT)]),
+      { cwd: workspaceDir, timeout: 3000, env: { ...process.env, ...res.env } },
     );
   } catch {
     // Best effort — if agent-browser refuses, the frame just ends up smaller.

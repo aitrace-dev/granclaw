@@ -110,6 +110,7 @@ function LiveView({ agentId, session }: { agentId: string; session: BrowserSessi
           type: string;
           data?: string;
           reason?: string;
+          detail?: string;
           index?: number;
           url?: string;
           title?: string;
@@ -126,6 +127,13 @@ function LiveView({ agentId, session }: { agentId: string; session: BrowserSessi
           setActiveTab({ index: msg.index, url: msg.url, title: msg.title });
           setTabFlash(true);
           window.setTimeout(() => setTabFlash(false), 900);
+        } else if (msg.type === 'unavailable') {
+          // Relay couldn't attach (daemon not running, no page targets, or
+          // no suitable tab). Clear the last frame so a stale image doesn't
+          // masquerade as "live", and surface the reason.
+          setFrame(null);
+          setStatus('error');
+          setErrorReason(msg.reason ?? 'stream unavailable');
         } else if (msg.type === 'error' || msg.type === 'detached') {
           setStatus('error');
           setErrorReason(msg.reason ?? 'stream ended');

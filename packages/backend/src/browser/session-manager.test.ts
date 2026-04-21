@@ -38,6 +38,16 @@ vi.mock('child_process', () => ({
 
 // Import AFTER the mock is set up so session-manager picks up the mocked execFile.
 import { createSession, startRecording } from './session-manager.js';
+import type { BrowserBinaryResolution } from '../agent/browser-bin.js';
+
+const DEFAULT_RES: BrowserBinaryResolution = {
+  bin: 'agent-browser',
+  preCommandArgs: ['--session', 'test'],
+  postCommandArgs: [],
+  env: {},
+  isRemote: false,
+  recordingSupported: true,
+};
 
 describe('startRecording', () => {
   let tmp: string;
@@ -62,7 +72,7 @@ describe('startRecording', () => {
     };
 
     const handle = createSession('agent-x', tmp);
-    const ok = await startRecording(handle);
+    const ok = await startRecording(handle, DEFAULT_RES);
 
     expect(ok, 'startRecording should report failure when no .webm lands on disk').toBe(false);
     expect(handle.recordingStarted).toBe(false);
@@ -84,7 +94,7 @@ describe('startRecording', () => {
     };
 
     const handle = createSession('agent-y', tmp);
-    const ok = await startRecording(handle);
+    const ok = await startRecording(handle, DEFAULT_RES);
 
     expect(ok).toBe(true);
     expect(handle.recordingStarted).toBe(true);
@@ -100,7 +110,7 @@ describe('startRecording', () => {
     };
 
     const handle = createSession('agent-z', tmp);
-    const ok = await startRecording(handle);
+    const ok = await startRecording(handle, DEFAULT_RES);
 
     expect(ok).toBe(false);
     expect(handle.recordingStarted).toBe(false);

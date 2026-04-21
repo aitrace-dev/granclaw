@@ -213,7 +213,14 @@ describe('session-manager — ffmpeg cold-start materialization race (bluggie 15
       return { stdout: '', stderr: '' };
     };
     const handle = sm.createSession('bluggie', tmp);
-    const ok = await sm.startRecording(handle);
+    const ok = await sm.startRecording(handle, {
+      bin: 'agent-browser',
+      preCommandArgs: ['--session', 'bluggie'],
+      postCommandArgs: [],
+      env: {},
+      isRemote: false,
+      recordingSupported: true,
+    });
     expect(ok, 'slow ffmpeg cold start must not be misclassified as "ffmpeg missing"').toBe(true);
     const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
     expect(meta.video).toBe('recording.webm');

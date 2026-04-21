@@ -25,7 +25,7 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-import { stealthArgv } from './stealth.js';
+import { buildArgv, type BrowserBinaryResolution } from '../agent/browser-bin.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -160,26 +160,21 @@ export function closeSession(handle: BrowserSessionHandle, status: Exclude<Sessi
  * "Recording already active" from a previous turn that didn't clean up is
  * handled via a stop-and-retry.
  */
-export async function startRecording(handle: BrowserSessionHandle): Promise<boolean> {
-  const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+export async function startRecording(
+  handle: BrowserSessionHandle,
+  res: BrowserBinaryResolution,
+): Promise<boolean> {
+  const bin = res.bin;
   const recordingPath = path.join(handle.sessionDir, 'recording.webm');
 
-  // If this invocation is the one that spawns the daemon, the daemon must
-  // load the persistent profile at boot. Pass --profile here so cookies are
-  // loaded before any subsequent command runs — agent-browser ignores
-  // --profile on already-running daemons.
-  //
-  // stealthArgv() adds --extension (our MV3 stealth extension) and, if a
-  // real Chrome binary is installed on the host, --executable-path. These
-  // also only take effect on the boot command, so they live here alongside
-  // --profile. Order matters: all launch flags must precede the subcommand.
-  const profileDir = path.join(handle.workspaceDir, '.browser-profile');
-  const profileArgs = fs.existsSync(profileDir) ? ['--profile', profileDir] : [];
-
-  const launchFlags = [...profileArgs, ...stealthArgv()];
-
-  const recordArgv = ['--session', handle.agentId, ...launchFlags, 'record', 'start', recordingPath];
-  const stopArgv = ['--session', handle.agentId, 'record', 'stop'];
+  // Reuse the caller's resolution so the daemon boots with the right launch
+  // flags. Personal/base: `--session X --profile <ws>/.browser-profile <stealth>`.
+  // Enterprise: `--cdp <port> --session X` — agent-browser attaches to the
+  // Orbita already owned by the gologin extension. Hardcoding --profile here
+  // would re-spawn chromium against a profile dir Orbita already holds,
+  // collide on SingletonLock, and leave a daemon with a dead chromium.
+  const recordArgv = buildArgv(res, 'record', ['start', recordingPath]);
+  const stopArgv = buildArgv(res, 'record', ['stop']);
 
   const tryStart = async (): Promise<boolean> => {
     try {

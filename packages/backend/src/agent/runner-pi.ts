@@ -945,7 +945,7 @@ export async function runAgent(
           // capture — meta.json.video stays null and the dashboard renders
           // "no recording".
           if (browser.recordingSupported && !browserState.handle.recordingStarted) {
-            await startBrowserRecording(browserState.handle);
+            await startBrowserRecording(browserState.handle, browser);
           }
 
           // Build argv per-CLI: the local daemon wants flags BEFORE the

@@ -487,7 +487,7 @@ export async function runAgent(
   try {
     // ── Load pi packages (ESM-only, must bypass tsc's require rewrite) ──
     const { getModel } = await esmImport<typeof import('@mariozechner/pi-ai')>('@mariozechner/pi-ai');
-    const { createAgentSession, SessionManager, DefaultResourceLoader } =
+    const { createAgentSession, SessionManager, DefaultResourceLoader, getAgentDir } =
       await esmImport<typeof import('@mariozechner/pi-coding-agent')>('@mariozechner/pi-coding-agent');
 
     // ── Resolve model ───────────────────────────────────────────────────
@@ -1330,18 +1330,22 @@ export async function runAgent(
 
     // Build resource loader. Must call reload() before passing to createAgentSession —
     // when the sdk receives a pre-built resourceLoader it skips reload().
-    // Double cast via `unknown`: pi 0.68 tightened DefaultResourceLoaderOptions
-    // to require `agentDir`, but pi falls back to getAgentDir() when it's
-    // undefined, matching our pre-0.68 behaviour. Bypass the nominal check.
+    // Pi 0.68 removed the internal agentDir default — DefaultResourceLoader now
+    // stores whatever's passed and later does path.join(this.agentDir, "skills"),
+    // which throws 'The "path" argument must be of type string. Received undefined'
+    // if we don't supply one. We pass pi's own getAgentDir() (~/.pi/agent by default,
+    // overridable via PI_CODING_AGENT_DIR) so behaviour matches pre-0.68 callers.
+    const agentDir = getAgentDir();
     const resourceLoader = new (DefaultResourceLoader as unknown as new (opts: Record<string, unknown>) => unknown)({
       cwd: workspaceDir,
+      agentDir,
       extensionFactories,
       ...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),
     });
     await (resourceLoader as any).reload();
 
     // ── Create agent session ────────────────────────────────────────────
-    // Note: agentDir omitted — pi resolves it from cwd and ~/.pi/agent by default.
+    // agentDir is baked into the prebuilt resourceLoader above.
     const { session } = await (createAgentSession as Function)({
       cwd: workspaceDir,
       model,

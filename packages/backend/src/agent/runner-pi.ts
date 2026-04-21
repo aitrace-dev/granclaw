@@ -48,6 +48,7 @@ import { TelegramHttpClient } from './telegram-http-client.js';
 import { defaultChatId, isKnownChat, listKnownChats } from './telegram-chats.js';
 import { sendFormattedTelegramMessage } from './telegram-markdown.js';
 import { saveMessage } from '../messages-db.js';
+import { planContextBudget } from './context-budget.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -290,7 +291,43 @@ export type StreamChunk =
   | { type: 'tool_result'; tool: string; output: unknown }
   | { type: 'agent_ready'; name: string }
   | { type: 'done'; sessionId: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  // Emitted around pi session.compact() so the UI can render a visible
+  // "compacting context…" indicator. Compaction blocks the event loop for
+  // tens of seconds on large contexts; without these chunks the frontend's
+  // 90s WS stream timeout fires and users see a generic "took too long"
+  // error. Reason strings mirror pi's AgentSessionEvent:
+  //   manual    — session.compact() called directly (pre-flight, overflow-retry, or /session/compact)
+  //   threshold — pi auto-compaction crossing between turns
+  //   overflow  — pi auto-compaction after provider rejected for context length
+  | { type: 'compaction_start'; reason: 'manual' | 'threshold' | 'overflow' }
+  | { type: 'compaction_end'; reason: 'manual' | 'threshold' | 'overflow' };
+
+// ── Event → chunk helpers ────────────────────────────────────────────────────
+
+/**
+ * Translate a pi AgentSessionEvent into a StreamChunk, or null if we don't
+ * surface the event. Exported so the event handler in the subscriber below
+ * is testable without spinning up a whole pi session.
+ *
+ * Today this only handles compaction_start/compaction_end because those
+ * two are the ones that (a) must survive a reason-string drift in pi and
+ * (b) act as the 90s-stream-timeout keep-alive the UI relies on. Other
+ * events (text deltas, tool lifecycle) stay inline in the subscriber
+ * because they need access to the agent id / closure state for logging.
+ */
+export function translateSessionEvent(event: { type?: string; reason?: string }): StreamChunk | null {
+  if (!event || typeof event.type !== 'string') return null;
+  if (event.type === 'compaction_start' || event.type === 'compaction_end') {
+    const reason: 'manual' | 'threshold' | 'overflow' =
+      event.reason === 'manual' || event.reason === 'threshold' || event.reason === 'overflow'
+        ? event.reason
+        : 'threshold';
+    if (event.type === 'compaction_start') return { type: 'compaction_start', reason };
+    return { type: 'compaction_end', reason };
+  }
+  return null;
+}
 
 // ── Active session tracking ──────────────────────────────────────────────────
 
@@ -1371,6 +1408,22 @@ export async function runAgent(
             break;
           }
 
+          // ── Context compaction (auto / threshold / manual) ────────
+          // pi-coding-agent emits these around session.compact() regardless
+          // of who called it (auto-compaction between turns, manual from
+          // the compact endpoint, or our pre-flight above). Translate
+          // directly to stream chunks so the UI can render a visible
+          // "compacting context…" row. This ALSO resets the frontend 90s
+          // WS stream timeout — compaction can easily run longer than 90s
+          // on bloated contexts, and without these heartbeat chunks the
+          // user sees a client-side "agent took too long" timeout error.
+          case 'compaction_start':
+          case 'compaction_end': {
+            const chunk = translateSessionEvent(event);
+            if (chunk) onChunk(chunk);
+            break;
+          }
+
           // ── Errors ────────────────────────────────────────────────
           case 'agent_end': {
             // Check for error in the last assistant message
@@ -1395,58 +1448,88 @@ export async function runAgent(
       }
     });
 
-    // ── Pre-flight: compact if context is already near the limit ───────
-    // Pi's auto-compaction is reactive (fires between turns when usage crosses
-    // the threshold). If a prior turn landed a single huge tool result that
-    // alone bloats the next prompt past the window, the model 400s before
-    // auto-compaction gets a chance. Guard against that here by checking the
-    // live usage before we hand the message to the session and compacting
-    // proactively when we're close to the ceiling.
-    try {
-      const usage = typeof session.getContextUsage === 'function'
-        ? session.getContextUsage() as { tokens: number | null; contextWindow: number; percent: number | null } | undefined
-        : undefined;
-      // 0.85 leaves headroom for the incoming message + output reservation.
-      // reserveTokens default is already 40% of the window, so compaction at
-      // 85% is an aggressive safety net for single-turn overflow, not a
-      // replacement for the between-turn auto-compaction that fires earlier.
-      if (usage && usage.percent != null && usage.percent >= 0.85) {
-        console.log(
-          `[runner-pi:${agent.id}] pre-prompt compaction — usage ${Math.round(usage.percent * 100)}% of ${usage.contextWindow}`,
-        );
-        try {
-          await session.compact();
-        } catch (cErr) {
-          console.error(`[runner-pi:${agent.id}] pre-prompt compaction failed:`, cErr);
-        }
+    // ── Pre-send token budget gate ──────────────────────────────────────
+    // Primary defense against provider 400 "maximum context length is X"
+    // errors. We compute a projected token count (current history + the
+    // incoming message + output reservation + fixed overhead) against the
+    // CURRENT model's contextWindow. If we'd exceed the usable budget, we
+    // compact BEFORE sending — and re-check, because compaction can fail
+    // to reduce enough when the user just switched from a larger-context
+    // model (pi's keepRecentTokens can keep more than the new window
+    // allows).
+    //
+    // We don't emit compaction_{start,end} chunks directly — pi emits those
+    // itself from inside session.compact(), which flow through the event
+    // subscriber above.
+    const modelContextWindow =
+      (model as { contextWindow?: number } | undefined)?.contextWindow ?? 128_000;
+    const modelMaxOutputTokens =
+      (model as { maxTokens?: number } | undefined)?.maxTokens ?? 4_096;
+
+    const readUsageTokens = (): number => {
+      try {
+        const u = typeof session.getContextUsage === 'function'
+          ? session.getContextUsage() as { tokens: number | null } | undefined
+          : undefined;
+        return u?.tokens ?? 0;
+      } catch {
+        return 0;
       }
-    } catch (err) {
-      console.error(`[runner-pi:${agent.id}] getContextUsage failed:`, err);
+    };
+
+    const planSend = () => planContextBudget({
+      currentTokens: readUsageTokens(),
+      incomingChars: message.length,
+      contextWindow: modelContextWindow,
+      maxOutputTokens: modelMaxOutputTokens,
+    });
+
+    let plan = planSend();
+    console.log(`[runner-pi:${agent.id}] pre-send budget: ${plan.reason}`);
+
+    if (plan.action === 'abort') {
+      onChunk({ type: 'error', message: plan.reason });
+      logAction(agent.id, 'error', null, { message: plan.reason });
+      return;
     }
 
-    // ── Send prompt (with one-shot compact-and-retry on overflow) ──────
-    // If the provider returns a context-length error despite the pre-flight,
-    // run a blocking compaction and resubmit the same user message. This is
-    // the "compact first, then deliver [compact]+last_message" behavior the
-    // user asked for: the retry sees the compacted history plus the original
-    // turn's text, with no duplicate user messages in persisted state because
-    // pi attaches the text to the new turn only when the previous one never
-    // reached the model.
-    const isContextOverflow = (err: unknown): boolean => {
-      const msg = err instanceof Error ? err.message : String(err ?? '');
-      return /context length|context window|maximum context|too (many|long).*tokens|reduce the length.*prompt/i.test(msg);
-    };
-    try {
-      await session.prompt(message);
-    } catch (err) {
-      if (!isContextOverflow(err)) throw err;
-      console.log(`[runner-pi:${agent.id}] prompt overflowed context — compacting and retrying`);
-      try { await session.compact(); } catch (cErr) {
-        console.error(`[runner-pi:${agent.id}] post-overflow compaction failed:`, cErr);
-        throw err;
+    if (plan.action === 'compact') {
+      try {
+        await session.compact();
+      } catch (cErr) {
+        console.error(`[runner-pi:${agent.id}] pre-send compaction failed:`, cErr);
       }
-      await session.prompt(message);
+      plan = planSend();
+      console.log(`[runner-pi:${agent.id}] post-compact budget: ${plan.reason}`);
+      if (plan.action !== 'send') {
+        // Second attempt: aggressive compaction (tight keepRecent) for the
+        // model-switch-to-smaller-window case, where default keepRecent
+        // alone can leave the context irreducibly large.
+        try {
+          const aggressiveKeep = Math.max(2_000, Math.floor(modelContextWindow * 0.05));
+          session.settingsManager.applyOverrides({
+            compaction: {
+              enabled: true,
+              reserveTokens: Math.floor(modelContextWindow * 0.5),
+              keepRecentTokens: aggressiveKeep,
+            },
+          });
+          await session.compact();
+        } catch (cErr) {
+          console.error(`[runner-pi:${agent.id}] aggressive compaction failed:`, cErr);
+        }
+        plan = planSend();
+        console.log(`[runner-pi:${agent.id}] post-aggressive-compact budget: ${plan.reason}`);
+        if (plan.action !== 'send') {
+          const msg = `Context still exceeds the current model's ${modelContextWindow}-token window after compaction. Start a new chat or switch to a larger-context model.`;
+          onChunk({ type: 'error', message: msg });
+          logAction(agent.id, 'error', null, { message: msg });
+          return;
+        }
+      }
     }
+
+    await session.prompt(message);
 
     // ── Persist session ─────────────────────────────────────────────────
     const stats = typeof session.getSessionStats === 'function'

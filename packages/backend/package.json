@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.81.0",
-    "@mariozechner/pi-agent-core": "^0.65.2",
-    "@mariozechner/pi-ai": "^0.65.2",
-    "@mariozechner/pi-coding-agent": "^0.65.2",
+    "@mariozechner/pi-agent-core": "^0.68.0",
+    "@mariozechner/pi-ai": "^0.68.0",
+    "@mariozechner/pi-coding-agent": "^0.68.0",
     "@sinclair/typebox": "^0.27.10",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",

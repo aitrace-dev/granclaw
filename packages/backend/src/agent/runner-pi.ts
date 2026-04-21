@@ -49,6 +49,7 @@ import { defaultChatId, isKnownChat, listKnownChats } from './telegram-chats.js'
 import { sendFormattedTelegramMessage } from './telegram-markdown.js';
 import { saveMessage } from '../messages-db.js';
 import { planContextBudget } from './context-budget.js';
+import { runCompactionWithRecovery } from './compaction-retry.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -1329,7 +1330,10 @@ export async function runAgent(
 
     // Build resource loader. Must call reload() before passing to createAgentSession —
     // when the sdk receives a pre-built resourceLoader it skips reload().
-    const resourceLoader = new (DefaultResourceLoader as new (opts: Record<string, unknown>) => unknown)({
+    // Double cast via `unknown`: pi 0.68 tightened DefaultResourceLoaderOptions
+    // to require `agentDir`, but pi falls back to getAgentDir() when it's
+    // undefined, matching our pre-0.68 behaviour. Bypass the nominal check.
+    const resourceLoader = new (DefaultResourceLoader as unknown as new (opts: Record<string, unknown>) => unknown)({
       cwd: workspaceDir,
       extensionFactories,
       ...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),
@@ -1494,38 +1498,35 @@ export async function runAgent(
     }
 
     if (plan.action === 'compact') {
-      try {
-        await session.compact();
-      } catch (cErr) {
-        console.error(`[runner-pi:${agent.id}] pre-send compaction failed:`, cErr);
+      const outcome = await runCompactionWithRecovery(
+        {
+          compact: () => session.compact(),
+          applySettings: (s) => session.settingsManager.applyOverrides({
+            compaction: { enabled: true, ...s },
+          }),
+        },
+        modelContextWindow,
+      );
+      for (const a of outcome.attempts) {
+        if (a.error) {
+          console.error(
+            `[runner-pi:${agent.id}] compaction attempt ${a.attempt} (${a.strategy}) failed:`,
+            a.error.message,
+          );
+        } else {
+          console.log(
+            `[runner-pi:${agent.id}] compaction attempt ${a.attempt} (${a.strategy}) succeeded`,
+          );
+        }
       }
       plan = planSend();
       console.log(`[runner-pi:${agent.id}] post-compact budget: ${plan.reason}`);
       if (plan.action !== 'send') {
-        // Second attempt: aggressive compaction (tight keepRecent) for the
-        // model-switch-to-smaller-window case, where default keepRecent
-        // alone can leave the context irreducibly large.
-        try {
-          const aggressiveKeep = Math.max(2_000, Math.floor(modelContextWindow * 0.05));
-          session.settingsManager.applyOverrides({
-            compaction: {
-              enabled: true,
-              reserveTokens: Math.floor(modelContextWindow * 0.5),
-              keepRecentTokens: aggressiveKeep,
-            },
-          });
-          await session.compact();
-        } catch (cErr) {
-          console.error(`[runner-pi:${agent.id}] aggressive compaction failed:`, cErr);
-        }
-        plan = planSend();
-        console.log(`[runner-pi:${agent.id}] post-aggressive-compact budget: ${plan.reason}`);
-        if (plan.action !== 'send') {
-          const msg = `Context still exceeds the current model's ${modelContextWindow}-token window after compaction. Start a new chat or switch to a larger-context model.`;
-          onChunk({ type: 'error', message: msg });
-          logAction(agent.id, 'error', null, { message: msg });
-          return;
-        }
+        const reason = outcome.finalError?.message ?? plan.reason;
+        const msg = `Context still exceeds the current model's ${modelContextWindow}-token window after compaction. ${reason} Start a new chat or switch to a larger-context model.`;
+        onChunk({ type: 'error', message: msg });
+        logAction(agent.id, 'error', null, { message: msg });
+        return;
       }
     }
 

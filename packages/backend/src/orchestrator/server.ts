@@ -50,7 +50,7 @@ import {
   getRunningRuns,
 } from '../workflows-db.js';
 import { executeWorkflow } from '../workflows/runner.js';
-import { bootstrapWorkspace } from '../agent/runner-pi.js';
+import { bootstrapWorkspace, compactAgentSession } from '../agent/runner-pi.js';
 import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, createScheduleRun, listScheduleRuns } from '../schedules-db.js';
 import { startScheduler } from '../scheduler.js';
 import { scanUsage } from '../usage-scanner.js';
@@ -417,6 +417,32 @@ export function createServer() {
     deleteMessages(req.params.id);
     console.log(`[orchestrator] agent "${req.params.id}" session cleared (workspace preserved)`);
     res.json({ ok: true });
+  });
+
+  // Compact the current agent session — summarize older turns to free up
+  // context window space WITHOUT clearing chat history or the session file.
+  // Contrast with DELETE /agents/:id/session (wipes .pi-sessions + messages).
+  // Requires an active session (the agent must have a running runner-pi turn
+  // or a session instance in memory); returns 409 otherwise.
+  app.post('/agents/:id/session/compact', async (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const customInstructions = typeof req.body?.customInstructions === 'string'
+      ? req.body.customInstructions
+      : undefined;
+    try {
+      const result = await compactAgentSession(req.params.id, customInstructions);
+      if (result.ok === false) {
+        res.status(409).json({ error: 'No active session in memory for this agent. Send a message first, or wait for the active turn to initialize a session.' });
+        return;
+      }
+      console.log(`[orchestrator] agent "${req.params.id}" session compacted`);
+      res.json({ ok: true, usageBefore: result.usageBefore, usageAfter: result.usageAfter });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[orchestrator] compact failed for "${req.params.id}":`, err);
+      res.status(500).json({ error: msg });
+    }
   });
 
   app.delete('/agents/:id/reset', async (req, res) => {

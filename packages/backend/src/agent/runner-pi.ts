@@ -306,6 +306,39 @@ export function stopAgent(agentId: string): boolean {
   return false;
 }
 
+/**
+ * Trigger manual context compaction on the currently active session.
+ * Returns:
+ *   - { ok: false, reason: 'not-active' } when no session is running for this agent
+ *   - { ok: true, usageBefore, usageAfter } on success
+ *   - throws on compaction failure (caller should surface a 500)
+ *
+ * NOTE: session.compact() aborts any in-flight agent turn. It is NOT the same
+ * as ctx.compact() from the compact_context tool — that one schedules
+ * compaction between turns and is safe to call mid-loop. Use THIS function
+ * only when no turn is running, e.g. from the POST /agents/:id/session/compact
+ * HTTP endpoint where the user is explicitly asking to shrink context.
+ */
+export async function compactAgentSession(
+  agentId: string,
+  customInstructions?: string,
+): Promise<
+  | { ok: false; reason: 'not-active' }
+  | { ok: true; usageBefore: unknown; usageAfter: unknown }
+> {
+  const entry = activeSessions.get(agentId);
+  if (!entry) return { ok: false, reason: 'not-active' };
+  const session = entry.session;
+  const usageBefore = typeof session.getContextUsage === 'function'
+    ? session.getContextUsage()
+    : undefined;
+  await session.compact(customInstructions);
+  const usageAfter = typeof session.getContextUsage === 'function'
+    ? session.getContextUsage()
+    : undefined;
+  return { ok: true, usageBefore, usageAfter };
+}
+
 // ── Provider → env-var mapping ───────────────────────────────────────────────
 // pi-ai reads API keys from conventional env vars (GEMINI_API_KEY, etc.).
 // We inject the key from providers-config into the correct env var so that
@@ -1362,8 +1395,58 @@ export async function runAgent(
       }
     });
 
-    // ── Send prompt ─────────────────────────────────────────────────────
-    await session.prompt(message);
+    // ── Pre-flight: compact if context is already near the limit ───────
+    // Pi's auto-compaction is reactive (fires between turns when usage crosses
+    // the threshold). If a prior turn landed a single huge tool result that
+    // alone bloats the next prompt past the window, the model 400s before
+    // auto-compaction gets a chance. Guard against that here by checking the
+    // live usage before we hand the message to the session and compacting
+    // proactively when we're close to the ceiling.
+    try {
+      const usage = typeof session.getContextUsage === 'function'
+        ? session.getContextUsage() as { tokens: number | null; contextWindow: number; percent: number | null } | undefined
+        : undefined;
+      // 0.85 leaves headroom for the incoming message + output reservation.
+      // reserveTokens default is already 40% of the window, so compaction at
+      // 85% is an aggressive safety net for single-turn overflow, not a
+      // replacement for the between-turn auto-compaction that fires earlier.
+      if (usage && usage.percent != null && usage.percent >= 0.85) {
+        console.log(
+          `[runner-pi:${agent.id}] pre-prompt compaction — usage ${Math.round(usage.percent * 100)}% of ${usage.contextWindow}`,
+        );
+        try {
+          await session.compact();
+        } catch (cErr) {
+          console.error(`[runner-pi:${agent.id}] pre-prompt compaction failed:`, cErr);
+        }
+      }
+    } catch (err) {
+      console.error(`[runner-pi:${agent.id}] getContextUsage failed:`, err);
+    }
+
+    // ── Send prompt (with one-shot compact-and-retry on overflow) ──────
+    // If the provider returns a context-length error despite the pre-flight,
+    // run a blocking compaction and resubmit the same user message. This is
+    // the "compact first, then deliver [compact]+last_message" behavior the
+    // user asked for: the retry sees the compacted history plus the original
+    // turn's text, with no duplicate user messages in persisted state because
+    // pi attaches the text to the new turn only when the previous one never
+    // reached the model.
+    const isContextOverflow = (err: unknown): boolean => {
+      const msg = err instanceof Error ? err.message : String(err ?? '');
+      return /context length|context window|maximum context|too (many|long).*tokens|reduce the length.*prompt/i.test(msg);
+    };
+    try {
+      await session.prompt(message);
+    } catch (err) {
+      if (!isContextOverflow(err)) throw err;
+      console.log(`[runner-pi:${agent.id}] prompt overflowed context — compacting and retrying`);
+      try { await session.compact(); } catch (cErr) {
+        console.error(`[runner-pi:${agent.id}] post-overflow compaction failed:`, cErr);
+        throw err;
+      }
+      await session.prompt(message);
+    }
 
     // ── Persist session ─────────────────────────────────────────────────
     const stats = typeof session.getSessionStats === 'function'

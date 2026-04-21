@@ -1336,11 +1336,14 @@ export async function runAgent(
     // if we don't supply one. We pass pi's own getAgentDir() (~/.pi/agent by default,
     // overridable via PI_CODING_AGENT_DIR) so behaviour matches pre-0.68 callers.
     const agentDir = getAgentDir();
+    // Pi 0.68 flipped `appendSystemPrompt` from `string` to `string[]` — reload()
+    // calls `appendSources.map(...)` and throws "appendSources.map is not a
+    // function" if we pass a bare string. Wrap it in an array.
     const resourceLoader = new (DefaultResourceLoader as unknown as new (opts: Record<string, unknown>) => unknown)({
       cwd: workspaceDir,
       agentDir,
       extensionFactories,
-      ...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),
+      ...(appendSystemPrompt !== undefined ? { appendSystemPrompt: [appendSystemPrompt] } : {}),
     });
     await (resourceLoader as any).reload();
 

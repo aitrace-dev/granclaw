@@ -124,12 +124,21 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
       input       TEXT,
       output      TEXT,
       error       TEXT,
+      events      TEXT,
       started_at  INTEGER,
       finished_at INTEGER,
       duration_ms INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_run_steps_run ON run_steps(run_id, started_at);
   `);
+
+  // Migration: ensure run_steps has an events column (added 2026-04-22 so
+  // the workflow RunDetail view can show live tool calls for agent steps).
+  const runStepsCols = (db.prepare(`PRAGMA table_info(run_steps)`).all() as { name: string }[]);
+  if (runStepsCols.length > 0 && !runStepsCols.some(c => c.name === 'events')) {
+    db.exec(`ALTER TABLE run_steps ADD COLUMN events TEXT`);
+    console.log('[workspace-pool] migrated run_steps table (added events column)');
+  }
 
   // Migration: ensure tasks.status allows 'cancelled' (added 2026-04-22).
   // SQLite CHECK constraints are baked into the table at CREATE time and

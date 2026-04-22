@@ -246,7 +246,8 @@
     "runLabel": "Ejecución —",
     "errorPrefix": "Error:",
     "input": "Entrada",
-    "output": "Salida"
+    "output": "Salida",
+    "activity": "Actividad"
   },
   "monitor": {
     "loading": "Cargando monitor…",

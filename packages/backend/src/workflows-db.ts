@@ -49,6 +49,22 @@ export interface Run {
   finishedAt: number | null;
 }
 
+/**
+ * Live events produced by an agent-type step while it runs. The runner
+ * buffers these in workflows/runner.ts and flushes them to the DB every
+ * few events so the frontend RunDetail view can show what the agent is
+ * doing in real time (polls every 1.5 s). Other step types
+ * (code, llm) don't emit events — only the final output is captured.
+ */
+export interface RunStepEvent {
+  type: 'tool_call' | 'tool_result' | 'error';
+  ts: number;
+  tool?: string;
+  input?: unknown;
+  output?: unknown;
+  message?: string;
+}
+
 export interface RunStep {
   id: string;
   runId: string;
@@ -57,6 +73,7 @@ export interface RunStep {
   input: unknown;
   output: unknown;
   error: string | null;
+  events: RunStepEvent[] | null;
   startedAt: number | null;
   finishedAt: number | null;
   durationMs: number | null;
@@ -119,6 +136,7 @@ function rowToRunStep(r: Record<string, unknown>): RunStep {
     input: r.input ? JSON.parse(r.input as string) : null,
     output: r.output ? JSON.parse(r.output as string) : null,
     error: (r.error as string) ?? null,
+    events: r.events ? (JSON.parse(r.events as string) as RunStepEvent[]) : null,
     startedAt: (r.started_at as number) ?? null,
     finishedAt: (r.finished_at as number) ?? null,
     durationMs: (r.duration_ms as number) ?? null,
@@ -292,6 +310,17 @@ export function updateRunStep(agentId: string, runStepId: string, data: {
     data.durationMs ?? null,
     runStepId,
   );
+}
+
+/**
+ * Overwrite the run_step's event log with the given array. The runner
+ * keeps the authoritative buffer in memory and flushes periodically;
+ * doing a full rewrite is simpler than append-and-merge in SQLite and
+ * the arrays are small (tens of events per step).
+ */
+export function writeRunStepEvents(agentId: string, runStepId: string, events: RunStepEvent[]): void {
+  getDb(agentId).prepare(`UPDATE run_steps SET events = ? WHERE id = ?`)
+    .run(JSON.stringify(events), runStepId);
 }
 
 // ── Monitor ──────────────────────────────────────────────────────────────

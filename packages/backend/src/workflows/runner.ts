@@ -18,7 +18,9 @@ import {
   updateRun,
   createRunStep,
   updateRunStep,
+  writeRunStepEvents,
   type Step,
+  type RunStepEvent,
 } from '../workflows-db.js';
 import { getProvider, getProviderApiKey } from '../providers-config.js';
 import { runAgent } from '../agent/runner-pi.js';
@@ -141,7 +143,8 @@ async function executeAgentStep(
   prevOutput: unknown,
   allResults: StepResult[],
   agent: { id: string; name: string; model: string; workspaceDir: string },
-  channelId: string
+  channelId: string,
+  onEvent: (event: RunStepEvent) => void,
 ): Promise<unknown> {
   const rawPrompt = config.prompt as string;
   const timeoutMs = (config.timeout_ms as number) ?? 300_000;
@@ -151,7 +154,15 @@ async function executeAgentStep(
 
   await Promise.race([
     runAgent(agent, prompt, (chunk) => {
-      if (chunk.type === 'text') responseText += chunk.text;
+      if (chunk.type === 'text') {
+        responseText += chunk.text;
+      } else if (chunk.type === 'tool_call') {
+        onEvent({ type: 'tool_call', ts: Date.now(), tool: chunk.tool, input: chunk.input });
+      } else if (chunk.type === 'tool_result') {
+        onEvent({ type: 'tool_result', ts: Date.now(), tool: chunk.tool, output: chunk.output });
+      } else if (chunk.type === 'error') {
+        onEvent({ type: 'error', ts: Date.now(), message: chunk.message });
+      }
     }, { channelId }),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Agent step timed out')), timeoutMs)
@@ -245,7 +256,32 @@ export async function executeWorkflow(
         output = await executeCodeStep(currentStep.config, workspaceDir);
       } else if (currentStep.type === 'agent') {
         const stepChannelId = `wf-${run.id}-s${currentStep.position}`;
-        output = await executeAgentStep(currentStep.config, prevOutput, allResults, agent, stepChannelId);
+        const events: RunStepEvent[] = [];
+        // Debounced flusher: writes the buffer at most every 1s to cap
+        // the write rate regardless of tool cadence, and always flushes
+        // on step completion via the finally block below.
+        let pendingFlush: ReturnType<typeof setTimeout> | null = null;
+        let lastFlushAt = 0;
+        const flush = () => {
+          pendingFlush = null;
+          lastFlushAt = Date.now();
+          try { writeRunStepEvents(agentId, runStepId, events); } catch { /* best-effort */ }
+        };
+        const scheduleFlush = () => {
+          if (pendingFlush) return;
+          const elapsed = Date.now() - lastFlushAt;
+          const delay = elapsed >= 1000 ? 0 : 1000 - elapsed;
+          pendingFlush = setTimeout(flush, delay);
+        };
+        try {
+          output = await executeAgentStep(
+            currentStep.config, prevOutput, allResults, agent, stepChannelId,
+            (event) => { events.push(event); scheduleFlush(); },
+          );
+        } finally {
+          if (pendingFlush) { clearTimeout(pendingFlush); pendingFlush = null; }
+          if (events.length > 0) { try { writeRunStepEvents(agentId, runStepId, events); } catch { /* ignore */ } }
+        }
       } else {
         output = await executeLlmStep(currentStep.config, prevOutput, allResults, workspaceDir, agent.model);
       }

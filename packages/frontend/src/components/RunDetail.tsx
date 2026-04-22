@@ -4,6 +4,7 @@ import {
   type WorkflowRunWithSteps,
   type WorkflowRunStep,
   type WorkflowStep,
+  type RunStepEvent,
 } from '../lib/api.ts';
 import { buttonGhost, cardCls } from '../ui/primitives';
 import { useT } from '../lib/i18n.tsx';
@@ -33,6 +34,29 @@ const statusIcons: Record<string, string> = {
   failed: '✕',
   skipped: '—',
 };
+
+const eventIcons: Record<RunStepEvent['type'], string> = {
+  tool_call: '→',
+  tool_result: '←',
+  error: '✕',
+};
+
+const eventColors: Record<RunStepEvent['type'], string> = {
+  tool_call: 'text-primary',
+  tool_result: 'text-success',
+  error: 'text-error',
+};
+
+function previewValue(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v.length > 200 ? v.slice(0, 200) + '…' : v;
+  try {
+    const s = JSON.stringify(v);
+    return s.length > 200 ? s.slice(0, 200) + '…' : s;
+  } catch {
+    return String(v);
+  }
+}
 
 export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) {
   const { t } = useT();
@@ -119,6 +143,45 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
                   {rs.error && (
                     <div className="text-error whitespace-pre-wrap font-mono text-xs">
                       {t('runDetail.errorPrefix')} {rs.error}
+                    </div>
+                  )}
+                  {rs.events && rs.events.length > 0 && (
+                    <div>
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">
+                        {t('runDetail.activity')}
+                      </div>
+                      <div className="flex flex-col gap-1 bg-surface-container-low p-2 rounded">
+                        {rs.events.map((ev, i) => {
+                          const relTs = rs.startedAt ? ((ev.ts - rs.startedAt) / 1000).toFixed(1) : '';
+                          return (
+                            <div key={i} className="flex items-start gap-2 font-mono text-[11px]">
+                              <span className="text-on-surface-variant/60 w-10 text-right shrink-0">
+                                {relTs && `+${relTs}s`}
+                              </span>
+                              <span className={`shrink-0 ${eventColors[ev.type]}`}>{eventIcons[ev.type]}</span>
+                              {ev.type === 'tool_call' && (
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-on-surface font-semibold">{ev.tool}</span>
+                                  {ev.input !== undefined && ev.input !== null && (
+                                    <span className="text-on-surface-variant ml-2 break-all">{previewValue(ev.input)}</span>
+                                  )}
+                                </div>
+                              )}
+                              {ev.type === 'tool_result' && (
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-on-surface">{ev.tool}</span>
+                                  {ev.output !== undefined && ev.output !== null && (
+                                    <span className="text-on-surface-variant ml-2 break-all">{previewValue(ev.output)}</span>
+                                  )}
+                                </div>
+                              )}
+                              {ev.type === 'error' && (
+                                <div className="flex-1 min-w-0 text-error break-all">{ev.message}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                   {rs.input !== null && (

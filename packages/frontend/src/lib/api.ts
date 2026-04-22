@@ -369,6 +369,15 @@ export interface WorkflowRun {
   finishedAt: number | null;
 }
 
+export interface RunStepEvent {
+  type: 'tool_call' | 'tool_result' | 'error';
+  ts: number;
+  tool?: string;
+  input?: unknown;
+  output?: unknown;
+  message?: string;
+}
+
 export interface WorkflowRunStep {
   id: string;
   runId: string;
@@ -377,6 +386,7 @@ export interface WorkflowRunStep {
   input: unknown;
   output: unknown;
   error: string | null;
+  events: RunStepEvent[] | null;
   startedAt: number | null;
   finishedAt: number | null;
   durationMs: number | null;

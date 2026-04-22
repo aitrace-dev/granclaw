@@ -679,6 +679,39 @@ export function createServer() {
     return out;
   }
 
+  // Walk skillsDir with pi's discovery rules (pi-coding-agent core/skills.js):
+  // a directory containing SKILL.md IS a skill — stop recursing there.
+  // Otherwise recurse. Supports nested skills like writing-styles/comments/SKILL.md.
+  function walkSkills(
+    root: string,
+    dir: string,
+    out: { name: string; path: string; description: string; userInvocable: boolean }[],
+  ): void {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { return; }
+
+    const skillMd = path.join(dir, 'SKILL.md');
+    if (fs.existsSync(skillMd)) {
+      const fm = parseFrontmatter(fs.readFileSync(skillMd, 'utf8'));
+      if (fm.description) {
+        const rel = path.relative(root, dir) || '.';
+        out.push({
+          name: fm.name ?? path.basename(dir),
+          path: rel.split(path.sep).join('/'),
+          description: fm.description,
+          userInvocable: fm['user-invocable'] === 'true',
+        });
+      }
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      walkSkills(root, path.join(dir, entry.name), out);
+    }
+  }
+
   app.get('/agents/:id/skills', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
@@ -686,36 +719,26 @@ export function createServer() {
     const skillsDir = resolveSkillsDir(workspaceDir);
     if (!skillsDir) { res.json({ skills: [] }); return; }
 
-    const skills: { name: string; description: string; userInvocable: boolean }[] = [];
-    for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const skillMd = path.join(skillsDir, entry.name, 'SKILL.md');
-      if (!fs.existsSync(skillMd)) continue;
-      const fm = parseFrontmatter(fs.readFileSync(skillMd, 'utf8'));
-      if (!fm.name && !fm.description) continue;
-      skills.push({
-        name: fm.name ?? entry.name,
-        description: fm.description ?? '',
-        userInvocable: fm['user-invocable'] === 'true',
-      });
-    }
-    skills.sort((a, b) => a.name.localeCompare(b.name));
+    const skills: { name: string; path: string; description: string; userInvocable: boolean }[] = [];
+    walkSkills(skillsDir, skillsDir, skills);
+    skills.sort((a, b) => a.path.localeCompare(b.path));
     res.json({ skills });
   });
 
-  // Full SKILL.md body for the detail pane in the Skills tab. Name is the
-  // directory name; we guard against `..` traversal by ensuring the
-  // resolved path stays inside the skillsDir.
-  app.get('/agents/:id/skills/:name', (req, res) => {
+  // Full SKILL.md body for the detail pane. The `*` wildcard captures a path
+  // that may contain slashes (e.g. writing-styles/comments). Guard against
+  // `..` traversal by ensuring the resolved path stays inside the skillsDir.
+  app.get('/agents/:id/skills/*', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
     const skillsDir = resolveSkillsDir(workspaceDir);
     if (!skillsDir) { res.status(404).json({ error: 'No skills directory' }); return; }
 
-    const requested = path.resolve(skillsDir, req.params.name, 'SKILL.md');
+    const rel = (req.params as { 0?: string })[0] ?? '';
+    const requested = path.resolve(skillsDir, rel, 'SKILL.md');
     if (!requested.startsWith(skillsDir + path.sep)) {
-      res.status(400).json({ error: 'Invalid skill name' });
+      res.status(400).json({ error: 'Invalid skill path' });
       return;
     }
     if (!fs.existsSync(requested)) {
@@ -725,7 +748,8 @@ export function createServer() {
     const content = fs.readFileSync(requested, 'utf8');
     const fm = parseFrontmatter(content);
     res.json({
-      name: fm.name ?? req.params.name,
+      name: fm.name ?? path.basename(rel),
+      path: rel,
       description: fm.description ?? '',
       userInvocable: fm['user-invocable'] === 'true',
       allowedTools: fm['allowed-tools'] ?? '',

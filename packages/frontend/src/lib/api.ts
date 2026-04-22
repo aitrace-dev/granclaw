@@ -206,6 +206,10 @@ export async function deleteSecretApi(agentId: string, name: string): Promise<vo
 
 export interface Skill {
   name: string;
+  /** Relative path from the skills root (e.g. "housekeeping" or
+   *  "writing-styles/comments"). Unique identifier — pi's loader allows
+   *  nested sub-folder skills, so `name` alone can collide. */
+  path: string;
   description: string;
   userInvocable?: boolean;
 }
@@ -222,8 +226,11 @@ export async function fetchSkills(agentId: string): Promise<Skill[]> {
   return data.skills;
 }
 
-export async function fetchSkillDetail(agentId: string, name: string): Promise<SkillDetail> {
-  const res = await fetch(`${BASE}/agents/${agentId}/skills/${encodeURIComponent(name)}`);
+export async function fetchSkillDetail(agentId: string, skillPath: string): Promise<SkillDetail> {
+  // Encode each path segment separately so forward slashes survive — the
+  // backend route is /skills/* and expects a slash-separated relative path.
+  const encoded = skillPath.split('/').map(encodeURIComponent).join('/');
+  const res = await fetch(`${BASE}/agents/${agentId}/skills/${encoded}`);
   if (!res.ok) throw new Error(`fetchSkillDetail: ${res.status}`);
   return res.json() as Promise<SkillDetail>;
 }

@@ -43,27 +43,35 @@ export function SkillsView({ agentId }: { agentId: string }) {
           <div className="p-4 text-[11px] text-on-surface-variant leading-relaxed">{t('skillsView.empty')}</div>
         ) : (
           <ul className="divide-y divide-outline/10">
-            {skills.map(s => (
-              <li key={s.name}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(s.name)}
-                  className={`w-full text-left px-4 py-3 hover:bg-surface-container transition-colors ${selected === s.name ? 'bg-surface-container' : ''}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-mono text-on-surface truncate">{s.name}</span>
-                    {s.userInvocable && (
-                      <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
-                        {t('skillsView.userInvocable')}
+            {skills.map(s => {
+              const slashIdx = s.path.lastIndexOf('/');
+              const prefix = slashIdx >= 0 ? s.path.slice(0, slashIdx + 1) : '';
+              const leaf = slashIdx >= 0 ? s.path.slice(slashIdx + 1) : s.name;
+              return (
+                <li key={s.path}>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(s.path)}
+                    className={`w-full text-left px-4 py-3 hover:bg-surface-container transition-colors ${selected === s.path ? 'bg-surface-container' : ''}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-mono truncate">
+                        {prefix && <span className="text-on-surface-variant/60">{prefix}</span>}
+                        <span className="text-on-surface">{leaf}</span>
                       </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] text-on-surface-variant mt-1 line-clamp-2 leading-snug">
-                    {s.description}
-                  </div>
-                </button>
-              </li>
-            ))}
+                      {s.userInvocable && (
+                        <span className="text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                          {t('skillsView.userInvocable')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-on-surface-variant mt-1 line-clamp-2 leading-snug">
+                      {s.description}
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -80,7 +88,14 @@ export function SkillsView({ agentId }: { agentId: string }) {
           <>
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-[16px] font-semibold text-on-surface font-mono">{detail.name}</h2>
+                <h2 className="text-[16px] font-semibold font-mono">
+                  {detail.path.includes('/') && (
+                    <span className="text-on-surface-variant/60">
+                      {detail.path.slice(0, detail.path.lastIndexOf('/') + 1)}
+                    </span>
+                  )}
+                  <span className="text-on-surface">{detail.name}</span>
+                </h2>
                 {detail.userInvocable && (
                   <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
                     {t('skillsView.userInvocable')}

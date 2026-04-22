@@ -153,7 +153,13 @@ jobs:
         with:
           context: ./infra
           push: true
-          tags: ghcr.io/aitrace-dev/granclaw:latest
+          # Emit both `:latest` and `:<version>` so downstream images
+          # (enterprise/infra/Dockerfile.granclaw) can pin to an exact base
+          # version. Without the versioned tag, enterprise is forced to
+          # track :latest and every base release silently rebuilds it.
+          tags: |
+            ghcr.io/aitrace-dev/granclaw:latest
+            ghcr.io/aitrace-dev/granclaw:${{ needs.release.outputs.version }}
           build-args: GRANCLAW_VERSION=${{ needs.release.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

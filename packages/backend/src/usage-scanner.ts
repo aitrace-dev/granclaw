@@ -14,6 +14,41 @@
 
 import { queryActions } from './logs-db.js';
 
+/**
+ * Per-million-token pricing override for models where pi/LiteLLM's
+ * computed cost is untrustworthy (either missing from its pricing DB
+ * or misidentified and priced against a more expensive Claude model).
+ *
+ * Prices mirror the "/M" figures in packages/frontend/src/lib/models.ts
+ * (input/output USD per 1M tokens). When the model matches, we
+ * recompute cost from the logged token counts and ignore the value
+ * pi stored.
+ *
+ * MiniMax M2.7: $0.30 input, $1.20 output per 1M — pi's LiteLLM
+ * bundle doesn't recognize the `minimax/` prefix and falls back to a
+ * wildly inflated default, so the usage view showed double-digit
+ * dollar figures for cheap turns.
+ */
+const PRICING_OVERRIDES_PER_MILLION: Record<string, { input: number; output: number; cacheRead?: number }> = {
+  'minimax/minimax-m2.7': { input: 0.30, output: 1.20 },
+};
+
+function recomputeCost(
+  model: string,
+  tokens: { input?: number; output?: number; cacheRead?: number } | undefined,
+): number | null {
+  const p = PRICING_OVERRIDES_PER_MILLION[model];
+  if (!p || !tokens) return null;
+  const inTok = tokens.input ?? 0;
+  const outTok = tokens.output ?? 0;
+  const cacheTok = tokens.cacheRead ?? 0;
+  return (
+    (inTok * p.input) / 1_000_000 +
+    (outTok * p.output) / 1_000_000 +
+    (cacheTok * (p.cacheRead ?? p.input)) / 1_000_000
+  );
+}
+
 export interface DailyUsage {
   date: string;
   inputTokens: number;
@@ -72,6 +107,9 @@ export async function scanUsage(agentId: string, days = 30): Promise<UsageSummar
       cost = parsed.cost ?? 0;
       model = parsed.model ?? 'unknown';
     } catch { continue; }
+
+    const overridden = recomputeCost(model, tokens);
+    if (overridden !== null) cost = overridden;
 
     const inputTokens = tokens?.input ?? 0;
     const outputTokens = tokens?.output ?? 0;

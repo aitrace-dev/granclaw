@@ -4,12 +4,14 @@ import {
   fetchWorkflow,
   fetchWorkflowRuns,
   triggerWorkflowRun,
+  createWorkflow,
   type Workflow,
   type WorkflowWithSteps,
   type WorkflowRun,
 } from '../lib/api.ts';
 import { WorkflowDetail } from './WorkflowDetail.tsx';
-import { badgeSuccess, badgeWarning, badgeNeutral, buttonPrimary, cardCls } from '../ui/primitives';
+import { WorkflowFormModal } from './WorkflowFormModal.tsx';
+import { badgeSuccess, badgeWarning, badgeNeutral, buttonPrimary, buttonSecondary, cardCls } from '../ui/primitives';
 import { useT } from '../lib/i18n.tsx';
 
 export function WorkflowList({ agentId }: { agentId: string }) {
@@ -18,6 +20,7 @@ export function WorkflowList({ agentId }: { agentId: string }) {
   const [selected, setSelected] = useState<WorkflowWithSteps | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [running, setRunning] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const loadWorkflows = useCallback(async () => {
     try {
@@ -54,17 +57,32 @@ export function WorkflowList({ agentId }: { agentId: string }) {
     }
   };
 
+  const handleCreate = async (data: { name: string; description: string }) => {
+    const wf = await createWorkflow(agentId, data);
+    setCreating(false);
+    await loadWorkflows();
+    await handleSelect(wf.id);
+  };
+
   if (selected) {
     return (
       <WorkflowDetail
         agentId={agentId}
         workflow={selected}
         runs={runs}
-        onBack={() => setSelected(null)}
+        onBack={async () => { setSelected(null); await loadWorkflows(); }}
         onRun={() => handleRun(selected.id)}
-        onRefreshRuns={async () => {
-          const wfRuns = await fetchWorkflowRuns(agentId, selected.id);
+        onRefresh={async () => {
+          const [wf, wfRuns] = await Promise.all([
+            fetchWorkflow(agentId, selected.id),
+            fetchWorkflowRuns(agentId, selected.id),
+          ]);
+          setSelected(wf);
           setRuns(wfRuns);
+        }}
+        onDeleted={async () => {
+          setSelected(null);
+          await loadWorkflows();
         }}
       />
     );
@@ -76,9 +94,6 @@ export function WorkflowList({ agentId }: { agentId: string }) {
     archived: badgeNeutral,
   };
 
-  // Colour classes for last-run status. `running` gets a pulsing primary
-  // so the user can spot an in-flight run from the list without drilling
-  // in; `failed` gets the warning treatment so stale/stuck runs pop.
   const runBadgeCls = (status: string | undefined): string => {
     if (status === 'running') return 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-primary/15 text-primary';
     if (status === 'completed') return `${badgeSuccess} text-[10px]`;
@@ -100,7 +115,12 @@ export function WorkflowList({ agentId }: { agentId: string }) {
 
   return (
     <div className="p-3 sm:p-4 min-w-0">
-      <h2 className="font-headline text-xl font-bold text-on-surface mb-4">{t('workflows.title')}</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-headline text-xl font-bold text-on-surface">{t('workflows.title')}</h2>
+        <button onClick={() => setCreating(true)} className={buttonSecondary}>
+          {t('workflows.newWorkflow')}
+        </button>
+      </div>
 
       {workflows.length === 0 ? (
         <p className="font-mono text-xs text-on-surface-variant">
@@ -151,6 +171,14 @@ export function WorkflowList({ agentId }: { agentId: string }) {
             </div>
           ))}
         </div>
+      )}
+
+      {creating && (
+        <WorkflowFormModal
+          title={t('workflows.newWorkflow')}
+          onSave={handleCreate}
+          onCancel={() => setCreating(false)}
+        />
       )}
     </div>
   );

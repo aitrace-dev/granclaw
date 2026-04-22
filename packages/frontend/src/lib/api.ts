@@ -710,6 +710,86 @@ export async function triggerWorkflowRun(agentId: string, workflowId: string): P
   return res.json() as Promise<{ runId: string }>;
 }
 
+export async function createWorkflow(
+  agentId: string,
+  data: { name: string; description?: string },
+): Promise<Workflow> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`createWorkflow: ${res.status}`);
+  return res.json() as Promise<Workflow>;
+}
+
+export async function updateWorkflow(
+  agentId: string,
+  workflowId: string,
+  data: { name?: string; description?: string; status?: WorkflowStatus },
+): Promise<Workflow> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`updateWorkflow: ${res.status}`);
+  return res.json() as Promise<Workflow>;
+}
+
+export async function deleteWorkflow(agentId: string, workflowId: string): Promise<void> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`deleteWorkflow: ${res.status}`);
+}
+
+export interface StepInput {
+  name: string;
+  type: StepType;
+  config: CodeConfig | LlmConfig;
+  transitions?: { conditions: Condition[] } | null;
+  position?: number;
+}
+
+export async function createStep(
+  agentId: string,
+  workflowId: string,
+  data: StepInput,
+): Promise<WorkflowStep> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/steps`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`createStep: ${res.status}`);
+  return res.json() as Promise<WorkflowStep>;
+}
+
+export async function updateStep(
+  agentId: string,
+  workflowId: string,
+  stepId: string,
+  data: Partial<StepInput>,
+): Promise<WorkflowStep> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/steps/${stepId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`updateStep: ${res.status}`);
+  return res.json() as Promise<WorkflowStep>;
+}
+
+export async function deleteStep(
+  agentId: string,
+  workflowId: string,
+  stepId: string,
+): Promise<void> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/steps/${stepId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`deleteStep: ${res.status}`);
+}
+
 // ── Logs ────────────────────────────────────────────────────────────────────
 
 export async function fetchLogs(params?: {

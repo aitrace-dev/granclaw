@@ -1,32 +1,38 @@
 import { useState } from 'react';
 import {
+  updateWorkflow,
+  deleteWorkflow,
+  createStep,
+  updateStep,
+  deleteStep,
   type WorkflowWithSteps,
   type WorkflowRun,
   type WorkflowStep,
+  type StepInput,
+  type WorkflowStatus,
 } from '../lib/api.ts';
 import { RunDetail } from './RunDetail.tsx';
-import { buttonPrimary, buttonGhost, cardCls, badgeBase } from '../ui/primitives';
+import { WorkflowFormModal } from './WorkflowFormModal.tsx';
+import { StepFormModal } from './StepFormModal.tsx';
+import { buttonPrimary, buttonGhost, buttonDanger, buttonSecondary, cardCls, badgeBase } from '../ui/primitives';
 import { useT } from '../lib/i18n.tsx';
 
 interface Props {
   agentId: string;
   workflow: WorkflowWithSteps;
   runs: WorkflowRun[];
-  onBack: () => void;
+  onBack: () => void | Promise<void>;
   onRun: () => void;
-  onRefreshRuns: () => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onDeleted: () => Promise<void>;
 }
 
-// Step-type chip colors, keyed to the new semantic palette.
 const stepTypeChip: Record<string, string> = {
   code:  `${badgeBase} bg-primary/10 border border-primary/20 text-primary`,
   llm:   `${badgeBase} bg-info/10 border border-info/20 text-info`,
   agent: `${badgeBase} bg-success/10 border border-success/20 text-success`,
 };
 
-// Run-status dot colors, read from the theme's semantic tokens via Tailwind
-// arbitrary values that reference the CSS variables. This keeps both light
-// and dark themes in sync without per-component overrides.
 const runStatusDot: Record<string, string> = {
   running:   'bg-warning',
   completed: 'bg-success',
@@ -34,10 +40,13 @@ const runStatusDot: Record<string, string> = {
   cancelled: 'bg-outline',
 };
 
-export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefreshRuns }: Props) {
+export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefresh, onDeleted }: Props) {
   const { t } = useT();
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+  const [editingWorkflow, setEditingWorkflow] = useState(false);
+  const [addingStep, setAddingStep] = useState(false);
+  const [editingStep, setEditingStep] = useState<WorkflowStep | null>(null);
 
   const toggleStep = (stepId: string) => {
     setExpandedSteps(prev => {
@@ -48,6 +57,50 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
     });
   };
 
+  const handleUpdateWorkflow = async (data: { name: string; description: string; status?: WorkflowStatus }) => {
+    await updateWorkflow(agentId, workflow.id, data);
+    setEditingWorkflow(false);
+    await onRefresh();
+  };
+
+  const handleDeleteWorkflow = async () => {
+    if (!window.confirm(t('workflows.confirmDelete', { name: workflow.name }))) return;
+    await deleteWorkflow(agentId, workflow.id);
+    await onDeleted();
+  };
+
+  const handleAddStep = async (data: StepInput) => {
+    await createStep(agentId, workflow.id, data);
+    setAddingStep(false);
+    await onRefresh();
+  };
+
+  const handleUpdateStep = async (data: StepInput) => {
+    if (!editingStep) return;
+    await updateStep(agentId, workflow.id, editingStep.id, data);
+    setEditingStep(null);
+    await onRefresh();
+  };
+
+  const handleDeleteStep = async (step: WorkflowStep) => {
+    if (!window.confirm(t('workflows.confirmDeleteStep', { name: step.name }))) return;
+    await deleteStep(agentId, workflow.id, step.id);
+    await onRefresh();
+  };
+
+  const handleMoveStep = async (step: WorkflowStep, direction: -1 | 1) => {
+    const sorted = [...workflow.steps].sort((a, b) => a.position - b.position);
+    const idx = sorted.findIndex(s => s.id === step.id);
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= sorted.length) return;
+    const target = sorted[targetIdx];
+    await Promise.all([
+      updateStep(agentId, workflow.id, step.id, { position: target.position }),
+      updateStep(agentId, workflow.id, target.id, { position: step.position }),
+    ]);
+    await onRefresh();
+  };
+
   if (selectedRunId) {
     return (
       <RunDetail
@@ -55,34 +108,52 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
         workflowId={workflow.id}
         runId={selectedRunId}
         steps={workflow.steps}
-        onBack={() => { setSelectedRunId(null); void onRefreshRuns(); }}
+        onBack={() => { setSelectedRunId(null); void onRefresh(); }}
       />
     );
   }
 
+  const sortedSteps = [...workflow.steps].sort((a, b) => a.position - b.position);
+
   return (
     <div className="p-4">
-      <button onClick={onBack} className={`${buttonGhost} mb-3`}>
+      <button onClick={() => void onBack()} className={`${buttonGhost} mb-3`}>
         {t('workflows.back')}
       </button>
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <h2 className="font-headline text-xl font-bold text-on-surface">{workflow.name}</h2>
-        <button onClick={onRun} className={buttonPrimary}>
-          {t('workflows.run_button')}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setEditingWorkflow(true)} className={buttonGhost}>
+            {t('workflows.edit')}
+          </button>
+          <button onClick={() => void handleDeleteWorkflow()} className={buttonDanger}>
+            {t('workflows.delete')}
+          </button>
+          <button onClick={onRun} className={buttonPrimary}>
+            {t('workflows.run_button')}
+          </button>
+        </div>
       </div>
 
       {workflow.description && (
         <p className="text-sm text-on-surface-variant mb-4">{workflow.description}</p>
       )}
 
-      {/* Steps timeline */}
-      <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
-        {t('workflows.stepsTitle', { count: workflow.steps.length })}
-      </h3>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant">
+          {t('workflows.stepsTitle', { count: sortedSteps.length })}
+        </h3>
+        <button onClick={() => setAddingStep(true)} className={buttonSecondary}>
+          {t('workflows.addStep')}
+        </button>
+      </div>
+
       <div className="flex flex-col gap-1 mb-6">
-        {workflow.steps.map((step: WorkflowStep, i: number) => {
+        {sortedSteps.length === 0 && (
+          <p className="text-xs text-on-surface-variant py-2">{t('workflows.noSteps')}</p>
+        )}
+        {sortedSteps.map((step: WorkflowStep, i: number) => {
           const config = step.config as unknown as Record<string, unknown>;
           const prompt = (config.prompt ?? config.script ?? '') as string;
           const isExpanded = expandedSteps.has(step.id);
@@ -90,10 +161,9 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
           return (
             <div
               key={step.id}
-              onClick={() => toggleStep(step.id)}
-              className={`${cardCls} p-3 cursor-pointer transition-colors hover:border-primary/40`}
+              className={`${cardCls} p-3 transition-colors hover:border-primary/40`}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleStep(step.id)}>
                 <span className="font-mono text-[10px] text-on-surface-variant w-5 text-center">{i + 1}</span>
                 <span className={stepTypeChip[step.type] ?? stepTypeChip.agent}>
                   {step.type}
@@ -104,6 +174,30 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
                     {t(step.transitions.conditions.length === 1 ? 'workflows.conditionsOne' : 'workflows.conditionsOther', { count: step.transitions.conditions.length })}
                   </span>
                 )}
+                <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => void handleMoveStep(step, -1)}
+                    disabled={i === 0}
+                    className={buttonGhost}
+                    title={t('workflows.moveUp')}
+                  >↑</button>
+                  <button
+                    onClick={() => void handleMoveStep(step, 1)}
+                    disabled={i === sortedSteps.length - 1}
+                    className={buttonGhost}
+                    title={t('workflows.moveDown')}
+                  >↓</button>
+                  <button
+                    onClick={() => setEditingStep(step)}
+                    className={buttonGhost}
+                    title={t('workflows.edit')}
+                  >✎</button>
+                  <button
+                    onClick={() => void handleDeleteStep(step)}
+                    className={buttonDanger}
+                    title={t('workflows.delete')}
+                  >✕</button>
+                </div>
                 <span
                   className="text-[10px] text-on-surface-variant transition-transform"
                   style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}
@@ -135,7 +229,6 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
         })}
       </div>
 
-      {/* Run history */}
       <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
         {t('workflows.runHistoryTitle', { count: runs.length })}
       </h3>
@@ -161,6 +254,33 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
             </div>
           ))}
         </div>
+      )}
+
+      {editingWorkflow && (
+        <WorkflowFormModal
+          title={t('workflows.editWorkflow')}
+          initial={{ name: workflow.name, description: workflow.description, status: workflow.status }}
+          allowStatus
+          onSave={handleUpdateWorkflow}
+          onCancel={() => setEditingWorkflow(false)}
+        />
+      )}
+
+      {addingStep && (
+        <StepFormModal
+          title={t('workflows.addStepTitle')}
+          onSave={handleAddStep}
+          onCancel={() => setAddingStep(false)}
+        />
+      )}
+
+      {editingStep && (
+        <StepFormModal
+          title={t('workflows.editStepTitle')}
+          initial={editingStep}
+          onSave={handleUpdateStep}
+          onCancel={() => setEditingStep(null)}
+        />
       )}
     </div>
   );

@@ -48,6 +48,7 @@ import {
   addStep, updateStep, removeStep,
   listRuns, getRun,
   getRunningRuns,
+  getLatestRun,
 } from '../workflows-db.js';
 import { executeWorkflow } from '../workflows/runner.js';
 import { bootstrapWorkspace, compactAgentSession } from '../agent/runner-pi.js';
@@ -653,33 +654,83 @@ export function createServer() {
 
   // ── Skills ──────────────────────────────────────────────────────────────
 
+  // Where skills live depends on the runtime:
+  //   - pi runner (current):  <workspace>/.pi/skills/
+  //   - legacy agent runner:  <workspace>/.agent/skills/
+  //   - older claude runner:  <workspace>/.claude/skills/
+  // Pick the first that exists. UI consumes /agents/:id/skills (list) and
+  // /agents/:id/skills/:name (full SKILL.md content) for the Skills tab.
+  function resolveSkillsDir(workspaceDir: string): string | null {
+    for (const candidate of ['.pi/skills', '.agent/skills', '.claude/skills']) {
+      const p = path.join(workspaceDir, candidate);
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  }
+
+  function parseFrontmatter(content: string): Record<string, string> {
+    const fm = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!fm) return {};
+    const out: Record<string, string> = {};
+    for (const line of fm[1].split('\n')) {
+      const m = line.match(/^([A-Za-z_-]+):\s*(.+)$/);
+      if (m) out[m[1]] = m[2].trim();
+    }
+    return out;
+  }
+
   app.get('/agents/:id/skills', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
     const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
-    // pi runner bootstraps .agent/skills/; legacy workspaces used .claude/skills/
-    const agentSkillsDir = path.join(workspaceDir, '.agent', 'skills');
-    const skillsDir = fs.existsSync(agentSkillsDir)
-      ? agentSkillsDir
-      : path.join(workspaceDir, '.claude', 'skills');
-    if (!fs.existsSync(skillsDir)) { res.json({ skills: [] }); return; }
+    const skillsDir = resolveSkillsDir(workspaceDir);
+    if (!skillsDir) { res.json({ skills: [] }); return; }
 
-    const skills: { name: string; description: string }[] = [];
+    const skills: { name: string; description: string; userInvocable: boolean }[] = [];
     for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const skillMd = path.join(skillsDir, entry.name, 'SKILL.md');
       if (!fs.existsSync(skillMd)) continue;
-      const content = fs.readFileSync(skillMd, 'utf8');
-      const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-      if (!fmMatch) continue;
-      const nameMatch = fmMatch[1].match(/^name:\s*(.+)/m);
-      const descMatch = fmMatch[1].match(/^description:\s*(.+)/m);
+      const fm = parseFrontmatter(fs.readFileSync(skillMd, 'utf8'));
+      if (!fm.name && !fm.description) continue;
       skills.push({
-        name: nameMatch?.[1]?.trim() ?? entry.name,
-        description: descMatch?.[1]?.trim() ?? '',
+        name: fm.name ?? entry.name,
+        description: fm.description ?? '',
+        userInvocable: fm['user-invocable'] === 'true',
       });
     }
+    skills.sort((a, b) => a.name.localeCompare(b.name));
     res.json({ skills });
+  });
+
+  // Full SKILL.md body for the detail pane in the Skills tab. Name is the
+  // directory name; we guard against `..` traversal by ensuring the
+  // resolved path stays inside the skillsDir.
+  app.get('/agents/:id/skills/:name', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+    const skillsDir = resolveSkillsDir(workspaceDir);
+    if (!skillsDir) { res.status(404).json({ error: 'No skills directory' }); return; }
+
+    const requested = path.resolve(skillsDir, req.params.name, 'SKILL.md');
+    if (!requested.startsWith(skillsDir + path.sep)) {
+      res.status(400).json({ error: 'Invalid skill name' });
+      return;
+    }
+    if (!fs.existsSync(requested)) {
+      res.status(404).json({ error: 'Skill not found' });
+      return;
+    }
+    const content = fs.readFileSync(requested, 'utf8');
+    const fm = parseFrontmatter(content);
+    res.json({
+      name: fm.name ?? req.params.name,
+      description: fm.description ?? '',
+      userInvocable: fm['user-invocable'] === 'true',
+      allowedTools: fm['allowed-tools'] ?? '',
+      content,
+    });
   });
 
   // ── Tasks ───────────────────────────────────────────────────────────────
@@ -1030,7 +1081,15 @@ export function createServer() {
   app.get('/agents/:id/workflows', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    res.json(listWorkflows(req.params.id));
+    // Hydrate each workflow with its most recent run so the UI list can
+    // show a "last run: running / completed / failed" badge without
+    // forcing users to drill into the detail view. getLatestRun is O(1)
+    // per workflow (indexed on workflow_id + started_at).
+    const workflows = listWorkflows(req.params.id).map(w => ({
+      ...w,
+      lastRun: getLatestRun(req.params.id, w.id),
+    }));
+    res.json(workflows);
   });
 
   app.post('/agents/:id/workflows', (req, res) => {

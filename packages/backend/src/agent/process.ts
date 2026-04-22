@@ -22,6 +22,7 @@ import path from 'path';
 import { getAgent, REPO_ROOT } from '../config.js';
 import { enqueue, dequeueNext, markDone, markFailed, cleanupStaleJobs } from '../agent-db.js';
 import { runAgent, stopAgent, bootstrapWorkspace } from './runner-pi.js';
+import { broadcastToClients, getOrCreateChannelSet } from './channel-broadcast.js';
 import { saveMessage, getProactiveMessagesSinceLastUser } from '../messages-db.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 import { forceCloseActiveSession } from '../browser-sessions.js';
@@ -68,12 +69,15 @@ function main() {
   // ── WebSocket server ───────────────────────────────────────────────────────
   const wss = new WebSocketServer({ port });
 
-  // Map from channelId → set of WS clients subscribed to that channel
+  // Map from channelId → set of WS clients subscribed to that channel.
+  // Per-tab subscribers for the same channel all coexist here: if two
+  // browser tabs have /agents/:id/chat open, both their WS connections
+  // live in channelClients.get('ui') and broadcastToChannel must fan out
+  // to both. See channel-broadcast.ts for the tested helper.
   const channelClients = new Map<string, Set<WebSocket>>();
 
   function getChannelClients(channelId: string): Set<WebSocket> {
-    if (!channelClients.has(channelId)) channelClients.set(channelId, new Set());
-    return channelClients.get(channelId)!;
+    return getOrCreateChannelSet(channelClients as any, channelId) as Set<WebSocket>;
   }
 
   wss.on('connection', (ws) => {
@@ -131,12 +135,9 @@ function main() {
 
   // ── Queue worker ───────────────────────────────────────────────────────────
   function broadcastToChannel(channelId: string, data: unknown) {
-    const json = JSON.stringify(data);
     const targets = channelClients.get(channelId);
     if (!targets) return;
-    for (const ws of targets) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(json);
-    }
+    broadcastToClients(targets as any, data);
   }
 
   // Track busy state per channel type so UI chat can run while workflows/schedules execute

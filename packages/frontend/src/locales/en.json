@@ -95,6 +95,8 @@
     "executing": "Running {tool}…",
     "toolCallsOne": "{count} tool call",
     "toolCallsOther": "{count} tool calls",
+    "compactingContext": "Compacting context…",
+    "compactedContext": "Context compacted",
     "pendingApproval": "⏳ Waiting for approval: {reason}",
     "waitingApproval": "Waiting for approval",
     "respondInGuardian": "Reply in the guardian panel →",
@@ -124,12 +126,24 @@
     "agentNeedsHelp": "The agent needs your help",
     "liveLabel": "live",
     "waitingStream": "waiting for browser stream…",
+    "browserStarting": "browser is starting — stream will begin once a page loads",
+    "browserNotReady": "browser is between pages — waiting for the next navigation",
     "whatDidYouDo": "What did you do?",
     "optional": "(optional)",
     "describeActionPlaceholder": "Describe your action for the agent…",
     "returning": "Returning…",
     "completed": "Completed",
     "urlBarPlaceholder": "Type a URL and press Enter to navigate…"
+  },
+  "skillsView": {
+    "title": "Skills",
+    "subtitle": "Skills your agent can invoke. User-invocable skills can be triggered from chat with /slash-commands.",
+    "empty": "No skills installed yet. Skills live in .pi/skills/ inside the agent workspace.",
+    "loading": "Loading skills…",
+    "selectSkill": "Select a skill on the left to see its full definition.",
+    "userInvocable": "user-invocable",
+    "allowedTools": "Allowed tools",
+    "loadError": "Could not load skill: {error}"
   },
   "tasks": {
     "columns": {
@@ -216,7 +230,13 @@
     "stepTimeout": "Timeout: {seconds}s",
     "stepId": "ID: {id}",
     "runHistoryTitle": "Run history ({count})",
-    "noRuns": "No runs yet."
+    "noRuns": "No runs yet.",
+    "runStatus": {
+      "running": "running",
+      "completed": "completed",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    }
   },
   "runDetail": {
     "loading": "Loading run…",
@@ -313,6 +333,7 @@
     "views": {
       "chat": "Chat",
       "tasks": "Tasks",
+      "skills": "Skills",
       "browser": "Browser",
       "files": "Files",
       "workflows": "Workflows",

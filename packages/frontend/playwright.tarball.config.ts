@@ -2,7 +2,7 @@
  * Playwright config for running regression tests against the packaged
  * granclaw CLI tarball on port 18787. Used to verify that a fix survives
  * the full build → pack → install → start pipeline, not just the dev
- * stack. See CLAUDE.md "fix on dev, verify on tarball" rule.
+ * stack. See docs/ARCHITECTURE.md "fix on dev, verify on tarball" rule.
  *
  * Expects a tarball install to already be running:
  *   GRANCLAW_HOME=/tmp/granclaw-verify-home AGENT_BASE_PORT=4100 \

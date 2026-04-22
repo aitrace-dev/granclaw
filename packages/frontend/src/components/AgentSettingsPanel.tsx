@@ -190,6 +190,12 @@ export function AgentSettingsPanel({
         onClick={() => onViewChange('tasks')}
       />
       <ViewButton
+        icon="🧩"
+        label={t('agentSettings.views.skills')}
+        active={mainView === 'skills'}
+        onClick={() => onViewChange('skills')}
+      />
+      <ViewButton
         icon="🌐"
         label={t('agentSettings.views.browser')}
         active={mainView === 'browser'}

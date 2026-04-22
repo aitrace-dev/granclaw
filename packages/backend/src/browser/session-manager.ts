@@ -205,10 +205,12 @@ export async function startRecording(
   // replay view shows a dead "no recording" card forever.
   //
   // Poll for the WebM file to appear. ffmpeg cold-starts can take 2–3s
-  // under Docker with a loaded host (e.g. right after /sync-server-image
-  // recreates containers). 5s is enough headroom that a slow cold start
-  // isn't misclassified as "ffmpeg missing".
-  const FILE_APPEAR_TIMEOUT_MS = 5000;
+  // under Docker with a loaded host, and we've seen >5s spikes on bluggie
+  // right after `/sync-server-image` recreates containers (every enterprise
+  // instance wakes ffmpeg at the same time). 15s gives headroom for those
+  // cold-start spikes without letting a genuine misconfiguration (missing
+  // ffmpeg, wrong PATH) stall the session for an eternity.
+  const FILE_APPEAR_TIMEOUT_MS = 15_000;
   const FILE_APPEAR_POLL_MS = 100;
   const deadline = Date.now() + FILE_APPEAR_TIMEOUT_MS;
   let fileOk = false;
@@ -221,8 +223,12 @@ export async function startRecording(
   }
 
   if (!fileOk) {
+    // Deliberately does NOT say "check that ffmpeg is installed" — on
+    // bluggie we chased that phantom for a day before confirming ffmpeg 5.1.8
+    // was present and the real cause was a too-tight poll window. Keep the
+    // log factual: the file didn't appear in time.
     console.warn(
-      `[browser/session-manager] record start reported success but ${recordingPath} did not materialize within ${FILE_APPEAR_TIMEOUT_MS}ms — check that ffmpeg is installed and the host is not overloaded`,
+      `[browser/session-manager] record start reported success but ${recordingPath} did not materialize within ${FILE_APPEAR_TIMEOUT_MS}ms — session will proceed without WebM recording`,
     );
     // Best-effort stop so we don't leave a zombie record-state that would
     // make the next session's tryStart hit "already active".

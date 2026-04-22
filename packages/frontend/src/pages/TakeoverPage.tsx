@@ -61,6 +61,7 @@ export function TakeoverPage() {
   const [info, setInfo] = useState<TakeoverInfo | null>(null);
   const [expired, setExpired] = useState(false);
   const [frame, setFrame] = useState<string | null>(null);
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [note, setNote] = useState('');
@@ -102,16 +103,31 @@ export function TakeoverPage() {
           data?: string;
           url?: string;
           title?: string;
+          reason?: string;
         };
         if (msg.type === 'frame' && msg.data) {
           setFrame(`data:image/jpeg;base64,${msg.data}`);
+          setUnavailableReason(null);
+        } else if (msg.type === 'unavailable') {
+          // Backend says no real page is bound right now (browser sits on
+          // about:blank, Orbita restarting, no tabs). Show a loading overlay
+          // instead of pretending the last frame is still live — hard rule:
+          // users never see an about:blank screencast.
+          setUnavailableReason(msg.reason ?? 'unknown');
+          setFrame(null);
         } else if (
           msg.type === 'attached' ||
           msg.type === 'tab_changed' ||
           msg.type === 'url_changed'
         ) {
-          if (msg.url) setCurrentUrl(msg.url);
+          // Only accept real http(s) URLs — the backend already filters, but
+          // double-guard so we never stomp the URL bar to about:blank even
+          // if a stale event slips through.
+          if (msg.url && /^https?:\/\//i.test(msg.url)) {
+            setCurrentUrl(msg.url);
+          }
           if (msg.title) setCurrentTitle(msg.title);
+          setUnavailableReason(null);
         }
       } catch {}
     };
@@ -475,7 +491,7 @@ export function TakeoverPage() {
         onPaste={onPaste}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {frame ? (
+        {frame && !unavailableReason ? (
           <img
             ref={imgRef}
             src={frame}
@@ -486,7 +502,11 @@ export function TakeoverPage() {
           />
         ) : (
           <p className="font-mono text-[10px] text-on-surface-variant/50 animate-pulse">
-            {t('takeover.waitingStream')}
+            {unavailableReason === 'no_suitable_target'
+              ? t('takeover.browserNotReady')
+              : unavailableReason
+                ? t('takeover.browserStarting')
+                : t('takeover.waitingStream')}
           </p>
         )}
       </div>

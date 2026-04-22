@@ -302,7 +302,13 @@ export type StreamChunk =
   //   threshold — pi auto-compaction crossing between turns
   //   overflow  — pi auto-compaction after provider rejected for context length
   | { type: 'compaction_start'; reason: 'manual' | 'threshold' | 'overflow' }
-  | { type: 'compaction_end'; reason: 'manual' | 'threshold' | 'overflow' };
+  | { type: 'compaction_end'; reason: 'manual' | 'threshold' | 'overflow' }
+  // Passive keep-alive emitted every HEARTBEAT_INTERVAL_MS while a tool is
+  // mid-execution. The frontend's 90s stream-idle timer resets on any
+  // chunk, so this prevents a legitimate long-running tool call (slow
+  // browser navigation, deep sub-agent chain, MCP round-trip) from being
+  // misclassified as a stalled turn. Not rendered by the UI.
+  | { type: 'heartbeat' };
 
 // ── Event → chunk helpers ────────────────────────────────────────────────────
 
@@ -419,6 +425,65 @@ function extractAgentName(workspaceDir: string): string | null {
   return null;
 }
 
+// ── Browser tool error classification ────────────────────────────────────────
+// The bluggie incident of 2026-04-22 showed the agent hallucinating "Browser
+// crashed after the heavy session" because our browser tool returned raw
+// stderr dumps like `browser snapshot failed: <a 200-line stack>`. The LLM
+// synthesised a plausible-sounding narrative ("crashed") from an indistinct
+// failure. Categorizing failures into a stable vocabulary + a recovery hint
+// stops that drift:
+//   - BROWSER_DIED  →  runtime will respawn; agent should retry.
+//   - CDP_UNREACHABLE → same recovery as BROWSER_DIED; folded into it.
+//   - TIMEOUT       →  page is hung; agent should fall back.
+//   - ABORTED       →  user cancelled; agent must stop.
+//   - CMD_ERROR     →  real command problem; agent inspects message.
+//
+// We only inspect well-defined signals (err.code/err.killed/err.signal/abort
+// state); the message regex is only a fallback, because relying on stderr
+// prose is brittle across agent-browser versions.
+export type BrowserErrorCategory = 'BROWSER_DIED' | 'TIMEOUT' | 'ABORTED' | 'CMD_ERROR';
+
+export function classifyBrowserError(err: unknown, signal?: AbortSignal): BrowserErrorCategory {
+  const e = err as {
+    code?: string | number;
+    killed?: boolean;
+    signal?: string;
+    stderr?: string;
+    stdout?: string;
+    message?: string;
+    name?: string;
+  };
+
+  // Node's execFile+AbortSignal surfaces as AbortError / code 'ABORT_ERR'.
+  if (signal?.aborted) return 'ABORTED';
+  if (e?.name === 'AbortError' || e?.code === 'ABORT_ERR') return 'ABORTED';
+
+  // execFile timeout: process killed via SIGTERM with `killed: true`.
+  if (e?.killed === true && (e?.signal === 'SIGTERM' || e?.code === null)) return 'TIMEOUT';
+  if (e?.code === 'ETIMEDOUT') return 'TIMEOUT';
+
+  // Daemon/CDP disconnection phrases. Agent-browser and pi both surface
+  // these when the underlying browser process is gone. Grouped under
+  // BROWSER_DIED so the agent gets a single clear recovery instruction.
+  const raw = `${e?.stderr ?? ''}\n${e?.stdout ?? ''}\n${e?.message ?? ''}`.toLowerCase();
+  if (
+    raw.includes('econnrefused') ||
+    raw.includes('target closed') ||
+    raw.includes('session closed') ||
+    raw.includes('protocol error') ||
+    raw.includes('browser has disconnected') ||
+    raw.includes('cdp connection closed') ||
+    raw.includes('daemon not running') ||
+    raw.includes('no session')
+  ) {
+    return 'BROWSER_DIED';
+  }
+
+  if (raw.includes('timeout') || raw.includes('timed out')) return 'TIMEOUT';
+
+  return 'CMD_ERROR';
+}
+
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 function getLanIp(): string {
@@ -483,6 +548,14 @@ export async function runAgent(
   // undefined means injection hasn't happened yet (e.g. model-not-found early return).
   let envKey: string | undefined;
   let prevValue: string | undefined;
+
+  // Tool-execution keep-alive. See comment where it's started (on
+  // tool_execution_start). Declared at the outer scope so the finally
+  // block can still reach stopHeartbeat() if the try body throws.
+  let toolHeartbeat: ReturnType<typeof setInterval> | null = null;
+  const stopHeartbeat = () => {
+    if (toolHeartbeat) { clearInterval(toolHeartbeat); toolHeartbeat = null; }
+  };
 
   try {
     // ── Load pi packages (ESM-only, must bypass tsc's require rewrite) ──
@@ -964,6 +1037,7 @@ export async function runAgent(
           'You do not need to screenshot for audit — the whole session is recorded as video automatically.',
           'Saved logins persist automatically when the user has set up a profile via the dashboard Browser view.',
           'CAPTCHA & Cloudflare handling: the browser ships a stealth extension that handles Cloudflare JS interstitials ("Just a moment…") automatically (waits up to ~45s). If an actual CAPTCHA widget is detected (reCAPTCHA, hCaptcha, Turnstile, etc.), the runtime returns immediately with a warning — call request_human_browser_takeover right away.',
+          'Error recovery: if a result contains "CATEGORY=BROWSER_DIED" the runtime has ALREADY respawned the browser — just retry the exact same command; do NOT tell the user the browser crashed. "CATEGORY=TIMEOUT" means the page is hung — try a different URL or approach. "CATEGORY=ABORTED" means the user cancelled — stop; do not retry. "CATEGORY=CMD_ERROR" is a genuine command problem — inspect the message.',
           'Examples: {"command":"open","args":["https://example.com"]}, {"command":"click","args":["--ref","e12"]}, {"command":"fill","args":["--ref","e5","Alice"]}',
         ],
         parameters: {
@@ -981,7 +1055,11 @@ export async function runAgent(
           },
           required: ['command'],
         },
-        async execute(_toolCallId: string, params: { command?: string; args?: string[] }) {
+        async execute(
+          _toolCallId: string,
+          params: { command?: string; args?: string[] },
+          signal?: AbortSignal,
+        ) {
           const command = (params.command ?? '').trim();
           const args = Array.isArray(params.args) ? params.args.map(String) : [];
 
@@ -1029,6 +1107,11 @@ export async function runAgent(
               timeout: 60_000,
               maxBuffer: 10 * 1024 * 1024,
               env: { ...process.env, ...browser.env },
+              // Forward pi's per-tool abort signal — previously dropped, so a
+              // hung browser command would run out its full 60s timeout even
+              // after the user cancelled the turn. With this wired, turn
+              // cancellation kills the child within milliseconds.
+              signal,
             });
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
             const out = stdout.trim() || stderr.trim() || 'ok';
@@ -1036,9 +1119,32 @@ export async function runAgent(
             return { content: [{ type: 'text' as const, text: out }] };
           } catch (err) {
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
-            const e = err as { stdout?: string; stderr?: string; message?: string; code?: number };
-            const msg = (e.stderr || e.stdout || e.message || String(err)).trim();
-            return { content: [{ type: 'text' as const, text: `browser ${command} failed: ${msg}` }] };
+            const category = classifyBrowserError(err, signal);
+
+            // On BROWSER_DIED null the handle so the NEXT tool call respawns a
+            // fresh session. Without this, every subsequent browser call in the
+            // turn would hit the same dead session and compound the error. The
+            // bluggie incident of 2026-04-22 ("browser crashed after the heavy
+            // session") was the agent hallucinating a crash from a stale-session
+            // error — categorizing it + auto-respawn stops that loop cold.
+            if (category === 'BROWSER_DIED') {
+              browserState.handle = null;
+              return { content: [{ type: 'text' as const, text:
+                `browser session expired and has been restarted (CATEGORY=BROWSER_DIED) — retry the ${command} you were attempting; the runtime already handled the reset.`
+              }] };
+            }
+            if (category === 'ABORTED') {
+              return { content: [{ type: 'text' as const, text: `browser ${command} was cancelled (CATEGORY=ABORTED)` }] };
+            }
+
+            const e = err as { stdout?: string; stderr?: string; message?: string };
+            const raw = (e.stderr || e.stdout || e.message || String(err)).trim();
+            if (category === 'TIMEOUT') {
+              return { content: [{ type: 'text' as const, text:
+                `browser ${command} timed out after 60s (CATEGORY=TIMEOUT). Page is likely hung — try a different URL or fall back to fetch_website.`
+              }] };
+            }
+            return { content: [{ type: 'text' as const, text: `browser ${command} failed (CATEGORY=CMD_ERROR): ${raw}` }] };
           }
         },
       });
@@ -1383,6 +1489,15 @@ export async function runAgent(
     // (extended by pi-coding-agent). We translate the subset we care about
     // into StreamChunk.
     let errorEmitted = false;
+
+    // Frontend 90s stream-idle watchdog resets on any chunk. A slow tool
+    // call (browser navigation on a heavy page, deep sub-agent chain, slow
+    // MCP round-trip) can exceed 90s while the turn is healthily running,
+    // so while a tool is executing we emit a no-op heartbeat chunk every
+    // HEARTBEAT_INTERVAL_MS. toolHeartbeat/stopHeartbeat are declared in
+    // the outer function scope so the finally block can always clear them.
+    const HEARTBEAT_INTERVAL_MS = 30_000;
+
     session.subscribe((event: any) => {
       try {
         switch (event.type) {
@@ -1405,9 +1520,17 @@ export async function runAgent(
           case 'tool_execution_start': {
             onChunk({ type: 'tool_call', tool: event.toolName, input: event.args });
             logAction(agent.id, 'tool_call', { tool: event.toolName, input: event.args });
+            stopHeartbeat();
+            toolHeartbeat = setInterval(() => {
+              try { onChunk({ type: 'heartbeat' }); } catch { /* ignore */ }
+            }, HEARTBEAT_INTERVAL_MS);
+            if (typeof (toolHeartbeat as { unref?: () => void })?.unref === 'function') {
+              (toolHeartbeat as { unref: () => void }).unref();
+            }
             break;
           }
           case 'tool_execution_end': {
+            stopHeartbeat();
             const output = event.result;
             const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
             onChunk({ type: 'tool_result', tool: event.toolName, output });
@@ -1581,6 +1704,7 @@ export async function runAgent(
     onChunk({ type: 'error', message: msg });
     try { logAction(agent.id, 'error', null, { message: msg }); } catch { /* ignore */ }
   } finally {
+    stopHeartbeat();
     activeSessions.delete(agent.id);
     // Finalize the browser session if the agent used it — stops the WebM
     // recording and marks status closed so the dashboard replay view can

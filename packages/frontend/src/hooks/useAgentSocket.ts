@@ -25,7 +25,16 @@ export type StreamChunk =
   | { type: 'blocked'; reason: string }
   | { type: 'pending_approval'; reason: string }
   | { type: 'done'; sessionId: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  // Compaction heartbeat — fires around pi session.compact() so the UI
+  // shows a visible indicator and the 90s stream timeout stays armed even
+  // when compaction blocks the agent loop for tens of seconds.
+  | { type: 'compaction_start'; reason: 'manual' | 'threshold' | 'overflow' }
+  | { type: 'compaction_end'; reason: 'manual' | 'threshold' | 'overflow' }
+  // Passive keep-alive emitted by runner-pi every ~30s during tool
+  // execution. Not rendered — its only purpose is to reset the stream
+  // idle timer so a long tool call isn't misclassified as a stalled turn.
+  | { type: 'heartbeat' };
 
 type WsMessage =
   | { type: 'chunk'; chunk: StreamChunk }

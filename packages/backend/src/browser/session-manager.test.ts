@@ -79,7 +79,7 @@ describe('startRecording', () => {
 
     const meta = JSON.parse(fs.readFileSync(handle.metaPath, 'utf-8'));
     expect(meta.video, 'meta.video must stay null so the frontend does not falsely advertise a recording').toBeNull();
-  }, 10_000);
+  }, 20_000); // 15s poll window + spawn overhead — stays under vitest's default after the bluggie-driven bump
 
   it('returns true and sets meta.video="recording.webm" when the WebM file actually materializes', async () => {
     execFileHandler = (_bin, args) => {

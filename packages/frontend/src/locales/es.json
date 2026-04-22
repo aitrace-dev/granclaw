@@ -95,6 +95,8 @@
     "executing": "Ejecutando {tool}…",
     "toolCallsOne": "{count} llamada a herramienta",
     "toolCallsOther": "{count} llamadas a herramienta",
+    "compactingContext": "Compactando contexto…",
+    "compactedContext": "Contexto compactado",
     "pendingApproval": "⏳ Esperando aprobación: {reason}",
     "waitingApproval": "Esperando aprobación",
     "respondInGuardian": "Responde en el panel guardián →",
@@ -124,12 +126,24 @@
     "agentNeedsHelp": "El agente necesita tu ayuda",
     "liveLabel": "en vivo",
     "waitingStream": "esperando transmisión del navegador…",
+    "browserStarting": "iniciando el navegador — la transmisión comenzará cuando cargue una página",
+    "browserNotReady": "el navegador está entre páginas — esperando la próxima navegación",
     "whatDidYouDo": "¿Qué hiciste?",
     "optional": "(opcional)",
     "describeActionPlaceholder": "Describe tu acción para el agente…",
     "returning": "Devolviendo…",
     "completed": "Completado",
     "urlBarPlaceholder": "Escribe una URL y pulsa Intro para navegar…"
+  },
+  "skillsView": {
+    "title": "Habilidades",
+    "subtitle": "Habilidades que tu agente puede invocar. Las habilidades invocables por el usuario se pueden activar desde el chat con /barra-comando.",
+    "empty": "No hay habilidades instaladas todavía. Viven en .pi/skills/ dentro del workspace del agente.",
+    "loading": "Cargando habilidades…",
+    "selectSkill": "Selecciona una habilidad a la izquierda para ver su definición completa.",
+    "userInvocable": "invocable por usuario",
+    "allowedTools": "Herramientas permitidas",
+    "loadError": "No se pudo cargar la habilidad: {error}"
   },
   "tasks": {
     "columns": {
@@ -216,7 +230,13 @@
     "stepTimeout": "Límite de tiempo: {seconds}s",
     "stepId": "ID: {id}",
     "runHistoryTitle": "Historial de ejecuciones ({count})",
-    "noRuns": "Sin ejecuciones aún."
+    "noRuns": "Sin ejecuciones aún.",
+    "runStatus": {
+      "running": "en ejecución",
+      "completed": "completado",
+      "failed": "fallido",
+      "cancelled": "cancelado"
+    }
   },
   "runDetail": {
     "loading": "Cargando ejecución…",
@@ -313,6 +333,7 @@
     "views": {
       "chat": "Chat",
       "tasks": "Tareas",
+      "skills": "Habilidades",
       "browser": "Navegador",
       "files": "Archivos",
       "workflows": "Flujos de trabajo",

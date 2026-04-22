@@ -313,6 +313,57 @@ export function getRunningRuns(agentId: string): { runId: string; workflowId: st
   } catch { return []; }
 }
 
+/**
+ * Flip every run still marked 'running' (and its still-'running' steps) to
+ * 'failed'. Called at boot from `packages/backend/src/index.ts` so a run
+ * that was mid-flight when the container was killed (sync-server-image
+ * does `docker rm -f`, crash, OOM, etc.) doesn't stay stuck in 'running'
+ * forever — the UI was showing the last run perpetually in-progress,
+ * blocking the run button's disabled-state heuristics and confusing users
+ * into thinking the workflow was "still going" hours later.
+ *
+ * Returns the number of runs flipped. Best-effort — errors are swallowed
+ * per-agent to keep boot from blocking on a single bad workspace.
+ */
+export function finalizeRunningRuns(agentId: string): number {
+  try {
+    const db = getDb(agentId);
+    const now = Date.now();
+    const err = 'Run interrupted — backend restarted while executing.';
+    // Step-level first so the run summary in the UI shows WHERE it died.
+    db.prepare(`
+      UPDATE run_steps SET status = 'failed', error = COALESCE(error, ?), finished_at = COALESCE(finished_at, ?)
+      WHERE status = 'running'
+    `).run(err, now);
+    db.prepare(`
+      UPDATE run_steps SET status = 'skipped'
+      WHERE status = 'pending' AND run_id IN (SELECT id FROM runs WHERE status = 'running')
+    `).run();
+    const result = db.prepare(`
+      UPDATE runs SET status = 'failed', finished_at = COALESCE(finished_at, ?)
+      WHERE status = 'running'
+    `).run(now);
+    return result.changes ?? 0;
+  } catch { return 0; }
+}
+
+/**
+ * Most recent run for a workflow, or null if the workflow has never run.
+ * Lightweight (no joins to run_steps) so the workflow list endpoint can
+ * hydrate every card without an N+1 problem. Used by the UI to show an
+ * at-a-glance "last run: running / completed / failed" badge without
+ * forcing the user to click into the detail view.
+ */
+export function getLatestRun(agentId: string, workflowId: string): Run | null {
+  try {
+    const db = getDb(agentId);
+    const row = db.prepare(`
+      SELECT * FROM runs WHERE workflow_id = ? ORDER BY started_at DESC LIMIT 1
+    `).get(workflowId);
+    return row ? rowToRun(row as Record<string, unknown>) : null;
+  } catch { return null; }
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
 export function closeWorkflowsDb(agentId: string): void {

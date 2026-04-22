@@ -1,11 +1,22 @@
 import 'dotenv/config';
 import net from 'net';
+import { setMaxListeners } from 'node:events';
 import { createServer } from './orchestrator/server.js';
+
+// Pi 0.68 issues tool calls in parallel. Every concurrent tool invocation
+// registers an abort listener on the shared session AbortSignal (properly
+// removed when the tool resolves — this is not a leak, just a high-water
+// mark). Node's default 10 listeners triggers
+// "MaxListenersExceededWarning" during parallel bursts. Raise the default
+// so normal operation doesn't print scary warnings; the per-call
+// add/remove pairing from pi still prevents real accumulation.
+setMaxListeners(50);
 import { startAllAgents, plannedAgentPorts } from './orchestrator/agent-manager.js';
 import { startScheduler } from './scheduler.js';
 import { initTelemetry, capture, shutdownTelemetry } from './telemetry.js';
 import { getAgents } from './config.js';
 import { finalizeAllActiveSessions } from './browser-sessions.js';
+import { finalizeRunningRuns } from './workflows-db.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -58,6 +69,17 @@ preflight()
         }
       } catch (err) {
         console.error(`[orchestrator] finalizeAllActiveSessions failed for ${agent.id}:`, err);
+      }
+      // Same story for workflow runs: a crash or container recreate mid-run
+      // leaves the run stuck in 'running' forever, which poisons the
+      // Workflows list (UI shows "running" permanently on a dead run).
+      try {
+        const flipped = finalizeRunningRuns(agent.id);
+        if (flipped > 0) {
+          console.log(`[orchestrator] finalized ${flipped} leftover running workflow run(s) for ${agent.id}`);
+        }
+      } catch (err) {
+        console.error(`[orchestrator] finalizeRunningRuns failed for ${agent.id}:`, err);
       }
     }
 

@@ -9,6 +9,63 @@ allowed-tools: [bash]
 
 You can create, edit, and trigger automated workflows that chain shell scripts, LLM calls, and full agent sessions into repeatable pipelines. Every operation goes through the **orchestrator REST API** — never touch SQLite directly.
 
+## MANDATORY — decompose into multiple steps, do NOT create single-step workflows
+
+**Before you write any `curl -X POST .../workflows` call, you MUST plan 2 or more steps and write them down.** A workflow with one step is not a workflow — it is a scheduled agent run. For that, use the `schedules` skill instead; do not create it here.
+
+### The rule
+
+Every workflow you create must have at least two steps. If your plan has one step, **stop and use `schedules`**. The value of a workflow comes from structured, inspectable output flowing between steps; cramming everything into a single agent step throws that value away and makes debugging impossible.
+
+### Decomposition ladder — write this out BEFORE any API call
+
+For any user request that starts with "automate …" or "set up a workflow for …", answer these in order and jot the plan in plain text first:
+
+1. **What concrete facts/data does the workflow need at the start?** → a **`code` step** (curl, jq, DB fetch, file read). Deterministic. Returns JSON.
+2. **How should those facts be filtered, scored, or classified?** → an **`llm` step** with an explicit `output_schema`. One-shot, structured.
+3. **Is there a decision that short-circuits the rest?** → add `transitions` on the previous step (`goto: "END"` when not worth continuing).
+4. **What's the final action that changes the world (post, message, write, update)?** → an **`agent` step** — but only if the action truly needs iterative tools (browser, vault, multi-file edits). If it's a single HTTP call, that's a `code` step.
+5. **Do we need to record the outcome?** → a final **`code` step** that writes a summary line somewhere inspectable.
+
+Only reach for `agent` steps when the action genuinely needs the full toolset. **Don't wrap a single curl in an `agent` step.** **Don't wrap a deterministic text transform in an `agent` step** — that's what `llm` is for.
+
+### Anti-pattern vs good
+
+BAD — one "do everything" agent step (this is what you must NOT do):
+
+```json
+[
+  {
+    "name": "Do everything",
+    "type": "agent",
+    "position": 0,
+    "config": {
+      "prompt": "Fetch the latest top 25 posts from r/MachineLearning, rank them by engagement, pick the top 5, and post a digest to the user's Telegram."
+    }
+  }
+]
+```
+
+GOOD — three steps, each with structured output the next step consumes:
+
+```json
+[
+  { "name": "Fetch posts",    "type": "code",  "position": 0, "config": { "script": "curl -s https://www.reddit.com/r/MachineLearning/top.json?limit=25 | jq '[.data.children[].data | {id, title, score, num_comments, permalink}]'" } },
+  { "name": "Rank top 5",     "type": "llm",   "position": 1, "config": { "prompt": "Rank these by engagement (score + num_comments), pick 5:\n\n{{prev.output}}\n\nReturn JSON {\"top5\":[{\"id\":string,\"title\":string,\"reason\":string}]}.", "output_schema": {"top5":"array"} } },
+  { "name": "Send to Telegram","type": "agent","position": 2, "config": { "prompt": "Send this digest to the user via telegram_send, one line per post, with a link:\n{{prev.output}}" } }
+]
+```
+
+Notice in the GOOD example: names are verbs + objects, positions are explicit, and each step's output is referenced by the next via `{{prev.output}}`. That is what "a workflow" means.
+
+### Sanity checklist — tick every box before creating
+
+- [ ] Does my plan have ≥ 2 steps? (If no → stop, use `schedules`.)
+- [ ] Does each step have a name that describes ONE concrete action?
+- [ ] Do later steps reference earlier output explicitly (`{{prev.output}}` or `{{steps.<name>.output}}`)?
+- [ ] Are `code` steps used for deterministic work, `llm` for structured transforms, `agent` reserved for real tool-use actions?
+- [ ] Is every step's `position` explicitly set (0-indexed)?
+
 ## Connection
 
 Two environment variables are injected into every agent process:

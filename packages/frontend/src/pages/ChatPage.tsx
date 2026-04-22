@@ -16,10 +16,12 @@ import { MonitorView } from '../components/MonitorView.tsx';
 import { UsageView } from '../components/UsageView.tsx';
 import { LogsView } from '../components/LogsView.tsx';
 import { IntegrationsView } from '../components/IntegrationsView.tsx';
+import { SkillsView } from '../components/SkillsView.tsx';
+import { CompactionIndicator } from '../components/CompactionIndicator.tsx';
 import { useT } from '../lib/i18n.tsx';
 import { getRegisteredViews, subscribeViews } from '../lib/extensions.ts';
 
-type MainView = 'chat' | 'files' | 'tasks' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
+type MainView = 'chat' | 'files' | 'tasks' | 'skills' | 'browser' | 'workflows' | 'schedules' | 'monitor' | 'usage' | 'logs' | 'integrations';
 
 function classifyError(msg: string): string {
   const lower = msg.toLowerCase();
@@ -38,7 +40,7 @@ function classifyError(msg: string): string {
   return 'generic';
 }
 
-const VALID_VIEWS: MainView[] = ['chat', 'files', 'tasks', 'browser', 'workflows', 'schedules', 'monitor', 'usage', 'logs', 'integrations'];
+const VALID_VIEWS: MainView[] = ['chat', 'files', 'tasks', 'skills', 'browser', 'workflows', 'schedules', 'monitor', 'usage', 'logs', 'integrations'];
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -50,6 +52,16 @@ interface ChatMessage {
   text: string;
   isStreaming?: boolean;
   toolCalls?: string[];
+  // Compaction indicator state. isCompacting is true while a
+  // compaction_start has fired without a matching compaction_end;
+  // compactions counts completed compactions in this turn so the UI can
+  // show "Context compacted" (or "2× context compacted") after the fact.
+  // We render this as a tool-call-ish status row inside the assistant
+  // message so the user sees the agent doing visible work, rather than
+  // staring at dead air until the 90s stream timeout fires a generic
+  // "took too long" error.
+  isCompacting?: boolean;
+  compactions?: number;
 }
 
 // ── Typing indicator ──────────────────────────────────────────────────────
@@ -187,7 +199,63 @@ export function ChatPage() {
     setPendingApproval(null);
   }, []);
 
-  const { sendMessage, stopMessage, connected } = useAgentSocket(agent?.id, undefined, handleReconnect);
+  // Re-fetch persisted messages and re-group them into ChatMessages.
+  // Used on mount AND whenever a foreign tab's turn completes so the
+  // old tab picks up messages sent from the new tab without a manual
+  // refresh. Defined up here so both the mount effect and the server-
+  // message handler below can call it.
+  const refetchMessages = useCallback(() => {
+    if (!agentId) return;
+    fetchMessages(agentId, 'ui').then((msgs) => {
+      const grouped: ChatMessage[] = [];
+      let pendingToolCalls: string[] = [];
+      for (const m of msgs) {
+        if (m.role === 'tool_call') {
+          pendingToolCalls.push(m.content);
+        } else if (m.role === 'assistant') {
+          if (!m.content && pendingToolCalls.length === 0) continue;
+          grouped.push({ id: m.id, role: 'agent', text: m.content, toolCalls: pendingToolCalls.length > 0 ? pendingToolCalls : undefined });
+          pendingToolCalls = [];
+        } else {
+          if (pendingToolCalls.length > 0) {
+            grouped.push({ id: crypto.randomUUID(), role: 'agent', text: '', toolCalls: pendingToolCalls });
+            pendingToolCalls = [];
+          }
+          grouped.push({ id: m.id, role: 'user', text: m.content });
+        }
+      }
+      if (pendingToolCalls.length > 0) {
+        grouped.push({ id: crypto.randomUUID(), role: 'agent', text: '', toolCalls: pendingToolCalls });
+      }
+      setMessages(grouped);
+    }).catch(console.error);
+  }, [agentId]);
+
+  // Server-message handler — fires for WS chunks received while this tab
+  // is NOT the active sender (useAgentSocket prefers handlerRef set by
+  // sendMessage; this fallback only runs when handlerRef is null).
+  //
+  // Purpose: multi-tab sync. When Tab B sends a message, Tab A's WS is
+  // still subscribed to the 'ui' channel and receives the broadcast
+  // chunks — without this handler they were silently dropped. We don't
+  // mirror every live chunk (getting the user-message shell + proper
+  // ordering right without a turn_start signal from the server is hard);
+  // instead, on the turn-ending chunks (done/error/blocked) we refetch
+  // persisted messages from the DB, which is the authoritative record of
+  // both user + assistant + tool_call rows the backend saved.
+  //
+  // Also: if `isSending` is false here we know the turn belongs to a
+  // foreign tab, so re-enabling the user's own chat input stays a no-op.
+  const isSendingRef = useRef(false);
+  isSendingRef.current = isSending;
+  const handleForeignWsMessage = useCallback((chunk: import('../hooks/useAgentSocket.ts').StreamChunk) => {
+    if (isSendingRef.current) return;
+    if (chunk.type === 'done' || chunk.type === 'error' || chunk.type === 'blocked') {
+      refetchMessages();
+    }
+  }, [refetchMessages]);
+
+  const { sendMessage, stopMessage, connected } = useAgentSocket(agent?.id, handleForeignWsMessage, handleReconnect);
 
   function handleStop() {
     stopMessage();
@@ -239,37 +307,11 @@ export function ChatPage() {
     if (!agentId) return;
     fetchAgent(agentId).then(setAgent).catch(console.error);
     fetchSecrets(agentId).then((s) => setSecretNames(s.names)).catch(console.error);
-    fetchMessages(agentId, 'ui').then((msgs) => {
-      // Group tool_call rows into the following assistant message's toolCalls array
-      const grouped: ChatMessage[] = [];
-      let pendingToolCalls: string[] = [];
-      for (const m of msgs) {
-        if (m.role === 'tool_call') {
-          pendingToolCalls.push(m.content);
-        } else if (m.role === 'assistant') {
-          // Skip empty assistant messages (ghost messages from interrupted streams)
-          if (!m.content && pendingToolCalls.length === 0) continue;
-          grouped.push({ id: m.id, role: 'agent', text: m.content, toolCalls: pendingToolCalls.length > 0 ? pendingToolCalls : undefined });
-          pendingToolCalls = [];
-        } else {
-          // Flush any orphaned tool calls before a user message
-          if (pendingToolCalls.length > 0) {
-            grouped.push({ id: crypto.randomUUID(), role: 'agent', text: '', toolCalls: pendingToolCalls });
-            pendingToolCalls = [];
-          }
-          grouped.push({ id: m.id, role: 'user', text: m.content });
-        }
-      }
-      // Flush any remaining orphaned tool calls at the end
-      if (pendingToolCalls.length > 0) {
-        grouped.push({ id: crypto.randomUUID(), role: 'agent', text: '', toolCalls: pendingToolCalls });
-      }
-      setMessages(grouped);
-    }).catch(console.error);
+    refetchMessages();
     fetchMessages(agentId, 'bb').then((msgs) =>
       setBbMessages(msgs.map((m) => ({ id: m.id, role: m.role === 'user' ? 'user' : 'agent', text: m.content })))
     ).catch(console.error);
-  }, [agentId]);
+  }, [agentId, refetchMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -325,6 +367,18 @@ export function ChatPage() {
           )
         );
         lastChunkType = 'tool_call';
+      } else if (chunk.type === 'compaction_start') {
+        setMessages((prev) =>
+          prev.map((m) => m.id === agentMsgId ? { ...m, isCompacting: true } : m)
+        );
+      } else if (chunk.type === 'compaction_end') {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === agentMsgId
+              ? { ...m, isCompacting: false, compactions: (m.compactions ?? 0) + 1 }
+              : m
+          )
+        );
       } else if (chunk.type === 'pending_approval') {
         setPendingApproval({ reason: chunk.reason });
         setMessages((prev) =>
@@ -451,6 +505,8 @@ export function ChatPage() {
         <BrowserView agentId={agentId} />
       ) : mainView === 'tasks' ? (
         <TaskBoard agentId={agentId} />
+      ) : mainView === 'skills' ? (
+        <SkillsView agentId={agentId} />
       ) : mainView === 'workflows' ? (
         <WorkflowList agentId={agentId} />
       ) : mainView === 'schedules' ? (
@@ -489,6 +545,12 @@ export function ChatPage() {
               {(m.toolCalls?.length ?? 0) > 0 && (
                 <ToolCallsBlock toolCalls={m.toolCalls!} isStreaming={m.isStreaming} />
               )}
+
+              {/* Context compaction indicator — shows while session.compact()
+                  is blocking the turn, then collapses to a static "compacted"
+                  row. Doubles as stream-timeout keep-alive since the chunks
+                  that drive it reset useAgentSocket's 90s timer. */}
+              <CompactionIndicator active={m.isCompacting} completed={m.compactions} />
 
               {/* Only render text bubble if there's text or it's streaming */}
               {(m.text || m.isStreaming) && (

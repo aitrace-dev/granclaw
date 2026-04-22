@@ -207,6 +207,12 @@ export async function deleteSecretApi(agentId: string, name: string): Promise<vo
 export interface Skill {
   name: string;
   description: string;
+  userInvocable?: boolean;
+}
+
+export interface SkillDetail extends Skill {
+  allowedTools: string;
+  content: string;
 }
 
 export async function fetchSkills(agentId: string): Promise<Skill[]> {
@@ -214,6 +220,12 @@ export async function fetchSkills(agentId: string): Promise<Skill[]> {
   if (!res.ok) throw new Error(`fetchSkills: ${res.status}`);
   const data = await res.json() as { skills: Skill[] };
   return data.skills;
+}
+
+export async function fetchSkillDetail(agentId: string, name: string): Promise<SkillDetail> {
+  const res = await fetch(`${BASE}/agents/${agentId}/skills/${encodeURIComponent(name)}`);
+  if (!res.ok) throw new Error(`fetchSkillDetail: ${res.status}`);
+  return res.json() as Promise<SkillDetail>;
 }
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
@@ -332,6 +344,9 @@ export interface Workflow {
   status: WorkflowStatus;
   createdAt: number;
   updatedAt: number;
+  /** Most recent run, if any — populated by GET /agents/:id/workflows so
+   *  the list can show an at-a-glance run-status badge. */
+  lastRun?: WorkflowRun | null;
 }
 
 export interface WorkflowWithSteps extends Workflow {

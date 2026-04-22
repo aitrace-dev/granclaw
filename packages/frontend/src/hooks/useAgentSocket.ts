@@ -47,7 +47,7 @@ type ChunkHandler = (chunk: StreamChunk) => void;
 
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 10000;
-const STREAM_TIMEOUT_MS = 90000; // 90s without chunks = stale
+const STREAM_TIMEOUT_MS = 300000; // 5min without chunks = stale
 
 export function useAgentSocket(
   agentId: string | undefined,
@@ -73,7 +73,7 @@ export function useAgentSocket(
       // No chunks for 90s — force done
       const handler = handlerRef.current;
       if (handler) {
-        handler({ type: 'error', message: 'Stream timeout — no response for 90s' });
+        handler({ type: 'error', message: 'Stream timeout — no response for 5 minutes' });
         handler({ type: 'done', sessionId: '' });
         handlerRef.current = null;
       }

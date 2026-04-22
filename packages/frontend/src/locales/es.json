@@ -146,22 +146,6 @@
     "loadError": "No se pudo cargar la habilidad: {error}"
   },
   "tasks": {
-    "columns": {
-      "backlog": "PENDIENTE",
-      "inProgress": "EN PROGRESO",
-      "scheduled": "PROGRAMADO",
-      "toReview": "EN REVISIÓN",
-      "done": "COMPLETADO",
-      "cancelled": "CANCELADO"
-    },
-    "statusLabels": {
-      "backlog": "Pendiente",
-      "inProgress": "En progreso",
-      "scheduled": "Programado",
-      "toReview": "En revisión",
-      "done": "Completado",
-      "cancelled": "Cancelado"
-    },
     "editedBy": "editado por {name}",
     "relativeNow": "ahora",
     "relativeMinutes": "hace {n}m",
@@ -170,12 +154,19 @@
     "titlePlaceholder": "Título de tarea…",
     "descPlaceholder": "Descripción (markdown)…",
     "add": "Agregar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "searchPlaceholder": "Buscar tareas…",
+    "clearAll": "Limpiar todo",
+    "clearConfirm": "¿Eliminar TODAS las tareas? No se puede deshacer.",
+    "columnLabelPlaceholder": "Nombre de columna…",
+    "deleteColumnConfirm": "¿Eliminar esta columna? Las tareas se moverán a la primera columna."
   },
   "taskDetail": {
     "saving": "guardando…",
     "close": "Cerrar",
     "status": "Estado",
+    "tags": "Etiquetas",
+    "addTag": "agregar…",
     "sourceLabel": "fuente",
     "editedByLabel": "editado por",
     "created": "creado",

@@ -1,23 +1,7 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { TaskWithComments, TaskComment, TaskStatus } from '../lib/api.ts';
+import type { TaskWithComments, TaskComment, TaskColumn } from '../lib/api.ts';
 import { useT } from '../lib/i18n.tsx';
-
-/* ═══════════════════════════════════════════════════════════════════════════
- *  TaskDetailPanel
- *  ───────────────
- *  Fixed slide-over from the right. Editable title, status dropdown,
- *  markdown description, flat comment list, add comment, delete.
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-const STATUS_ORDER: { value: TaskStatus; labelKey: string }[] = [
-  { value: 'backlog', labelKey: 'tasks.statusLabels.backlog' },
-  { value: 'in_progress', labelKey: 'tasks.statusLabels.inProgress' },
-  { value: 'scheduled', labelKey: 'tasks.statusLabels.scheduled' },
-  { value: 'to_review', labelKey: 'tasks.statusLabels.toReview' },
-  { value: 'done', labelKey: 'tasks.statusLabels.done' },
-  { value: 'cancelled', labelKey: 'tasks.statusLabels.cancelled' },
-];
 
 function useRelativeTime() {
   const { t } = useT();
@@ -70,14 +54,16 @@ function CommentItem({ comment }: { comment: TaskComment }) {
 
 export function TaskDetailPanel({
   task,
+  columns,
   onClose,
   onUpdate,
   onAddComment,
   onDelete,
 }: {
   task: TaskWithComments;
+  columns: TaskColumn[];
   onClose: () => void;
-  onUpdate: (taskId: string, data: { title?: string; description?: string; status?: TaskStatus }) => Promise<void>;
+  onUpdate: (taskId: string, data: { title?: string; description?: string; status?: string; tags?: string[] }) => Promise<void>;
   onAddComment: (taskId: string, body: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
 }) {
@@ -95,7 +81,9 @@ export function TaskDetailPanel({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Sync drafts when task prop changes (e.g. after update)
+  const [tagInput, setTagInput] = useState('');
+
+  // Sync drafts when task prop changes
   const [lastTaskId, setLastTaskId] = useState(task.id);
   if (task.id !== lastTaskId) {
     setLastTaskId(task.id);
@@ -104,6 +92,7 @@ export function TaskDetailPanel({
     setEditingTitle(false);
     setEditingDesc(false);
     setCommentDraft('');
+    setTagInput('');
   }
 
   const commitTitle = async () => {
@@ -124,9 +113,21 @@ export function TaskDetailPanel({
     }
   };
 
-  const commitStatus = async (status: TaskStatus) => {
+  const commitStatus = async (status: string) => {
     setSaving(true);
     try { await onUpdate(task.id, { status }); } finally { setSaving(false); }
+  };
+
+  const addTag = async (tag: string) => {
+    const trimmed = tag.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!trimmed || task.tags.includes(trimmed)) return;
+    setSaving(true);
+    try { await onUpdate(task.id, { tags: [...task.tags, trimmed] }); } finally { setSaving(false); }
+  };
+
+  const removeTag = async (tag: string) => {
+    setSaving(true);
+    try { await onUpdate(task.id, { tags: task.tags.filter((t) => t !== tag) }); } finally { setSaving(false); }
   };
 
   const submitComment = async () => {
@@ -157,16 +158,13 @@ export function TaskDetailPanel({
         onClick={onClose}
       />
 
-      {/* Panel — sized for long-form writing (title + description +
-          comments). Defaults to 840px on wide screens, capped at 92vw
-          on narrow ones so it never overruns the viewport. */}
       <div
         className="fixed inset-y-0 right-0 w-[min(840px,92vw)] z-50 flex flex-col overflow-hidden bg-surface-container"
         style={{
           boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
         }}
       >
-        {/* ── Header ──────────────────────────────────────────────────────── */}
+        {/* Header */}
         <div
           className="flex items-center justify-between px-5 py-4 flex-shrink-0"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
@@ -188,7 +186,7 @@ export function TaskDetailPanel({
           </button>
         </div>
 
-        {/* ── Scrollable body ──────────────────────────────────────────────── */}
+        {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
           <div className="px-5 py-4 flex flex-col gap-5">
 
@@ -224,15 +222,51 @@ export function TaskDetailPanel({
               </p>
               <select
                 value={task.status}
-                onChange={(e) => void commitStatus(e.target.value as TaskStatus)}
+                onChange={(e) => void commitStatus(e.target.value)}
                 className="rounded bg-surface-container px-2.5 py-[7px] text-[11px] text-on-surface outline-none focus:ring-1 focus:ring-primary/25 cursor-pointer font-mono transition-shadow"
               >
-                {STATUS_ORDER.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {t(o.labelKey)}
+                {columns.map((col) => (
+                  <option key={col.id} value={col.id}>
+                    {col.label}
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Tags */}
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[8px] uppercase tracking-[0.18em] text-on-surface-variant/35 font-semibold">
+                {t('taskDetail.tags')}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {task.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-[2px] text-[10px] font-mono text-primary/70"
+                  >
+                    {tag}
+                    <button
+                      onClick={() => void removeTag(tag)}
+                      className="text-primary/40 hover:text-error/70 transition-colors leading-none"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <input
+                  className="rounded bg-surface-container px-2 py-[4px] text-[10px] text-on-surface placeholder:text-on-surface-variant/40 outline-none focus:ring-1 focus:ring-primary/25 font-mono w-24"
+                  placeholder={t('taskDetail.addTag')}
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && tagInput.trim()) {
+                      void addTag(tagInput);
+                      setTagInput('');
+                    }
+                    if (e.key === 'Escape') setTagInput('');
+                  }}
+                />
+              </div>
             </div>
 
             {/* Meta badges */}

@@ -42,7 +42,7 @@ import { listSecretNames, setSecret, deleteSecret } from '../secrets-vault.js';
 import { getSession, enqueue, getActiveJobs, markFailed } from '../agent-db.js';
 import { closeWorkspaceDb } from '../workspace-pool.js';
 import { saveMessage, getMessages, deleteMessages, queryMessages, Message } from '../messages-db.js';
-import { listTasks, getTask, createTask, updateTask, deleteTask, listComments, createComment } from '../tasks-db.js';
+import { listTasks, getTask, createTask, updateTask, deleteTask, clearTasks, listComments, createComment, listColumns, createColumn, deleteColumn } from '../tasks-db.js';
 import {
   listWorkflows, getWorkflow, createWorkflow, updateWorkflow, deleteWorkflow,
   addStep, updateStep, removeStep,
@@ -757,22 +757,65 @@ export function createServer() {
     });
   });
 
+  // ── Task columns ─────────────────────────────────────────────────────────
+
+  app.get('/agents/:id/task-columns', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    res.json(listColumns(req.params.id));
+  });
+
+  app.post('/agents/:id/task-columns', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const { label } = req.body as { label?: string };
+    if (!label) { res.status(400).json({ error: 'label required' }); return; }
+    try {
+      const column = createColumn(req.params.id, { label });
+      res.status(201).json(column);
+    } catch (e) {
+      res.status(409).json({ error: (e as Error).message });
+    }
+  });
+
+  app.delete('/agents/:id/task-columns/:columnId', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    try {
+      const deleted = deleteColumn(req.params.id, req.params.columnId);
+      if (!deleted) { res.status(404).json({ error: 'Column not found' }); return; }
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
   // ── Tasks ───────────────────────────────────────────────────────────────
 
   app.get('/agents/:id/tasks', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
     const status = req.query.status as string | undefined;
-    res.json(listTasks(req.params.id, status));
+    const search = req.query.search as string | undefined;
+    const tagsParam = req.query.tags as string | undefined;
+    const tags = tagsParam ? tagsParam.split(',') : undefined;
+    res.json(listTasks(req.params.id, { status, search, tags }));
   });
 
   app.post('/agents/:id/tasks', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const { title, description, status } = req.body as { title?: string; description?: string; status?: string };
+    const { title, description, status, tags } = req.body as { title?: string; description?: string; status?: string; tags?: string[] };
     if (!title) { res.status(400).json({ error: 'title required' }); return; }
-    const task = createTask(req.params.id, { title, description, status: status as any });
+    const task = createTask(req.params.id, { title, description, status, tags });
     res.status(201).json(task);
+  });
+
+  app.delete('/agents/:id/tasks', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const count = clearTasks(req.params.id);
+    res.json({ ok: true, deleted: count });
   });
 
   app.get('/agents/:id/tasks/:taskId', (req, res) => {
@@ -787,8 +830,8 @@ export function createServer() {
   app.put('/agents/:id/tasks/:taskId', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const { title, description, status } = req.body as { title?: string; description?: string; status?: string };
-    const task = updateTask(req.params.id, req.params.taskId, { title, description, status: status as any });
+    const { title, description, status, tags } = req.body as { title?: string; description?: string; status?: string; tags?: string[] };
+    const task = updateTask(req.params.id, req.params.taskId, { title, description, status, tags });
     if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
     res.json(task);
   });

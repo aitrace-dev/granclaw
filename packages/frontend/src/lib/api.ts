@@ -237,13 +237,14 @@ export async function fetchSkillDetail(agentId: string, skillPath: string): Prom
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 
-export type TaskStatus = 'backlog' | 'in_progress' | 'scheduled' | 'to_review' | 'done' | 'cancelled';
+export type TaskStatus = string;
 
 export interface Task {
   id: string;
   title: string;
   description: string;
-  status: TaskStatus;
+  status: string;
+  tags: string[];
   source: 'agent' | 'human';
   updatedBy: 'agent' | 'human' | null;
   createdAt: number;
@@ -262,8 +263,19 @@ export interface TaskComment {
   createdAt: number;
 }
 
-export async function fetchTasks(agentId: string, status?: string): Promise<Task[]> {
-  const qs = status ? `?status=${status}` : '';
+export interface TaskColumn {
+  id: string;
+  label: string;
+  position: number;
+  createdAt: number;
+}
+
+export async function fetchTasks(agentId: string, opts?: { status?: string; search?: string; tags?: string[] }): Promise<Task[]> {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set('status', opts.status);
+  if (opts?.search) params.set('search', opts.search);
+  if (opts?.tags?.length) params.set('tags', opts.tags.join(','));
+  const qs = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${BASE}/agents/${agentId}/tasks${qs}`);
   if (!res.ok) throw new Error(`fetchTasks: ${res.status}`);
   return res.json() as Promise<Task[]>;
@@ -275,7 +287,7 @@ export async function fetchTask(agentId: string, taskId: string): Promise<TaskWi
   return res.json() as Promise<TaskWithComments>;
 }
 
-export async function createTaskApi(agentId: string, data: { title: string; description?: string; status?: TaskStatus }): Promise<Task> {
+export async function createTaskApi(agentId: string, data: { title: string; description?: string; status?: string; tags?: string[] }): Promise<Task> {
   const res = await fetch(`${BASE}/agents/${agentId}/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -285,7 +297,7 @@ export async function createTaskApi(agentId: string, data: { title: string; desc
   return res.json() as Promise<Task>;
 }
 
-export async function updateTaskApi(agentId: string, taskId: string, data: { title?: string; description?: string; status?: TaskStatus }): Promise<Task> {
+export async function updateTaskApi(agentId: string, taskId: string, data: { title?: string; description?: string; status?: string; tags?: string[] }): Promise<Task> {
   const res = await fetch(`${BASE}/agents/${agentId}/tasks/${taskId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -300,6 +312,12 @@ export async function deleteTaskApi(agentId: string, taskId: string): Promise<vo
   if (!res.ok) throw new Error(`deleteTask: ${res.status}`);
 }
 
+export async function clearTasksApi(agentId: string): Promise<{ deleted: number }> {
+  const res = await fetch(`${BASE}/agents/${agentId}/tasks`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`clearTasks: ${res.status}`);
+  return res.json() as Promise<{ deleted: number }>;
+}
+
 export async function addTaskComment(agentId: string, taskId: string, body: string): Promise<TaskComment> {
   const res = await fetch(`${BASE}/agents/${agentId}/tasks/${taskId}/comments`, {
     method: 'POST',
@@ -308,6 +326,27 @@ export async function addTaskComment(agentId: string, taskId: string, body: stri
   });
   if (!res.ok) throw new Error(`addTaskComment: ${res.status}`);
   return res.json() as Promise<TaskComment>;
+}
+
+export async function fetchColumns(agentId: string): Promise<TaskColumn[]> {
+  const res = await fetch(`${BASE}/agents/${agentId}/task-columns`);
+  if (!res.ok) throw new Error(`fetchColumns: ${res.status}`);
+  return res.json() as Promise<TaskColumn[]>;
+}
+
+export async function createColumnApi(agentId: string, label: string): Promise<TaskColumn> {
+  const res = await fetch(`${BASE}/agents/${agentId}/task-columns`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  });
+  if (!res.ok) throw new Error(`createColumn: ${res.status}`);
+  return res.json() as Promise<TaskColumn>;
+}
+
+export async function deleteColumnApi(agentId: string, columnId: string): Promise<void> {
+  const res = await fetch(`${BASE}/agents/${agentId}/task-columns/${columnId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`deleteColumn: ${res.status}`);
 }
 
 // ── Workflow types ────────────────────────────────────────────────────────

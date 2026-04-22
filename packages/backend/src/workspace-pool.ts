@@ -55,14 +55,14 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     db.exec(`ALTER TABLE sessions ADD COLUMN session_file TEXT`);
   }
 
-  // ── tasks + comments (from tasks-db) ─────────────────────────────────────
+  // ── tasks + comments + columns (from tasks-db) ───────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
       id          TEXT PRIMARY KEY,
       title       TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
-      status      TEXT NOT NULL DEFAULT 'backlog'
-                    CHECK(status IN ('backlog','in_progress','scheduled','to_review','done','cancelled')),
+      status      TEXT NOT NULL DEFAULT 'to_do',
+      tags        TEXT NOT NULL DEFAULT '',
       source      TEXT NOT NULL DEFAULT 'agent'
                     CHECK(source IN ('agent','human')),
       updated_by  TEXT DEFAULT NULL
@@ -75,6 +75,12 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
       task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       body       TEXT NOT NULL,
       source     TEXT NOT NULL CHECK(source IN ('agent','human')),
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS task_columns (
+      id         TEXT PRIMARY KEY,
+      label      TEXT NOT NULL,
+      position   INTEGER NOT NULL,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -140,20 +146,18 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     console.log('[workspace-pool] migrated run_steps table (added events column)');
   }
 
-  // Migration: ensure tasks.status allows 'cancelled' (added 2026-04-22).
-  // SQLite CHECK constraints are baked into the table at CREATE time and
-  // cannot be altered, so rebuild the table when the constraint is stale.
-  const tasksSchema = (db.prepare(
-    `SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'`
-  ).get() as { sql: string } | undefined);
-  if (tasksSchema?.sql && !tasksSchema.sql.includes('cancelled')) {
+  // Migration: detect old tasks schema (no tags column) → destroy and recreate.
+  const taskCols = (db.pragma('table_info(tasks)') as Array<{ name: string }>).map(c => c.name);
+  if (taskCols.length > 0 && !taskCols.includes('tags')) {
     db.exec(`
-      CREATE TABLE tasks_new (
+      DROP TABLE IF EXISTS comments;
+      DROP TABLE IF EXISTS tasks;
+      CREATE TABLE tasks (
         id          TEXT PRIMARY KEY,
         title       TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
-        status      TEXT NOT NULL DEFAULT 'backlog'
-                      CHECK(status IN ('backlog','in_progress','scheduled','to_review','done','cancelled')),
+        status      TEXT NOT NULL DEFAULT 'to_do',
+        tags        TEXT NOT NULL DEFAULT '',
         source      TEXT NOT NULL DEFAULT 'agent'
                       CHECK(source IN ('agent','human')),
         updated_by  TEXT DEFAULT NULL
@@ -161,12 +165,26 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
         created_at  INTEGER NOT NULL,
         updated_at  INTEGER NOT NULL
       );
-      INSERT INTO tasks_new SELECT * FROM tasks;
-      DROP TABLE tasks;
-      ALTER TABLE tasks_new RENAME TO tasks;
-      CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+      CREATE TABLE comments (
+        id         TEXT PRIMARY KEY,
+        task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        body       TEXT NOT NULL,
+        source     TEXT NOT NULL CHECK(source IN ('agent','human')),
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_tasks_status ON tasks(status);
+      CREATE INDEX idx_comments_task ON comments(task_id, created_at);
     `);
-    console.log('[workspace-pool] migrated tasks table (added cancelled status)');
+    console.log('[workspace-pool] recreated tasks table (v2: tags + custom columns)');
+  }
+
+  // Seed default columns if task_columns is empty
+  const colCount = (db.prepare('SELECT COUNT(*) as n FROM task_columns').get() as { n: number }).n;
+  if (colCount === 0) {
+    const seedNow = Math.floor(Date.now() / 1000);
+    db.prepare('INSERT INTO task_columns (id, label, position, created_at) VALUES (?, ?, ?, ?)').run('to_do', 'To Do', 0, seedNow);
+    db.prepare('INSERT INTO task_columns (id, label, position, created_at) VALUES (?, ?, ?, ?)').run('in_progress', 'In Progress', 1, seedNow);
+    db.prepare('INSERT INTO task_columns (id, label, position, created_at) VALUES (?, ?, ?, ?)').run('done', 'Done', 2, seedNow);
   }
 
   // Migration: ensure steps.type allows 'agent' (existing workflows.sqlite compat)

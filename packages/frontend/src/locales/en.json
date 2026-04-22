@@ -146,22 +146,6 @@
     "loadError": "Could not load skill: {error}"
   },
   "tasks": {
-    "columns": {
-      "backlog": "BACKLOG",
-      "inProgress": "IN PROGRESS",
-      "scheduled": "SCHEDULED",
-      "toReview": "TO REVIEW",
-      "done": "DONE",
-      "cancelled": "CANCELLED"
-    },
-    "statusLabels": {
-      "backlog": "Backlog",
-      "inProgress": "In progress",
-      "scheduled": "Scheduled",
-      "toReview": "To review",
-      "done": "Done",
-      "cancelled": "Cancelled"
-    },
     "editedBy": "edited by {name}",
     "relativeNow": "now",
     "relativeMinutes": "{n}m ago",
@@ -170,12 +154,19 @@
     "titlePlaceholder": "Task title…",
     "descPlaceholder": "Description (markdown)…",
     "add": "Add",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "searchPlaceholder": "Search tasks…",
+    "clearAll": "Clear all",
+    "clearConfirm": "Delete ALL tasks? This cannot be undone.",
+    "columnLabelPlaceholder": "Column name…",
+    "deleteColumnConfirm": "Delete this column? Tasks in it will move to the first column."
   },
   "taskDetail": {
     "saving": "saving…",
     "close": "Close",
     "status": "Status",
+    "tags": "Tags",
+    "addTag": "add tag…",
     "sourceLabel": "source",
     "editedByLabel": "edited by",
     "created": "created",

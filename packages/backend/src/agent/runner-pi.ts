@@ -886,19 +886,28 @@ export async function runAgent(
       pi.registerTool({
         name: 'list_tasks',
         label: 'List Tasks',
-        description: 'List tasks from the kanban board. Optionally filter by status.',
+        description: 'List tasks from the kanban board. Optionally filter by status, search text, or tags.',
         promptSnippet: 'List tasks',
-        promptGuidelines: ['Use to see what is in backlog, in_progress, to_review, or done.'],
+        promptGuidelines: [
+          'Use to see tasks across columns. Filter by column status, search title/description, or filter by tags.',
+          'Default columns are to_do, in_progress, done — but custom columns may exist.',
+        ],
         parameters: {
           type: 'object',
           properties: {
-            status: { type: 'string', enum: ['backlog', 'in_progress', 'scheduled', 'to_review', 'done', 'cancelled'], description: 'Filter by status (omit for all tasks)' },
+            status: { type: 'string', description: 'Filter by column status (e.g. to_do, in_progress, done)' },
+            search: { type: 'string', description: 'Search text — matches title or description' },
+            tags: { type: 'array', items: { type: 'string' }, description: 'Filter by tags — tasks must have ALL listed tags' },
           },
         },
-        async execute(_id: string, params: { status?: string }) {
+        async execute(_id: string, params: { status?: string; search?: string; tags?: string[] }) {
           try {
-            const url = params.status ? `${taskBase()}?status=${params.status}` : taskBase();
-            const data = await fetchJson(url);
+            const qp = new URLSearchParams();
+            if (params.status) qp.set('status', params.status);
+            if (params.search) qp.set('search', params.search);
+            if (params.tags?.length) qp.set('tags', params.tags.join(','));
+            const qs = qp.toString() ? `?${qp.toString()}` : '';
+            const data = await fetchJson(`${taskBase()}${qs}`);
             return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
           } catch (e) { return err('list_tasks', e); }
         },
@@ -932,18 +941,19 @@ export async function runAgent(
         promptSnippet: 'Create a task',
         promptGuidelines: [
           'Use when breaking down work into subtasks or tracking a new action item.',
-          'Status defaults to backlog. Use markdown in description.',
+          'Status defaults to to_do. Use markdown in description. Tags help organize tasks.',
         ],
         parameters: {
           type: 'object',
           properties: {
             title:       { type: 'string', description: 'Short task title (under 80 chars)' },
             description: { type: 'string', description: 'Full description in markdown (optional)' },
-            status:      { type: 'string', enum: ['backlog', 'in_progress', 'scheduled', 'to_review', 'done'], description: 'Initial status (default: backlog)' },
+            status:      { type: 'string', description: 'Column status (default: to_do)' },
+            tags:        { type: 'array', items: { type: 'string' }, description: 'Tags for categorization (optional)' },
           },
           required: ['title'],
         },
-        async execute(_id: string, params: { title: string; description?: string; status?: string }) {
+        async execute(_id: string, params: { title: string; description?: string; status?: string; tags?: string[] }) {
           try {
             const data = await fetchJson(taskBase(), {
               method: 'POST',
@@ -958,11 +968,11 @@ export async function runAgent(
       pi.registerTool({
         name: 'update_task',
         label: 'Update Task',
-        description: 'Update a task\'s title, description, or status.',
+        description: 'Update a task\'s title, description, status, or tags.',
         promptSnippet: 'Update a task',
         promptGuidelines: [
           'Only send fields you want to change.',
-          'Move to in_progress when starting, to_review when done and awaiting human review.',
+          'Move to in_progress when starting, done when complete.',
         ],
         parameters: {
           type: 'object',
@@ -970,11 +980,12 @@ export async function runAgent(
             taskId:      { type: 'string', description: 'Task ID, e.g. TSK-001' },
             title:       { type: 'string', description: 'New title (optional)' },
             description: { type: 'string', description: 'New description in markdown (optional)' },
-            status:      { type: 'string', enum: ['backlog', 'in_progress', 'scheduled', 'to_review', 'done'], description: 'New status (optional)' },
+            status:      { type: 'string', description: 'New column status (optional)' },
+            tags:        { type: 'array', items: { type: 'string' }, description: 'Replace tags (optional)' },
           },
           required: ['taskId'],
         },
-        async execute(_id: string, params: { taskId: string; title?: string; description?: string; status?: string }) {
+        async execute(_id: string, params: { taskId: string; title?: string; description?: string; status?: string; tags?: string[] }) {
           try {
             const { taskId, ...body } = params;
             const data = await fetchJson(`${taskBase()}/${taskId}`, {

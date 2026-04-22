@@ -43,7 +43,7 @@ import {
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
 import { stealthArgv } from '../browser/stealth.js';
-import { resolveBrowserBinary, buildArgv, cdpNavigate } from './browser-bin.js';
+import { resolveBrowserBinary, buildArgv, cdpNavigate, killBrowser } from './browser-bin.js';
 import { TelegramHttpClient } from './telegram-http-client.js';
 import { defaultChatId, isKnownChat, listKnownChats } from './telegram-chats.js';
 import { sendFormattedTelegramMessage } from './telegram-markdown.js';
@@ -1202,6 +1202,46 @@ export async function runAgent(
               }] };
             }
             return { content: [{ type: 'text' as const, text: `browser ${command} failed (CATEGORY=CMD_ERROR): ${raw}` }] };
+          }
+        },
+      });
+    });
+
+    // browser_restart tool: kills and respawns the browser process. Works on
+    // both open-source (Chromium/agent-browser) and enterprise (Orbita). The
+    // profile directory and cookies survive — only the process is recycled.
+    extensionFactories.push((pi: any) => {
+      pi.registerTool({
+        name: 'browser_restart',
+        label: 'Restart Browser',
+        description:
+          'Kill the browser process and force a fresh start on the next browser command. ' +
+          'Cookies, logins, and profile data are preserved — only the process is restarted. ' +
+          'Use when the browser is hung, unresponsive, showing stale state, or after a proxy change.',
+        promptSnippet: 'Kill and respawn the browser daemon (cookies survive)',
+        promptGuidelines: [
+          'Use when browser commands timeout repeatedly or the browser appears hung.',
+          'Use after you receive BROWSER_BLOCKED if you want a clean process before retrying.',
+          'Cookies and saved logins persist — only the process is restarted.',
+          'The next browser command after this will spawn a fresh browser automatically.',
+        ],
+        parameters: { type: 'object', properties: {} },
+        async execute() {
+          try {
+            if (browserState.handle) {
+              try { await finalizeBrowserSession(browserState.handle, 'closed'); } catch {}
+              browserState.handle = null;
+            }
+            await killBrowser(agent.id);
+            return { content: [{ type: 'text' as const, text:
+              'Browser killed. Cookies and logins are preserved. The next browser command will spawn a fresh instance.'
+            }] };
+          } catch (err) {
+            browserState.handle = null;
+            const msg = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: 'text' as const, text:
+              `browser_restart partial: ${msg} — next browser call will still spawn fresh.`
+            }] };
           }
         },
       });

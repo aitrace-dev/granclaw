@@ -17,7 +17,7 @@
  */
 
 import type { Express } from 'express';
-import type { BrowserProvider } from '../agent/browser-bin.js';
+import type { BrowserProvider, BrowserKiller } from '../agent/browser-bin.js';
 import type * as AppSecretsModule from '../app-secrets.js';
 import type * as RegistryModule from '../integrations/registry.js';
 import type * as AgentIntegrationsModule from '../integrations/agent-integrations-db.js';
@@ -46,6 +46,12 @@ export interface ExtensionContext {
    * that returns a non-null resolution wins.
    */
   registerBrowserProvider(provider: BrowserProvider): void;
+  /**
+   * Register a callback that kills the extension-managed browser process
+   * for an agent. Called by killBrowser() in browser-bin.ts when the agent
+   * invokes browser_restart.
+   */
+  registerBrowserKiller(killer: BrowserKiller): void;
   /**
    * Register an externally-managed CDP session with the browser-live relay.
    * Once registered, frontend can connect to /browser-live/:agentId/:sessionId

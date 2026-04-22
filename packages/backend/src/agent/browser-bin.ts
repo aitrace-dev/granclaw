@@ -53,9 +53,38 @@ export function registerBrowserProvider(provider: BrowserProvider): void {
   providers.push(provider);
 }
 
+/**
+ * Extension hook for browser teardown. Extensions register a callback that
+ * kills their managed browser process (e.g. Orbita). Called by killBrowser().
+ */
+export type BrowserKiller = (agentId: string) => void | Promise<void>;
+const killers: BrowserKiller[] = [];
+
+export function registerBrowserKiller(killer: BrowserKiller): void {
+  killers.push(killer);
+}
+
+/**
+ * Kill the browser for an agent — calls extension killers (Orbita), removes
+ * the CDP bridge file, and shuts down agent-browser's daemon. The next
+ * browser tool call will spawn a fresh instance.
+ */
+export async function killBrowser(agentId: string): Promise<void> {
+  for (const killer of killers) {
+    try { await killer(agentId); } catch {}
+  }
+  try { fs.unlinkSync(`/tmp/granclaw-cdp-${agentId}.url`); } catch {}
+  try {
+    const { execFileSync } = await import('child_process');
+    const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+    execFileSync(bin, ['--session', agentId, 'close'], { timeout: 5000, stdio: 'pipe' });
+  } catch {}
+}
+
 /** Test-only: clear all registered providers. */
 export function _resetBrowserProvidersForTests(): void {
   providers.length = 0;
+  killers.length = 0;
 }
 
 /**

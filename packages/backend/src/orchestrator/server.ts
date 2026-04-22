@@ -32,7 +32,7 @@ import { randomUUID } from 'crypto';
 import logsRouter from '../routes/logs.js';
 import { integrationsRouter } from '../integrations/routes.js';
 import { loadExtensions } from '../extensions/loader.js';
-import { registerBrowserProvider } from '../agent/browser-bin.js';
+import { registerBrowserProvider, registerBrowserKiller } from '../agent/browser-bin.js';
 import {
   registerTakeoverResolvedListener,
   fireTakeoverResolved,
@@ -1515,6 +1515,7 @@ export function createServer() {
   loadExtensions({
     app,
     registerBrowserProvider,
+    registerBrowserKiller,
     registerCdpSession: registerExternalCdpSession,
     removeCdpSession: removeExternalCdpSession,
     registerTakeoverResolvedListener,

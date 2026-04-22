@@ -151,14 +151,16 @@
       "inProgress": "IN PROGRESS",
       "scheduled": "SCHEDULED",
       "toReview": "TO REVIEW",
-      "done": "DONE"
+      "done": "DONE",
+      "cancelled": "CANCELLED"
     },
     "statusLabels": {
       "backlog": "Backlog",
       "inProgress": "In progress",
       "scheduled": "Scheduled",
       "toReview": "To review",
-      "done": "Done"
+      "done": "Done",
+      "cancelled": "Cancelled"
     },
     "editedBy": "edited by {name}",
     "relativeNow": "now",

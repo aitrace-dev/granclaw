@@ -62,7 +62,7 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
       title       TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       status      TEXT NOT NULL DEFAULT 'backlog'
-                    CHECK(status IN ('backlog','in_progress','scheduled','to_review','done')),
+                    CHECK(status IN ('backlog','in_progress','scheduled','to_review','done','cancelled')),
       source      TEXT NOT NULL DEFAULT 'agent'
                     CHECK(source IN ('agent','human')),
       updated_by  TEXT DEFAULT NULL
@@ -130,6 +130,35 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_run_steps_run ON run_steps(run_id, started_at);
   `);
+
+  // Migration: ensure tasks.status allows 'cancelled' (added 2026-04-22).
+  // SQLite CHECK constraints are baked into the table at CREATE time and
+  // cannot be altered, so rebuild the table when the constraint is stale.
+  const tasksSchema = (db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'`
+  ).get() as { sql: string } | undefined);
+  if (tasksSchema?.sql && !tasksSchema.sql.includes('cancelled')) {
+    db.exec(`
+      CREATE TABLE tasks_new (
+        id          TEXT PRIMARY KEY,
+        title       TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status      TEXT NOT NULL DEFAULT 'backlog'
+                      CHECK(status IN ('backlog','in_progress','scheduled','to_review','done','cancelled')),
+        source      TEXT NOT NULL DEFAULT 'agent'
+                      CHECK(source IN ('agent','human')),
+        updated_by  TEXT DEFAULT NULL
+                      CHECK(updated_by IN ('agent','human')),
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+      INSERT INTO tasks_new SELECT * FROM tasks;
+      DROP TABLE tasks;
+      ALTER TABLE tasks_new RENAME TO tasks;
+      CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    `);
+    console.log('[workspace-pool] migrated tasks table (added cancelled status)');
+  }
 
   // Migration: ensure steps.type allows 'agent' (existing workflows.sqlite compat)
   const stepsSchema = (db.prepare(

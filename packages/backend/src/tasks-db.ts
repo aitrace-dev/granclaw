@@ -12,7 +12,7 @@ import { getWorkspaceDb, closeWorkspaceDb } from './workspace-pool.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-export type TaskStatus = 'backlog' | 'in_progress' | 'scheduled' | 'to_review' | 'done';
+export type TaskStatus = 'backlog' | 'in_progress' | 'scheduled' | 'to_review' | 'done' | 'cancelled';
 export type Source = 'agent' | 'human';
 
 export interface Task {

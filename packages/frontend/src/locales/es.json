@@ -151,14 +151,16 @@
       "inProgress": "EN PROGRESO",
       "scheduled": "PROGRAMADO",
       "toReview": "EN REVISIÓN",
-      "done": "COMPLETADO"
+      "done": "COMPLETADO",
+      "cancelled": "CANCELADO"
     },
     "statusLabels": {
       "backlog": "Pendiente",
       "inProgress": "En progreso",
       "scheduled": "Programado",
       "toReview": "En revisión",
-      "done": "Completado"
+      "done": "Completado",
+      "cancelled": "Cancelado"
     },
     "editedBy": "editado por {name}",
     "relativeNow": "ahora",

@@ -16,6 +16,7 @@ const STATUS_ORDER: { value: TaskStatus; labelKey: string }[] = [
   { value: 'scheduled', labelKey: 'tasks.statusLabels.scheduled' },
   { value: 'to_review', labelKey: 'tasks.statusLabels.toReview' },
   { value: 'done', labelKey: 'tasks.statusLabels.done' },
+  { value: 'cancelled', labelKey: 'tasks.statusLabels.cancelled' },
 ];
 
 function useRelativeTime() {
@@ -156,9 +157,11 @@ export function TaskDetailPanel({
         onClick={onClose}
       />
 
-      {/* Panel */}
+      {/* Panel — sized for long-form writing (title + description +
+          comments). Defaults to 840px on wide screens, capped at 92vw
+          on narrow ones so it never overruns the viewport. */}
       <div
-        className="fixed inset-y-0 right-0 w-96 z-50 flex flex-col overflow-hidden bg-surface-container"
+        className="fixed inset-y-0 right-0 w-[min(840px,92vw)] z-50 flex flex-col overflow-hidden bg-surface-container"
         style={{
           boxShadow: '-8px 0 40px rgba(0,0,0,0.5)',
         }}
@@ -271,7 +274,7 @@ export function TaskDetailPanel({
                 <div className="flex flex-col gap-1.5">
                   <textarea
                     autoFocus
-                    className={`${inputCls} min-h-[120px] resize-y font-mono text-[11px] leading-relaxed`}
+                    className={`${inputCls} min-h-[360px] resize-y font-mono text-[12px] leading-relaxed`}
                     value={descDraft}
                     onChange={(e) => setDescDraft(e.target.value)}
                     placeholder={t('taskDetail.descPlaceholder')}
@@ -331,7 +334,7 @@ export function TaskDetailPanel({
                 {t('taskDetail.addComment')}
               </p>
               <textarea
-                className={`${inputCls} min-h-[72px] resize-none font-mono text-[11px] leading-relaxed`}
+                className={`${inputCls} min-h-[200px] resize-y font-mono text-[12px] leading-relaxed`}
                 placeholder={t('taskDetail.commentPlaceholder')}
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}

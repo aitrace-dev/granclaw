@@ -26,6 +26,7 @@ const COLUMN_ORDER: { status: TaskStatus; labelKey: string }[] = [
   { status: 'scheduled', labelKey: 'tasks.columns.scheduled' },
   { status: 'to_review', labelKey: 'tasks.columns.toReview' },
   { status: 'done', labelKey: 'tasks.columns.done' },
+  { status: 'cancelled', labelKey: 'tasks.columns.cancelled' },
 ];
 
 function useRelativeTime() {

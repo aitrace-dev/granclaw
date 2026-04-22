@@ -237,7 +237,7 @@ export async function fetchSkillDetail(agentId: string, skillPath: string): Prom
 
 // ── Tasks ──────────────────────────────────────────────────────────────────
 
-export type TaskStatus = 'backlog' | 'in_progress' | 'scheduled' | 'to_review' | 'done';
+export type TaskStatus = 'backlog' | 'in_progress' | 'scheduled' | 'to_review' | 'done' | 'cancelled';
 
 export interface Task {
   id: string;

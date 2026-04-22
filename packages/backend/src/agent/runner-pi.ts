@@ -443,6 +443,31 @@ function extractAgentName(workspaceDir: string): string | null {
 // prose is brittle across agent-browser versions.
 export type BrowserErrorCategory = 'BROWSER_DIED' | 'TIMEOUT' | 'ABORTED' | 'CMD_ERROR';
 
+// Bot-detection interstitials return HTTP 200 with the block page as the
+// snapshot body, so classifyBrowserError never sees them. Detecting the
+// block text ourselves lets the agent recognize "I reached the site but
+// the site is refusing to serve me" vs "I have the real content".
+//
+// Conservative — each phrase should be strong enough that no legitimate
+// page accidentally matches. If a site ends up false-positive, prefer
+// tightening a phrase over adding exclusions.
+const BROWSER_BLOCK_PATTERNS: RegExp[] = [
+  /blocked by network security/i,                  // Reddit anti-bot
+  /attention required!? \| cloudflare/i,            // Cloudflare challenge page
+  /please (?:verify|confirm) you are (?:a |)human/i, // Cloudflare Turnstile / hCaptcha shells
+  /just a moment\.\.\./i,                           // CF interstitial holding phrase
+  /checking your browser before accessing/i,        // CF legacy challenge
+  /access denied\s*-?\s*you don't have permission/i, // Akamai / generic WAF
+];
+
+export function detectBrowserBlock(output: string): boolean {
+  if (!output) return false;
+  // Only worth scanning text snapshots; nothing else carries the block
+  // page body. Cap the scan window to keep very large snapshots fast.
+  const head = output.slice(0, 8_000);
+  return BROWSER_BLOCK_PATTERNS.some((r) => r.test(head));
+}
+
 export function classifyBrowserError(err: unknown, signal?: AbortSignal): BrowserErrorCategory {
   const e = err as {
     code?: string | number;
@@ -1115,6 +1140,22 @@ export async function runAgent(
             });
             appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
             const out = stdout.trim() || stderr.trim() || 'ok';
+
+            // Site-level anti-bot interstitials (Cloudflare, Reddit "blocked
+            // by network security", Akamai access-denied, etc.) come back
+            // as a successful HTTP 200 page, so the snapshot text contains
+            // the block wall. Flag it so the agent doesn't try to click
+            // buttons on a page where nothing real is loaded. Only scan
+            // content-returning commands — navigations and clicks don't
+            // carry the page body.
+            const READS_PAGE = new Set(['snapshot', 'html', 'text', 'content']);
+            if (READS_PAGE.has(command) && detectBrowserBlock(out)) {
+              return { content: [{ type: 'text' as const, text:
+                `browser ${command} reached the page but the site returned an anti-bot block (CATEGORY=BROWSER_BLOCKED). ` +
+                `The page shown is not real content. Try fetch_website with unblocker=true, request human takeover, or abandon this source.\n\n` +
+                `--- block page excerpt ---\n${out.slice(0, 400)}`
+              }] };
+            }
 
             return { content: [{ type: 'text' as const, text: out }] };
           } catch (err) {

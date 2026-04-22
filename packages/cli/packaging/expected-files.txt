@@ -3,6 +3,7 @@ README.md
 bin/granclaw.js
 dist/backend/agent-db.js
 dist/backend/agent/browser-bin.js
+dist/backend/agent/channel-broadcast.js
 dist/backend/agent/compaction-retry.js
 dist/backend/agent/context-budget.js
 dist/backend/agent/message-assembly.js

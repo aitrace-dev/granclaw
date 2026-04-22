@@ -278,7 +278,9 @@
     "errorPrefix": "Error:",
     "input": "Entrada",
     "output": "Salida",
-    "activity": "Actividad"
+    "activity": "Actividad",
+    "cancel": "Cancelar ejecución",
+    "cancelling": "Cancelando…"
   },
   "monitor": {
     "loading": "Cargando monitor…",

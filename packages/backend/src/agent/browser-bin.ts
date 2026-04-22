@@ -18,6 +18,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { WebSocket } from 'ws';
 import { stealthArgv } from '../browser/stealth.js';
 
 export interface BrowserBinaryResolution {
@@ -34,6 +35,10 @@ export interface BrowserBinaryResolution {
   isRemote: boolean;
   /** Whether local WebM recording should be attempted for this session. */
   recordingSupported: boolean;
+  /** CDP port when running against an existing browser (enterprise/Orbita).
+   *  Used by the browser tool to navigate the existing tab directly instead
+   *  of letting agent-browser create a new one. */
+  cdpPort?: string;
 }
 
 /**
@@ -63,6 +68,42 @@ export function buildArgv(res: BrowserBinaryResolution, command: string, args: s
   return [...res.preCommandArgs, command, ...args, ...res.postCommandArgs];
 }
 
+/**
+ * Navigate the first existing page tab via CDP Page.navigate — same approach
+ * Social Logins verify uses. Prevents agent-browser from creating a new tab
+ * for every `open`, which causes tab accumulation and may trigger anti-bot
+ * heuristics on sites that fingerprint rapid new-tab creation.
+ */
+export function cdpNavigate(port: string, url: string): Promise<string> {
+  return new Promise(async (resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('cdpNavigate: timeout')), 15_000);
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/json`);
+      const targets = (await res.json()) as Array<{ type: string; webSocketDebuggerUrl: string }>;
+      const page = targets.find(t => t.type === 'page');
+      if (!page) { clearTimeout(timer); reject(new Error('cdpNavigate: no page target')); return; }
+
+      const ws = new WebSocket(page.webSocketDebuggerUrl);
+      ws.on('open', () => {
+        ws.send(JSON.stringify({ id: 1, method: 'Page.navigate', params: { url } }));
+      });
+      ws.on('message', (data: Buffer) => {
+        const msg = JSON.parse(data.toString());
+        if (msg.id === 1) {
+          clearTimeout(timer);
+          ws.close();
+          if (msg.error) reject(new Error(`cdpNavigate: ${msg.error.message}`));
+          else resolve(url);
+        }
+      });
+      ws.on('error', (err) => { clearTimeout(timer); reject(err); });
+    } catch (err) {
+      clearTimeout(timer);
+      reject(err);
+    }
+  });
+}
+
 export async function resolveBrowserBinary(agentId: string, workspaceDir: string): Promise<BrowserBinaryResolution> {
   // Try registered providers first (supplied by extensions).
   for (const provider of providers) {
@@ -88,6 +129,7 @@ export async function resolveBrowserBinary(agentId: string, workspaceDir: string
           env: {},
           isRemote: false,
           recordingSupported: true,
+          cdpPort: port,
         };
       }
     } catch {}

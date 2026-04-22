@@ -29,6 +29,22 @@ import { saveMessage } from '../messages-db.js';
 
 const execAsync = promisify(exec);
 
+// ── Active run tracking (for cancellation) ──────────────────────────────
+
+const activeRuns = new Map<string, AbortController>();
+
+export function cancelWorkflowRun(agentId: string, runId: string): boolean {
+  const key = `${agentId}:${runId}`;
+  const ctrl = activeRuns.get(key);
+  if (!ctrl) return false;
+  ctrl.abort();
+  return true;
+}
+
+export function getActiveRunIds(): string[] {
+  return Array.from(activeRuns.keys());
+}
+
 // ── Template resolution ───────────────────────────────────────────────────
 
 interface StepResult {
@@ -231,6 +247,9 @@ export async function executeWorkflow(
   const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
   const run = createRun(agentId, workflowId, trigger);
   const allResults: StepResult[] = [];
+  const abortCtrl = new AbortController();
+  const runKey = `${agentId}:${run.id}`;
+  activeRuns.set(runKey, abortCtrl);
 
   // Pre-create all run_steps as pending
   const runStepMap = new Map<string, string>(); // stepId → runStepId
@@ -243,6 +262,17 @@ export async function executeWorkflow(
   let prevOutput: unknown = null;
 
   while (currentStep) {
+    if (abortCtrl.signal.aborted) {
+      for (const step of workflow.steps) {
+        const rsId = runStepMap.get(step.id)!;
+        if (!allResults.some(r => r.stepId === step.id)) {
+          updateRunStep(agentId, rsId, { status: 'skipped' });
+        }
+      }
+      updateRun(agentId, run.id, { status: 'cancelled', finishedAt: Date.now() });
+      activeRuns.delete(runKey);
+      return run.id;
+    }
     const runStepId = runStepMap.get(currentStep.id)!;
     const startedAt = Date.now();
 
@@ -332,6 +362,7 @@ export async function executeWorkflow(
       }
 
       updateRun(agentId, run.id, { status: 'failed', finishedAt });
+      activeRuns.delete(runKey);
       console.error(`[workflow-runner] step "${currentStep?.name}" failed:`, message);
 
       // Post failure to UI channel so chat has context
@@ -342,6 +373,7 @@ export async function executeWorkflow(
     }
   }
 
+  activeRuns.delete(runKey);
   updateRun(agentId, run.id, { status: 'completed', finishedAt: Date.now() });
 
   // Post workflow result summary to UI channel so chat has context

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   fetchWorkflowRun,
+  cancelWorkflowRun,
   type WorkflowRunWithSteps,
   type WorkflowRunStep,
   type WorkflowStep,
   type RunStepEvent,
 } from '../lib/api.ts';
-import { buttonGhost, cardCls } from '../ui/primitives';
+import { buttonGhost, buttonDanger, cardCls } from '../ui/primitives';
 import { useT } from '../lib/i18n.tsx';
 
 interface Props {
@@ -62,6 +63,7 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
   const { t } = useT();
   const [run, setRun] = useState<WorkflowRunWithSteps | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [cancelling, setCancelling] = useState(false);
 
   const loadRun = useCallback(async () => {
     try {
@@ -104,10 +106,28 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
         <h2 className="font-headline text-xl font-bold text-on-surface">
           {t('runDetail.runLabel')} <span className={statusText[run.status]}>{run.status}</span>
         </h2>
-        <span className="font-mono text-[11px] text-on-surface-variant">
-          {new Date(run.startedAt).toLocaleString()}
-          {run.finishedAt && ` · ${((run.finishedAt - run.startedAt) / 1000).toFixed(1)}s`}
-        </span>
+        <div className="flex items-center gap-3">
+          {run.status === 'running' && (
+            <button
+              disabled={cancelling}
+              onClick={async () => {
+                setCancelling(true);
+                try {
+                  await cancelWorkflowRun(agentId, workflowId, runId);
+                  await loadRun();
+                } catch { /* ignore */ }
+                setCancelling(false);
+              }}
+              className={buttonDanger}
+            >
+              {cancelling ? t('runDetail.cancelling') : t('runDetail.cancel')}
+            </button>
+          )}
+          <span className="font-mono text-[11px] text-on-surface-variant">
+            {new Date(run.startedAt).toLocaleString()}
+            {run.finishedAt && ` · ${((run.finishedAt - run.startedAt) / 1000).toFixed(1)}s`}
+          </span>
+        </div>
       </div>
 
       {/* Step timeline */}

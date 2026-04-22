@@ -43,7 +43,7 @@ import {
   type BrowserSessionHandle,
 } from '../browser/session-manager.js';
 import { stealthArgv } from '../browser/stealth.js';
-import { resolveBrowserBinary, buildArgv } from './browser-bin.js';
+import { resolveBrowserBinary, buildArgv, cdpNavigate } from './browser-bin.js';
 import { TelegramHttpClient } from './telegram-http-client.js';
 import { defaultChatId, isKnownChat, listKnownChats } from './telegram-chats.js';
 import { sendFormattedTelegramMessage } from './telegram-markdown.js';
@@ -692,7 +692,7 @@ export async function runAgent(
           role?: string; sortBy?: string; limit?: number;
           count?: boolean; format?: string;
         }) {
-          const apiUrl = process.env.GRANCLAW_API_URL ?? 'http://localhost:3001';
+          const apiUrl = process.env.GRANCLAW_API_URL ?? `http://localhost:${process.env.PORT ?? 3001}`;
           const url = new URL(`${apiUrl}/agents/${agent.id}/messages`);
           if (params.contains) url.searchParams.set('contains', params.contains);
           if (params.from)     url.searchParams.set('from',     params.from);
@@ -871,7 +871,7 @@ export async function runAgent(
     // Always registered — task board is always available.
     extensionFactories.push((pi: any) => {
       const taskBase = () => {
-        const apiUrl = process.env.GRANCLAW_API_URL ?? 'http://localhost:3001';
+        const apiUrl = process.env.GRANCLAW_API_URL ?? `http://localhost:${process.env.PORT ?? 3001}`;
         return `${apiUrl}/agents/${agent.id}/tasks`;
       };
       const fetchJson = async (url: string, init?: RequestInit) => {
@@ -892,7 +892,7 @@ export async function runAgent(
         parameters: {
           type: 'object',
           properties: {
-            status: { type: 'string', enum: ['backlog', 'in_progress', 'scheduled', 'to_review', 'done'], description: 'Filter by status (omit for all tasks)' },
+            status: { type: 'string', enum: ['backlog', 'in_progress', 'scheduled', 'to_review', 'done', 'cancelled'], description: 'Filter by status (omit for all tasks)' },
           },
         },
         async execute(_id: string, params: { status?: string }) {
@@ -1122,6 +1122,22 @@ export async function runAgent(
             await startBrowserRecording(browserState.handle, browser);
           }
 
+          // Enterprise single-tab navigation: when an existing CDP browser
+          // is available (Orbita), navigate the existing tab via CDP
+          // Page.navigate instead of agent-browser's `open` which creates a
+          // new tab each time. This prevents tab accumulation and matches the
+          // Social Logins verify flow — both paths navigate the same tab.
+          if (command === 'open' && browser.cdpPort && args.length > 0) {
+            try {
+              await cdpNavigate(browser.cdpPort, args[0]);
+              appendBrowserCommand(browserState.handle, `${command} ${args.join(' ')}`.trim());
+              return { content: [{ type: 'text' as const, text: `Navigated to ${args[0]}` }] };
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              return { content: [{ type: 'text' as const, text: `browser open failed (CDP navigate): ${msg}` }] };
+            }
+          }
+
           // Build argv per-CLI: the local daemon wants flags BEFORE the
           // subcommand; remote CLIs may want them AFTER. buildArgv handles both.
           const argv = buildArgv(browser, command, args);
@@ -1345,7 +1361,7 @@ export async function runAgent(
             required: ['query'],
           },
           async execute(_toolCallId: string, params: { query: string }) {
-            const apiUrl = process.env.GRANCLAW_API_URL ?? 'http://localhost:3001';
+            const apiUrl = process.env.GRANCLAW_API_URL ?? `http://localhost:${process.env.PORT ?? 3001}`;
             const url = `${apiUrl}/search?q=${encodeURIComponent(params.query)}`;
             try {
               const res = await fetch(url);

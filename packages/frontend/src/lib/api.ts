@@ -710,6 +710,11 @@ export async function triggerWorkflowRun(agentId: string, workflowId: string): P
   return res.json() as Promise<{ runId: string }>;
 }
 
+export async function cancelWorkflowRun(agentId: string, workflowId: string, runId: string): Promise<void> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/runs/${runId}/cancel`, { method: 'POST' });
+  if (!res.ok) throw new Error(`cancelWorkflowRun: ${res.status}`);
+}
+
 export async function createWorkflow(
   agentId: string,
   data: { name: string; description?: string },

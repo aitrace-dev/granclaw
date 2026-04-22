@@ -50,7 +50,7 @@ import {
   getRunningRuns,
   getLatestRun,
 } from '../workflows-db.js';
-import { executeWorkflow } from '../workflows/runner.js';
+import { executeWorkflow, cancelWorkflowRun } from '../workflows/runner.js';
 import { bootstrapWorkspace, compactAgentSession } from '../agent/runner-pi.js';
 import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, createScheduleRun, listScheduleRuns } from '../schedules-db.js';
 import { startScheduler } from '../scheduler.js';
@@ -1205,6 +1205,14 @@ export function createServer() {
     const run = getRun(req.params.id, req.params.runId);
     if (!run) { res.status(404).json({ error: 'Run not found' }); return; }
     res.json(run);
+  });
+
+  app.post('/agents/:id/workflows/:wfId/runs/:runId/cancel', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const cancelled = cancelWorkflowRun(req.params.id, req.params.runId);
+    if (!cancelled) { res.status(404).json({ error: 'Run not active or not found' }); return; }
+    res.json({ ok: true });
   });
 
   // ── Schedules ─────────────────────────────────────────────────────────────

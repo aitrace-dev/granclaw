@@ -14,7 +14,7 @@ import {
 import { RunDetail } from './RunDetail.tsx';
 import { WorkflowFormModal } from './WorkflowFormModal.tsx';
 import { StepFormModal } from './StepFormModal.tsx';
-import { buttonPrimary, buttonGhost, buttonDanger, buttonSecondary, cardCls, badgeBase } from '../ui/primitives';
+import { buttonPrimary, buttonGhost, buttonDanger, buttonSecondary, cardCls } from '../ui/primitives';
 import { useT } from '../lib/i18n.tsx';
 
 interface Props {
@@ -26,12 +26,6 @@ interface Props {
   onRefresh: () => Promise<void>;
   onDeleted: () => Promise<void>;
 }
-
-const stepTypeChip: Record<string, string> = {
-  code:  `${badgeBase} bg-primary/10 border border-primary/20 text-primary`,
-  llm:   `${badgeBase} bg-info/10 border border-info/20 text-info`,
-  agent: `${badgeBase} bg-success/10 border border-success/20 text-success`,
-};
 
 const runStatusDot: Record<string, string> = {
   running:   'bg-warning',
@@ -165,9 +159,6 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
             >
               <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleStep(step.id)}>
                 <span className="font-mono text-[10px] text-on-surface-variant w-5 text-center">{i + 1}</span>
-                <span className={stepTypeChip[step.type] ?? stepTypeChip.agent}>
-                  {step.type}
-                </span>
                 <span className="text-sm text-on-surface flex-1">{step.name}</span>
                 {step.transitions && (
                   <span className="font-mono text-[10px] text-on-surface-variant">
@@ -218,7 +209,6 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
                     </pre>
                   )}
                   <div className="flex gap-4 mt-1.5 font-mono text-[10px] text-on-surface-variant">
-                    <span>{t('workflows.stepType', { type: step.type })}</span>
                     {timeoutMs && <span>{t('workflows.stepTimeout', { seconds: timeoutMs / 1000 })}</span>}
                     <span>{t('workflows.stepId', { id: step.id.slice(0, 8) })}</span>
                   </div>

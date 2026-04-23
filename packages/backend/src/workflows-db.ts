@@ -13,7 +13,7 @@ import { getWorkspaceDb, closeWorkspaceDb } from './workspace-pool.js';
 // ── Types ─────────────────────────────────────────────────────────────────
 
 export type WorkflowStatus = 'active' | 'paused' | 'archived';
-export type StepType = 'code' | 'llm' | 'agent';
+
 export type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 export type RunStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
@@ -31,7 +31,7 @@ export interface Step {
   workflowId: string;
   position: number;
   name: string;
-  type: StepType;
+  type: string;
   config: Record<string, unknown>;
   transitions: { conditions: { expr: string; goto: string }[] } | null;
 }
@@ -110,7 +110,7 @@ function rowToStep(r: Record<string, unknown>): Step {
     workflowId: r.workflow_id as string,
     position: r.position as number,
     name: r.name as string,
-    type: r.type as StepType,
+    type: r.type as string,
     config: JSON.parse(r.config as string),
     transitions: r.transitions ? JSON.parse(r.transitions as string) : null,
   };
@@ -201,7 +201,7 @@ export function deleteWorkflow(agentId: string, workflowId: string): boolean {
 // ── Step CRUD ─────────────────────────────────────────────────────────────
 
 export function addStep(agentId: string, workflowId: string, data: {
-  name: string; type: StepType; config: Record<string, unknown>;
+  name: string; config: Record<string, unknown>;
   transitions?: { conditions: { expr: string; goto: string }[] }; position?: number;
 }): Step {
   const db = getDb(agentId);
@@ -210,13 +210,13 @@ export function addStep(agentId: string, workflowId: string, data: {
   db.prepare(`
     INSERT INTO steps (id, workflow_id, position, name, type, config, transitions)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, workflowId, pos, data.name, data.type, JSON.stringify(data.config), data.transitions ? JSON.stringify(data.transitions) : null);
+  `).run(id, workflowId, pos, data.name, 'agent', JSON.stringify(data.config), data.transitions ? JSON.stringify(data.transitions) : null);
   db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), workflowId);
   return rowToStep(db.prepare(`SELECT * FROM steps WHERE id = ?`).get(id) as Record<string, unknown>);
 }
 
 export function updateStep(agentId: string, stepId: string, data: {
-  name?: string; type?: StepType; config?: Record<string, unknown>;
+  name?: string; config?: Record<string, unknown>;
   transitions?: { conditions: { expr: string; goto: string }[] } | null; position?: number;
 }): Step | null {
   const db = getDb(agentId);
@@ -227,7 +227,7 @@ export function updateStep(agentId: string, stepId: string, data: {
     UPDATE steps SET name = ?, type = ?, config = ?, transitions = ?, position = ? WHERE id = ?
   `).run(
     data.name ?? step.name,
-    data.type ?? step.type,
+    'agent',
     data.config ? JSON.stringify(data.config) : existing.config as string,
     data.transitions !== undefined ? (data.transitions ? JSON.stringify(data.transitions) : null) : existing.transitions as string | null,
     data.position ?? step.position,

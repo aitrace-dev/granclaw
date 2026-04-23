@@ -7,11 +7,8 @@
  * Runs in the orchestrator process. Frontend polls for status updates.
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import path from 'path';
 import { REPO_ROOT, getAgent } from '../config.js';
-import { esmImport } from '../esm-import.js';
 import {
   getWorkflow,
   createRun,
@@ -22,12 +19,9 @@ import {
   type Step,
   type RunStepEvent,
 } from '../workflows-db.js';
-import { getProvider, getProviderApiKey } from '../providers-config.js';
 import { runAgent } from '../agent/runner-pi.js';
 import { randomUUID } from 'crypto';
 import { saveMessage } from '../messages-db.js';
-
-const execAsync = promisify(exec);
 
 // ── Active run tracking (for cancellation) ──────────────────────────────
 
@@ -68,91 +62,7 @@ function resolveTemplates(prompt: string, prevOutput: unknown, allResults: StepR
   return resolved;
 }
 
-// ── Step executors ────────────────────────────────────────────────────────
-
-async function executeCodeStep(
-  config: Record<string, unknown>,
-  workspaceDir: string
-): Promise<unknown> {
-  const script = config.script as string;
-  const shell = (config.shell as string) ?? 'bash';
-  const timeoutMs = (config.timeout_ms as number) ?? 30000;
-
-  const { stdout } = await execAsync(script, {
-    cwd: workspaceDir,
-    shell,
-    timeout: timeoutMs,
-    env: { ...process.env, HOME: process.env.HOME ?? '' },
-  });
-
-  // Try parsing as JSON, fallback to raw string
-  const trimmed = stdout.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return trimmed;
-  }
-}
-
-function providerEnvKey(provider: string): string {
-  const keys: Record<string, string> = {
-    google: 'GEMINI_API_KEY',
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    groq: 'GROQ_API_KEY',
-    xai: 'XAI_API_KEY',
-    mistral: 'MISTRAL_API_KEY',
-    cerebras: 'CEREBRAS_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
-  };
-  return keys[provider] ?? `${provider.toUpperCase()}_API_KEY`;
-}
-
-async function executeLlmStep(
-  config: Record<string, unknown>,
-  prevOutput: unknown,
-  allResults: StepResult[],
-  workspaceDir: string,
-  agentModel: string | undefined,
-): Promise<unknown> {
-  const providerCfg = getProvider();
-  if (!providerCfg) throw new Error('No provider configured. Go to Settings to add a provider.');
-
-  const apiKey = getProviderApiKey();
-  if (!apiKey) throw new Error('Provider API key missing. Go to Settings to reconfigure.');
-
-  const { getModel, complete } = await esmImport<typeof import('@mariozechner/pi-ai')>('@mariozechner/pi-ai');
-
-  const modelId = agentModel?.trim() || providerCfg.model;
-  const model = (getModel as (p: string, m: string) => unknown)(providerCfg.provider, modelId);
-  if (!model) throw new Error(`Model "${modelId}" not found for provider "${providerCfg.provider}".`);
-
-  const prompt = resolveTemplates(config.prompt as string, prevOutput, allResults);
-  const envKey = providerEnvKey(providerCfg.provider);
-  const prevValue = process.env[envKey];
-  process.env[envKey] = apiKey;
-  try {
-    const response = await (complete as Function)(model, {
-      messages: [{ role: 'user', content: prompt }],
-    });
-    // Extract text from pi-ai response (same shape as runner-pi.ts events)
-    if (typeof response === 'string') return response;
-    if (response && typeof response === 'object') {
-      // Try common text extraction paths
-      const r = response as Record<string, unknown>;
-      if (typeof r.text === 'string') return r.text;
-      if (Array.isArray(r.content)) {
-        const textBlock = (r.content as Array<Record<string, unknown>>).find(b => b.type === 'text');
-        if (textBlock && typeof textBlock.text === 'string') return textBlock.text;
-      }
-      if (typeof r.message === 'string') return r.message;
-    }
-    return String(response);
-  } finally {
-    if (prevValue === undefined) delete process.env[envKey];
-    else process.env[envKey] = prevValue;
-  }
-}
+// ── Step executor ─────────────────────────────────────────────────────────
 
 async function executeAgentStep(
   config: Record<string, unknown>,
@@ -280,40 +190,30 @@ export async function executeWorkflow(
     updateRunStep(agentId, runStepId, { status: 'running', startedAt });
 
     try {
+      const stepChannelId = `wf-${run.id}-s${currentStep.position}`;
+      const events: RunStepEvent[] = [];
+      let pendingFlush: ReturnType<typeof setTimeout> | null = null;
+      let lastFlushAt = 0;
+      const flush = () => {
+        pendingFlush = null;
+        lastFlushAt = Date.now();
+        try { writeRunStepEvents(agentId, runStepId, events); } catch { /* best-effort */ }
+      };
+      const scheduleFlush = () => {
+        if (pendingFlush) return;
+        const elapsed = Date.now() - lastFlushAt;
+        const delay = elapsed >= 1000 ? 0 : 1000 - elapsed;
+        pendingFlush = setTimeout(flush, delay);
+      };
       let output: unknown;
-
-      if (currentStep.type === 'code') {
-        output = await executeCodeStep(currentStep.config, workspaceDir);
-      } else if (currentStep.type === 'agent') {
-        const stepChannelId = `wf-${run.id}-s${currentStep.position}`;
-        const events: RunStepEvent[] = [];
-        // Debounced flusher: writes the buffer at most every 1s to cap
-        // the write rate regardless of tool cadence, and always flushes
-        // on step completion via the finally block below.
-        let pendingFlush: ReturnType<typeof setTimeout> | null = null;
-        let lastFlushAt = 0;
-        const flush = () => {
-          pendingFlush = null;
-          lastFlushAt = Date.now();
-          try { writeRunStepEvents(agentId, runStepId, events); } catch { /* best-effort */ }
-        };
-        const scheduleFlush = () => {
-          if (pendingFlush) return;
-          const elapsed = Date.now() - lastFlushAt;
-          const delay = elapsed >= 1000 ? 0 : 1000 - elapsed;
-          pendingFlush = setTimeout(flush, delay);
-        };
-        try {
-          output = await executeAgentStep(
-            currentStep.config, prevOutput, allResults, agent, stepChannelId,
-            (event) => { events.push(event); scheduleFlush(); },
-          );
-        } finally {
-          if (pendingFlush) { clearTimeout(pendingFlush); pendingFlush = null; }
-          if (events.length > 0) { try { writeRunStepEvents(agentId, runStepId, events); } catch { /* ignore */ } }
-        }
-      } else {
-        output = await executeLlmStep(currentStep.config, prevOutput, allResults, workspaceDir, agent.model);
+      try {
+        output = await executeAgentStep(
+          currentStep.config, prevOutput, allResults, agent, stepChannelId,
+          (event) => { events.push(event); scheduleFlush(); },
+        );
+      } finally {
+        if (pendingFlush) { clearTimeout(pendingFlush); pendingFlush = null; }
+        if (events.length > 0) { try { writeRunStepEvents(agentId, runStepId, events); } catch { /* ignore */ } }
       }
 
       const finishedAt = Date.now();

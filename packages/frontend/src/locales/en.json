@@ -219,7 +219,6 @@
     "stepsTitle": "Steps ({count})",
     "conditionsOne": "{count} condition",
     "conditionsOther": "{count} conditions",
-    "stepType": "Type: {type}",
     "stepTimeout": "Timeout: {seconds}s",
     "stepId": "ID: {id}",
     "runHistoryTitle": "Run history ({count})",
@@ -252,15 +251,9 @@
     "formStatus": "Status",
     "stepNameLabel": "Step name",
     "stepNamePlaceholder": "Fetch latest posts",
-    "stepTypeLabel": "Type",
-    "stepScriptLabel": "Script",
-    "stepScriptPlaceholder": "echo \"hello\"",
-    "stepShellLabel": "Shell",
     "stepTimeoutLabel": "Timeout (seconds)",
     "stepPromptLabel": "Prompt",
-    "stepPromptPlaceholder": "Summarize the previous step output…",
-    "stepModelLabel": "Model (optional)",
-    "stepModelPlaceholder": "claude-sonnet-4-6"
+    "stepPromptPlaceholder": "Summarize the previous step output…"
   },
   "runDetail": {
     "loading": "Loading run…",

@@ -352,20 +352,12 @@ export async function deleteColumnApi(agentId: string, columnId: string): Promis
 // ── Workflow types ────────────────────────────────────────────────────────
 
 export type WorkflowStatus = 'active' | 'paused' | 'archived';
-export type StepType = 'code' | 'llm' | 'agent';
 export type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 export type RunStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
-export interface CodeConfig {
-  script: string;
-  shell?: string;
-  timeout_ms?: number;
-}
-
-export interface LlmConfig {
+export interface StepConfig {
   prompt: string;
-  model?: string;
-  output_schema?: Record<string, string>;
+  timeout_ms?: number;
 }
 
 export interface Condition {
@@ -378,8 +370,7 @@ export interface WorkflowStep {
   workflowId: string;
   position: number;
   name: string;
-  type: StepType;
-  config: CodeConfig | LlmConfig;
+  config: StepConfig;
   transitions: { conditions: Condition[] } | null;
 }
 
@@ -788,8 +779,7 @@ export async function deleteWorkflow(agentId: string, workflowId: string): Promi
 
 export interface StepInput {
   name: string;
-  type: StepType;
-  config: CodeConfig | LlmConfig;
+  config: StepConfig;
   transitions?: { conditions: Condition[] } | null;
   position?: number;
 }

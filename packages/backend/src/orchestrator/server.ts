@@ -1198,17 +1198,17 @@ export function createServer() {
   app.post('/agents/:id/workflows/:wfId/steps', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const { name, type, config, transitions, position } = req.body;
-    if (!name || !type || !config) { res.status(400).json({ error: 'name, type, and config required' }); return; }
-    const step = addStep(req.params.id, req.params.wfId, { name, type, config, transitions, position });
+    const { name, config, transitions, position } = req.body;
+    if (!name || !config) { res.status(400).json({ error: 'name and config required' }); return; }
+    const step = addStep(req.params.id, req.params.wfId, { name, config, transitions, position });
     res.status(201).json(step);
   });
 
   app.put('/agents/:id/workflows/:wfId/steps/:stepId', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const { name, type, config, transitions, position } = req.body;
-    const step = updateStep(req.params.id, req.params.stepId, { name, type, config, transitions, position });
+    const { name, config, transitions, position } = req.body;
+    const step = updateStep(req.params.id, req.params.stepId, { name, config, transitions, position });
     if (!step) { res.status(404).json({ error: 'Step not found' }); return; }
     res.json(step);
   });

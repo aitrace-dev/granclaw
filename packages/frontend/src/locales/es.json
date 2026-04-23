@@ -219,7 +219,6 @@
     "stepsTitle": "Pasos ({count})",
     "conditionsOne": "{count} condición",
     "conditionsOther": "{count} condiciones",
-    "stepType": "Tipo: {type}",
     "stepTimeout": "Límite de tiempo: {seconds}s",
     "stepId": "ID: {id}",
     "runHistoryTitle": "Historial de ejecuciones ({count})",
@@ -252,15 +251,9 @@
     "formStatus": "Estado",
     "stepNameLabel": "Nombre del paso",
     "stepNamePlaceholder": "Recoger últimas publicaciones",
-    "stepTypeLabel": "Tipo",
-    "stepScriptLabel": "Script",
-    "stepScriptPlaceholder": "echo \"hola\"",
-    "stepShellLabel": "Shell",
     "stepTimeoutLabel": "Tiempo límite (segundos)",
     "stepPromptLabel": "Prompt",
-    "stepPromptPlaceholder": "Resume la salida del paso anterior…",
-    "stepModelLabel": "Modelo (opcional)",
-    "stepModelPlaceholder": "claude-sonnet-4-6"
+    "stepPromptPlaceholder": "Resume la salida del paso anterior…"
   },
   "runDetail": {
     "loading": "Cargando ejecución…",

@@ -569,11 +569,6 @@ export async function runAgent(
   // can prevent new processes from opening it, but should never crash the agent.
   try { logAction(agent.id, 'message', { text: message }); } catch { /* ignore */ }
 
-  // Declare outside try so finally can restore the env var.
-  // undefined means injection hasn't happened yet (e.g. model-not-found early return).
-  let envKey: string | undefined;
-  let prevValue: string | undefined;
-
   // Tool-execution keep-alive. See comment where it's started (on
   // tool_execution_start). Declared at the outer scope so the finally
   // block can still reach stopHeartbeat() if the try body throws.
@@ -612,9 +607,10 @@ export async function runAgent(
     const model: unknown = baseUrlOverride ? { ...rawModel, baseUrl: baseUrlOverride } : rawModel;
 
     // Inject the API key into the env so pi-ai's credential chain picks it up.
-    // Done here (after model guard) so the finally block always restores it.
-    envKey = providerEnvKey(providerCfg.provider);
-    prevValue = process.env[envKey];
+    // Set-and-leave: multiple agents may run concurrently with the same provider,
+    // and pi-ai can fire async retries after runAgent returns, so we never
+    // delete the env var. Subsequent calls overwrite with the same value.
+    const envKey = providerEnvKey(providerCfg.provider);
     process.env[envKey] = apiKey;
 
     // ── Session manager ─────────────────────────────────────────────────
@@ -1829,11 +1825,6 @@ export async function runAgent(
     // benefit, so we dropped it.
     if (browserState.handle) {
       try { await finalizeBrowserSession(browserState.handle, 'closed'); } catch { /* best effort */ }
-    }
-    // Restore env var only if it was injected (envKey is set only after model guard)
-    if (envKey !== undefined) {
-      if (prevValue === undefined) delete process.env[envKey];
-      else process.env[envKey] = prevValue;
     }
   }
 }

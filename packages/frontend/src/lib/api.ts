@@ -642,6 +642,7 @@ export interface Schedule {
   nextRun: number | null;
   lastRun: number | null;
   createdAt: number;
+  workflowId: string | null;
 }
 
 export async function fetchSchedules(agentId: string): Promise<Schedule[]> {
@@ -652,7 +653,7 @@ export async function fetchSchedules(agentId: string): Promise<Schedule[]> {
 
 export async function createScheduleApi(
   agentId: string,
-  data: { name: string; message: string; cron: string; timezone?: string }
+  data: { name: string; message?: string; cron: string; timezone?: string; workflowId?: string }
 ): Promise<Schedule> {
   const res = await fetch(`${BASE}/agents/${agentId}/schedules`, {
     method: 'POST',
@@ -822,6 +823,14 @@ export async function deleteStep(
     method: 'DELETE',
   });
   if (!res.ok) throw new Error(`deleteStep: ${res.status}`);
+}
+
+// ── Workflow Schedules ───────────────────────────────────────────────────────
+
+export async function fetchWorkflowSchedules(agentId: string, workflowId: string): Promise<Schedule[]> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/schedules`);
+  if (!res.ok) throw new Error(`fetchWorkflowSchedules: ${res.status}`);
+  return res.json() as Promise<Schedule[]>;
 }
 
 // ── Logs ────────────────────────────────────────────────────────────────────

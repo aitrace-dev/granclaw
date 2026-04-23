@@ -33,6 +33,7 @@ export interface Schedule {
   nextRun: number | null;
   lastRun: number | null;
   createdAt: number;
+  workflowId: string | null;
 }
 
 // ── Internal DB accessor ──────────────────────────────────────────────────
@@ -57,6 +58,7 @@ function rowToSchedule(r: Record<string, unknown>): Schedule {
     nextRun: (r.next_run as number) ?? null,
     lastRun: (r.last_run as number) ?? null,
     createdAt: r.created_at as number,
+    workflowId: (r.workflow_id as string) ?? null,
   };
 }
 
@@ -84,18 +86,19 @@ export function getSchedule(agentId: string, scheduleId: string): Schedule | nul
 
 export function createSchedule(agentId: string, data: {
   name: string;
-  message: string;
+  message?: string;
   cron: string;
   timezone?: string;
   nextRun: number;
+  workflowId?: string;
 }): Schedule {
   const db = getDb(agentId);
   const id = nextScheduleId(db);
   const now = Date.now();
   db.prepare(`
-    INSERT INTO schedules (id, agent_id, name, message, cron, timezone, status, next_run, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)
-  `).run(id, agentId, data.name, data.message, data.cron, data.timezone ?? 'Asia/Singapore', data.nextRun, now);
+    INSERT INTO schedules (id, agent_id, name, message, cron, timezone, status, next_run, created_at, workflow_id)
+    VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+  `).run(id, agentId, data.name, data.message ?? '', data.cron, data.timezone ?? 'Asia/Singapore', data.nextRun, now, data.workflowId ?? null);
   return getSchedule(agentId, id)!;
 }
 
@@ -133,6 +136,11 @@ export function deleteSchedule(agentId: string, scheduleId: string): boolean {
   const db = getDb(agentId);
   const result = db.prepare(`DELETE FROM schedules WHERE id = ? AND agent_id = ?`).run(scheduleId, agentId);
   return result.changes > 0;
+}
+
+export function getSchedulesForWorkflow(agentId: string, workflowId: string): Schedule[] {
+  const db = getDb(agentId);
+  return (db.prepare(`SELECT * FROM schedules WHERE agent_id = ? AND workflow_id = ? ORDER BY created_at DESC`).all(agentId, workflowId) as Record<string, unknown>[]).map(rowToSchedule);
 }
 
 export function getDueSchedules(agentId: string): Schedule[] {

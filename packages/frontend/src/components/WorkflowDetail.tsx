@@ -1,19 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   updateWorkflow,
   deleteWorkflow,
   createStep,
   updateStep,
   deleteStep,
+  fetchWorkflowSchedules,
+  createScheduleApi,
+  updateScheduleApi,
+  deleteScheduleApi,
   type WorkflowWithSteps,
   type WorkflowRun,
   type WorkflowStep,
   type StepInput,
   type WorkflowStatus,
+  type Schedule,
 } from '../lib/api.ts';
 import { RunDetail } from './RunDetail.tsx';
 import { WorkflowFormModal } from './WorkflowFormModal.tsx';
 import { StepFormModal } from './StepFormModal.tsx';
+import { WorkflowScheduleModal } from './WorkflowScheduleModal.tsx';
 import { buttonPrimary, buttonGhost, buttonDanger, buttonSecondary, cardCls } from '../ui/primitives';
 import { useT } from '../lib/i18n.tsx';
 
@@ -25,6 +31,34 @@ interface Props {
   onRun: () => void;
   onRefresh: () => Promise<void>;
   onDeleted: () => Promise<void>;
+}
+
+function cronToHuman(cron: string): string {
+  const parts = cron.split(' ');
+  if (parts.length !== 5) return cron;
+  const [min, hour, dom, mon, dow] = parts;
+  if (dom === '*' && mon === '*' && dow === '*') {
+    if (hour !== '*' && min !== '*') return `Daily at ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
+    if (hour === '*' && min === '0') return 'Every hour';
+    if (hour === '*') return `Every hour at :${min.padStart(2, '0')}`;
+  }
+  if (dom === '*' && mon === '*' && dow !== '*') {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayNames = dow.split(',').map(d => days[Number(d)] ?? d).join(', ');
+    if (hour !== '*' && min !== '*') return `${dayNames} at ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
+  }
+  return cron;
+}
+
+function relativeTime(ms: number | null): string {
+  if (!ms) return '—';
+  const diff = ms - Date.now();
+  const absDiff = Math.abs(diff);
+  if (absDiff < 60_000) return diff > 0 ? 'in <1m' : '<1m ago';
+  if (absDiff < 3_600_000) return diff > 0 ? `in ${Math.round(absDiff / 60_000)}m` : `${Math.round(absDiff / 60_000)}m ago`;
+  if (absDiff < 86_400_000) return diff > 0 ? `in ${Math.round(absDiff / 3_600_000)}h` : `${Math.round(absDiff / 3_600_000)}h ago`;
+  const days = Math.round(absDiff / 86_400_000);
+  return diff > 0 ? `in ${days}d` : `${days}d ago`;
 }
 
 const runStatusDot: Record<string, string> = {
@@ -41,6 +75,43 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
   const [editingWorkflow, setEditingWorkflow] = useState(false);
   const [addingStep, setAddingStep] = useState(false);
   const [editingStep, setEditingStep] = useState<WorkflowStep | null>(null);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [addingSchedule, setAddingSchedule] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+
+  const loadSchedules = useCallback(async () => {
+    try {
+      setSchedules(await fetchWorkflowSchedules(agentId, workflow.id));
+    } catch { /* ignore */ }
+  }, [agentId, workflow.id]);
+
+  useEffect(() => { void loadSchedules(); }, [loadSchedules]);
+
+  const handleAddSchedule = async (data: { name: string; cron: string; timezone: string }) => {
+    await createScheduleApi(agentId, { ...data, workflowId: workflow.id });
+    setAddingSchedule(false);
+    await loadSchedules();
+  };
+
+  const handleUpdateSchedule = async (data: { name: string; cron: string; timezone: string }) => {
+    if (!editingSchedule) return;
+    await updateScheduleApi(agentId, editingSchedule.id, data);
+    setEditingSchedule(null);
+    await loadSchedules();
+  };
+
+  const handleDeleteSchedule = async (schedule: Schedule) => {
+    if (!window.confirm(t('workflows.deleteScheduleConfirm', { name: schedule.name }))) return;
+    await deleteScheduleApi(agentId, schedule.id);
+    await loadSchedules();
+  };
+
+  const handleToggleSchedule = async (schedule: Schedule) => {
+    await updateScheduleApi(agentId, schedule.id, {
+      status: schedule.status === 'active' ? 'paused' : 'active',
+    });
+    await loadSchedules();
+  };
 
   const toggleStep = (stepId: string) => {
     setExpandedSteps(prev => {
@@ -123,6 +194,9 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
           </button>
           <button onClick={() => void handleDeleteWorkflow()} className={buttonDanger}>
             {t('workflows.delete')}
+          </button>
+          <button onClick={() => setAddingSchedule(true)} className={buttonSecondary}>
+            {t('workflows.schedule')}
           </button>
           <button onClick={onRun} className={buttonPrimary}>
             {t('workflows.run_button')}
@@ -219,6 +293,44 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
         })}
       </div>
 
+      {/* Schedules */}
+      <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
+        {t('workflows.schedulesTitle', { count: schedules.length })}
+      </h3>
+      {schedules.length === 0 ? (
+        <p className="text-xs text-on-surface-variant mb-6">{t('workflows.noSchedules')}</p>
+      ) : (
+        <div className="flex flex-col gap-1 mb-6">
+          {schedules.map((sch) => (
+            <div key={sch.id} className={`${cardCls} p-3`}>
+              <div className="flex items-center gap-2">
+                <span className={`h-1.5 w-1.5 rounded-full ${sch.status === 'active' ? 'bg-success' : 'bg-warning/50'}`} />
+                <span className="text-sm text-on-surface flex-1">{sch.name}</span>
+                <span className="font-mono text-[10px] text-on-surface-variant">{cronToHuman(sch.cron)}</span>
+                <span className="font-mono text-[10px] text-on-surface-variant">{sch.timezone}</span>
+                <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => void handleToggleSchedule(sch)} className={buttonGhost}>
+                    {sch.status === 'active' ? t('schedules.pause') : t('schedules.resume')}
+                  </button>
+                  <button onClick={() => setEditingSchedule(sch)} className={buttonGhost} title={t('workflows.edit')}>
+                    ✎
+                  </button>
+                  <button onClick={() => void handleDeleteSchedule(sch)} className={buttonDanger} title={t('workflows.delete')}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+              {sch.nextRun && (
+                <div className="mt-1 ml-3.5 font-mono text-[10px] text-on-surface-variant">
+                  {t('schedules.next', { time: relativeTime(sch.nextRun) })}
+                  {sch.lastRun && ` · ${t('schedules.last', { time: relativeTime(sch.lastRun) })}`}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <h3 className="font-label text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant mb-2">
         {t('workflows.runHistoryTitle', { count: runs.length })}
       </h3>
@@ -270,6 +382,23 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
           initial={editingStep}
           onSave={handleUpdateStep}
           onCancel={() => setEditingStep(null)}
+        />
+      )}
+
+      {addingSchedule && (
+        <WorkflowScheduleModal
+          title={t('workflows.scheduleTitle')}
+          onSave={handleAddSchedule}
+          onCancel={() => setAddingSchedule(false)}
+        />
+      )}
+
+      {editingSchedule && (
+        <WorkflowScheduleModal
+          title={t('workflows.editSchedule')}
+          initial={{ name: editingSchedule.name, cron: editingSchedule.cron, timezone: editingSchedule.timezone }}
+          onSave={handleUpdateSchedule}
+          onCancel={() => setEditingSchedule(null)}
         />
       )}
     </div>

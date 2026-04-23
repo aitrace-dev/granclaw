@@ -52,7 +52,7 @@ import {
 } from '../workflows-db.js';
 import { executeWorkflow, cancelWorkflowRun } from '../workflows/runner.js';
 import { bootstrapWorkspace, compactAgentSession } from '../agent/runner-pi.js';
-import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, createScheduleRun, listScheduleRuns } from '../schedules-db.js';
+import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, createScheduleRun, listScheduleRuns, getSchedulesForWorkflow } from '../schedules-db.js';
 import { startScheduler } from '../scheduler.js';
 import { scanUsage } from '../usage-scanner.js';
 import { parseExpression } from 'cron-parser';
@@ -1258,6 +1258,14 @@ export function createServer() {
     res.json({ ok: true });
   });
 
+  // ── Workflow Schedules ──────────────────────────────────────────────────
+
+  app.get('/agents/:id/workflows/:wfId/schedules', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    res.json(getSchedulesForWorkflow(req.params.id, req.params.wfId));
+  });
+
   // ── Schedules ─────────────────────────────────────────────────────────────
 
   app.get('/agents/:id/schedules', (req, res) => {
@@ -1269,8 +1277,9 @@ export function createServer() {
   app.post('/agents/:id/schedules', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const { name, message, cron, timezone } = req.body as { name?: string; message?: string; cron?: string; timezone?: string };
-    if (!name || !message || !cron) { res.status(400).json({ error: 'name, message, and cron required' }); return; }
+    const { name, message, cron, timezone, workflowId } = req.body as { name?: string; message?: string; cron?: string; timezone?: string; workflowId?: string };
+    if (!name || !cron) { res.status(400).json({ error: 'name and cron required' }); return; }
+    if (!workflowId && !message) { res.status(400).json({ error: 'message required for non-workflow schedules' }); return; }
 
     let nextRun: number;
     try {
@@ -1280,7 +1289,7 @@ export function createServer() {
       res.status(400).json({ error: `Invalid cron expression: ${cron}` }); return;
     }
 
-    const schedule = createSchedule(req.params.id, { name, message, cron, timezone, nextRun });
+    const schedule = createSchedule(req.params.id, { name, message, cron, timezone, nextRun, workflowId });
     res.status(201).json(schedule);
     capture('schedule_created', { agentId: req.params.id });
   });

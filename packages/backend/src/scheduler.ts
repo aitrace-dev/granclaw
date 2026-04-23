@@ -12,6 +12,7 @@ import { getManagedAgents } from './orchestrator/agent-manager.js';
 import { getDueSchedules, updateSchedule } from './schedules-db.js';
 import { enqueue } from './agent-db.js';
 import { REPO_ROOT } from './config.js';
+import { executeWorkflow } from './workflows/runner.js';
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -33,9 +34,16 @@ function tick(): void {
     }
 
     for (const schedule of due) {
-      const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
-      enqueue(workspaceDir, agentId, schedule.message, 'schedule');
-      console.log(`[scheduler] triggered "${schedule.name}" for agent "${agentId}"`);
+      if (schedule.workflowId) {
+        console.log(`[scheduler] triggering workflow "${schedule.workflowId}" for schedule "${schedule.name}" (agent "${agentId}")`);
+        executeWorkflow(agentId, schedule.workflowId, 'schedule').catch((err) => {
+          console.error(`[scheduler] workflow "${schedule.workflowId}" failed:`, err);
+        });
+      } else {
+        const workspaceDir = path.resolve(REPO_ROOT, managed.config.workspaceDir);
+        enqueue(workspaceDir, agentId, schedule.message, 'schedule');
+        console.log(`[scheduler] triggered "${schedule.name}" for agent "${agentId}"`);
+      }
 
       let nextRun: number;
       try {

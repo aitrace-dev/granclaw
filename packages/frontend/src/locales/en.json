@@ -253,7 +253,17 @@
     "stepNamePlaceholder": "Fetch latest posts",
     "stepTimeoutLabel": "Timeout (seconds)",
     "stepPromptLabel": "Prompt",
-    "stepPromptPlaceholder": "Summarize the previous step output…"
+    "stepPromptPlaceholder": "Summarize the previous step output…",
+    "schedule": "Schedule",
+    "scheduleTitle": "Schedule workflow",
+    "editSchedule": "Edit schedule",
+    "schedulesTitle": "Schedules ({count})",
+    "noSchedules": "No schedules. Click \"Schedule\" to add a recurring run.",
+    "cronLabel": "Cron expression",
+    "cronPlaceholder": "0 9 * * *",
+    "timezoneLabel": "Timezone",
+    "scheduleNamePlaceholder": "Daily run",
+    "deleteScheduleConfirm": "Delete schedule \"{name}\"?"
   },
   "runDetail": {
     "loading": "Loading run…",

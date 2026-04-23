@@ -231,7 +231,7 @@ function evaluateTransitions(
 export async function executeWorkflow(
   agentId: string,
   workflowId: string,
-  trigger: 'manual' | 'chat'
+  trigger: 'manual' | 'chat' | 'schedule'
 ): Promise<string> {
   const workflow = getWorkflow(agentId, workflowId);
   if (!workflow) throw new Error(`Workflow "${workflowId}" not found`);

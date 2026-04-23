@@ -115,7 +115,7 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
       workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
       status      TEXT NOT NULL DEFAULT 'running'
                     CHECK(status IN ('running','completed','failed','cancelled')),
-      trigger     TEXT NOT NULL CHECK(trigger IN ('manual','chat')),
+      trigger     TEXT NOT NULL CHECK(trigger IN ('manual','chat','schedule')),
       started_at  INTEGER NOT NULL,
       finished_at INTEGER
     );
@@ -210,6 +210,29 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     console.log('[workspace-pool] migrated steps table (added agent type)');
   }
 
+  // Migration: allow 'schedule' in runs.trigger for scheduled workflow execution
+  const runsSchema = (db.prepare(
+    `SELECT sql FROM sqlite_master WHERE type='table' AND name='runs'`
+  ).get() as { sql: string } | undefined);
+  if (runsSchema?.sql && !runsSchema.sql.includes('schedule')) {
+    db.exec(`
+      CREATE TABLE runs_new (
+        id          TEXT PRIMARY KEY,
+        workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+        status      TEXT NOT NULL DEFAULT 'running'
+                      CHECK(status IN ('running','completed','failed','cancelled')),
+        trigger     TEXT NOT NULL CHECK(trigger IN ('manual','chat','schedule')),
+        started_at  INTEGER NOT NULL,
+        finished_at INTEGER
+      );
+      INSERT INTO runs_new SELECT * FROM runs;
+      DROP TABLE runs;
+      ALTER TABLE runs_new RENAME TO runs;
+      CREATE INDEX IF NOT EXISTS idx_runs_workflow ON runs(workflow_id, started_at);
+    `);
+    console.log('[workspace-pool] migrated runs table (added schedule trigger)');
+  }
+
   // ── secrets ───────────────────────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS secrets (
@@ -225,14 +248,15 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
       id          TEXT PRIMARY KEY,
       agent_id    TEXT NOT NULL,
       name        TEXT NOT NULL,
-      message     TEXT NOT NULL,
+      message     TEXT NOT NULL DEFAULT '',
       cron        TEXT NOT NULL,
       timezone    TEXT NOT NULL DEFAULT 'Asia/Singapore',
       status      TEXT NOT NULL DEFAULT 'active'
                     CHECK(status IN ('active','paused')),
       next_run    INTEGER,
       last_run    INTEGER,
-      created_at  INTEGER NOT NULL
+      created_at  INTEGER NOT NULL,
+      workflow_id TEXT DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS schedule_runs (
@@ -245,6 +269,13 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_schedule_runs_schedule
       ON schedule_runs (schedule_id, started_at DESC);
   `);
+
+  // Migration: add workflow_id column to schedules if missing
+  const schedCols = (db.prepare(`PRAGMA table_info(schedules)`).all() as { name: string }[]);
+  if (schedCols.length > 0 && !schedCols.some(c => c.name === 'workflow_id')) {
+    db.exec(`ALTER TABLE schedules ADD COLUMN workflow_id TEXT DEFAULT NULL`);
+    console.log('[workspace-pool] migrated schedules table (added workflow_id column)');
+  }
 
   pool.set(workspaceDir, db);
   return db;

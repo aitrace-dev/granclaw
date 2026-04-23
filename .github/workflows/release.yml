@@ -39,7 +39,7 @@ jobs:
 
     runs-on: ubuntu-latest
     # Skip the version-bump commit the workflow itself pushes back to main
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message || '', '[skip ci]')
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:

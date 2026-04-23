@@ -114,6 +114,7 @@ jobs:
       - name: Tag and push
         run: |
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git pull --rebase origin main
           git push origin HEAD --follow-tags
 
       - name: Create GitHub Release

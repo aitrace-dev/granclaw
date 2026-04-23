@@ -97,41 +97,43 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
   const stepMap = new Map(steps.map((s) => [s.id, s]));
 
   return (
-    <div className="p-4">
-      <button onClick={onBack} className={`${buttonGhost} mb-3`}>
-        {t('runDetail.back')}
-      </button>
+    <div className="flex-1 flex flex-col overflow-hidden p-4">
+      <div className="flex-shrink-0">
+        <button onClick={onBack} className={`${buttonGhost} mb-3`}>
+          {t('runDetail.back')}
+        </button>
 
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-headline text-xl font-bold text-on-surface">
-          {t('runDetail.runLabel')} <span className={statusText[run.status]}>{run.status}</span>
-        </h2>
-        <div className="flex items-center gap-3">
-          {run.status === 'running' && (
-            <button
-              disabled={cancelling}
-              onClick={async () => {
-                setCancelling(true);
-                try {
-                  await cancelWorkflowRun(agentId, workflowId, runId);
-                  await loadRun();
-                } catch { /* ignore */ }
-                setCancelling(false);
-              }}
-              className={buttonDanger}
-            >
-              {cancelling ? t('runDetail.cancelling') : t('runDetail.cancel')}
-            </button>
-          )}
-          <span className="font-mono text-[11px] text-on-surface-variant">
-            {new Date(run.startedAt).toLocaleString()}
-            {run.finishedAt && ` · ${((run.finishedAt - run.startedAt) / 1000).toFixed(1)}s`}
-          </span>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-headline text-xl font-bold text-on-surface">
+            {t('runDetail.runLabel')} <span className={statusText[run.status]}>{run.status}</span>
+          </h2>
+          <div className="flex items-center gap-3">
+            {run.status === 'running' && (
+              <button
+                disabled={cancelling}
+                onClick={async () => {
+                  setCancelling(true);
+                  try {
+                    await cancelWorkflowRun(agentId, workflowId, runId);
+                    await loadRun();
+                  } catch { /* ignore */ }
+                  setCancelling(false);
+                }}
+                className={buttonDanger}
+              >
+                {cancelling ? t('runDetail.cancelling') : t('runDetail.cancel')}
+              </button>
+            )}
+            <span className="font-mono text-[11px] text-on-surface-variant">
+              {new Date(run.startedAt).toLocaleString()}
+              {run.finishedAt && ` · ${((run.finishedAt - run.startedAt) / 1000).toFixed(1)}s`}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Step timeline */}
-      <div className="flex flex-col gap-1">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-1">
         {run.steps.map((rs: WorkflowRunStep) => {
           const stepDef = stepMap.get(rs.stepId);
           const isExpanded = expanded.has(rs.id);

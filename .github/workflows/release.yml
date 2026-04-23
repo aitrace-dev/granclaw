@@ -2,7 +2,7 @@ name: deploy beta release
 
 # Beta release pipeline: auto-version → bump → gate → publish → tag → GitHub Release.
 #
-# Flow (workflow_dispatch, manual button):
+# Flow (push to main or workflow_dispatch):
 #   1. Derive next beta version from packages/cli/package.json base + highest
 #      existing vX.Y.Z-beta.N tag → produces X.Y.Z-beta.(N+1)
 #   2. If packages/cli/package.json is not already at the target, bump it

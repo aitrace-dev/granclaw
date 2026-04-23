@@ -110,7 +110,7 @@ export function WorkflowDetail({ agentId, workflow, runs, onBack, onRun, onRefre
   const sortedSteps = [...workflow.steps].sort((a, b) => a.position - b.position);
 
   return (
-    <div className="p-4">
+    <div className="p-4 flex-1 overflow-y-auto">
       <button onClick={() => void onBack()} className={`${buttonGhost} mb-3`}>
         {t('workflows.back')}
       </button>

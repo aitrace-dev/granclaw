@@ -172,7 +172,7 @@ export function RunDetail({ agentId, workflowId, runId, steps, onBack }: Props) 
                       <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant mb-1">
                         {t('runDetail.activity')}
                       </div>
-                      <div className="flex flex-col gap-1 bg-surface-container-low p-2 rounded">
+                      <div className="flex flex-col gap-1 bg-surface-container-low p-2 rounded max-h-64 overflow-y-auto">
                         {rs.events.map((ev, i) => {
                           const relTs = rs.startedAt ? ((ev.ts - rs.startedAt) / 1000).toFixed(1) : '';
                           return (

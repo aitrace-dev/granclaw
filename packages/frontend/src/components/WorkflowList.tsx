@@ -66,6 +66,7 @@ export function WorkflowList({ agentId }: { agentId: string }) {
 
   if (selected) {
     return (
+      <div className="flex flex-col flex-1 overflow-hidden">
       <WorkflowDetail
         agentId={agentId}
         workflow={selected}
@@ -85,6 +86,7 @@ export function WorkflowList({ agentId }: { agentId: string }) {
           await loadWorkflows();
         }}
       />
+      </div>
     );
   }
 
@@ -114,7 +116,7 @@ export function WorkflowList({ agentId }: { agentId: string }) {
   };
 
   return (
-    <div className="p-3 sm:p-4 min-w-0">
+    <div className="p-3 sm:p-4 min-w-0 flex-1 overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-headline text-xl font-bold text-on-surface">{t('workflows.title')}</h2>
         <button onClick={() => setCreating(true)} className={buttonSecondary}>

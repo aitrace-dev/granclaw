@@ -69,3 +69,9 @@ run_in_server.sh
 # Provider credentials — local-only, never commit (real API keys live here)
 providers.config.json
 documentation/
+
+# Local-only developer guide — not for the public repo
+CLAUDE.md
+
+# Local agents config — seeded on first `npm run dev` from packages/cli/templates/agents.config.json
+agents.config.json

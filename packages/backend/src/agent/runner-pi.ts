@@ -526,7 +526,7 @@ export async function runAgent(
   agent: AgentConfig,
   message: string,
   onChunk: (chunk: StreamChunk) => void,
-  options?: { channelId?: string }
+  options?: { channelId?: string; extraTools?: ((pi: any) => void)[] }
 ): Promise<void> {
   const workspaceDir = path.resolve(REPO_ROOT, agent.workspaceDir);
   const channelId = options?.channelId ?? 'ui';
@@ -1537,6 +1537,11 @@ export async function runAgent(
         },
       });
     });
+
+    // Append caller-injected tool factories (e.g. workflow step tools)
+    if (options?.extraTools) {
+      extensionFactories.push(...options.extraTools);
+    }
 
     // Build resource loader. Must call reload() before passing to createAgentSession —
     // when the sdk receives a pre-built resourceLoader it skips reload().

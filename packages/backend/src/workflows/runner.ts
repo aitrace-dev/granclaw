@@ -19,24 +19,38 @@ import {
   type Step,
   type RunStepEvent,
 } from '../workflows-db.js';
-import { runAgent } from '../agent/runner-pi.js';
+import { runAgent, stopAgent } from '../agent/runner-pi.js';
 import { randomUUID } from 'crypto';
 import { saveMessage } from '../messages-db.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 // ── Active run tracking (for cancellation) ──────────────────────────────
 
-const activeRuns = new Map<string, AbortController>();
+const activeRuns = new Map<string, { ctrl: AbortController; agentId: string }>();
 
 export function cancelWorkflowRun(agentId: string, runId: string): boolean {
   const key = `${agentId}:${runId}`;
-  const ctrl = activeRuns.get(key);
-  if (!ctrl) return false;
-  ctrl.abort();
+  const entry = activeRuns.get(key);
+  if (!entry) return false;
+  entry.ctrl.abort();
+  stopAgent(agentId);
   return true;
 }
 
 export function getActiveRunIds(): string[] {
   return Array.from(activeRuns.keys());
+}
+
+// ── Browser cleanup ──────────────────────────────────────────────────────
+
+async function closeBrowserTabs(agentId: string): Promise<void> {
+  const bin = process.env.AGENT_BROWSER_BIN ?? 'agent-browser';
+  try {
+    await execFileAsync(bin, ['--session', agentId, 'close', '--all'], { timeout: 5000 });
+  } catch { /* best effort — browser may not be running */ }
 }
 
 // ── Template resolution ───────────────────────────────────────────────────
@@ -62,6 +76,15 @@ function resolveTemplates(prompt: string, prevOutput: unknown, allResults: StepR
   return resolved;
 }
 
+// ── Workflow step signal ──────────────────────────────────────────────────
+
+class StepFailure extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'StepFailure';
+  }
+}
+
 // ── Step executor ─────────────────────────────────────────────────────────
 
 async function executeAgentStep(
@@ -78,42 +101,105 @@ async function executeAgentStep(
 
   let responseText = '';
 
-  await Promise.race([
-    runAgent(agent, prompt, (chunk) => {
-      if (chunk.type === 'text') {
-        responseText += chunk.text;
-      } else if (chunk.type === 'tool_call') {
-        onEvent({ type: 'tool_call', ts: Date.now(), tool: chunk.tool, input: chunk.input });
-      } else if (chunk.type === 'tool_result') {
-        onEvent({ type: 'tool_result', ts: Date.now(), tool: chunk.tool, output: chunk.output });
-      } else if (chunk.type === 'error') {
-        onEvent({ type: 'error', ts: Date.now(), message: chunk.message });
-      }
-    }, { channelId }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Agent step timed out')), timeoutMs)
+  // Deferred that the agent resolves via workflow_step_complete / workflow_step_fail tools
+  let resolveSignal: (value: { status: 'complete' | 'fail'; output?: unknown; reason?: string }) => void;
+  const signalPromise = new Promise<{ status: 'complete' | 'fail'; output?: unknown; reason?: string }>(
+    (resolve) => { resolveSignal = resolve; }
+  );
+  let signalFired = false;
+
+  const extraTools: ((pi: any) => void)[] = [
+    (pi: any) => {
+      pi.registerTool({
+        name: 'workflow_step_complete',
+        label: 'Complete Workflow Step',
+        description:
+          'Signal that this workflow step completed successfully. ' +
+          'Call this when you have finished the task described in the step prompt. ' +
+          'Pass an optional output summary for the next step to consume.',
+        parameters: {
+          type: 'object',
+          properties: {
+            output: {
+              type: 'string',
+              description: 'Summary or result of the step (passed to the next step as context)',
+            },
+          },
+        },
+        execute(_toolCallId: string, params: { output?: string }) {
+          if (!signalFired) {
+            signalFired = true;
+            resolveSignal({ status: 'complete', output: params.output ?? responseText.trim() });
+          }
+          return { content: [{ type: 'text' as const, text: 'Step marked as complete.' }] };
+        },
+      });
+    },
+    (pi: any) => {
+      pi.registerTool({
+        name: 'workflow_step_fail',
+        label: 'Fail Workflow Step',
+        description:
+          'Signal that this workflow step failed. ' +
+          'Call this when you cannot complete the task — e.g. a required resource is unavailable, ' +
+          'login failed, or the task is impossible given the current state. ' +
+          'Provide a reason so the workflow run log explains what went wrong.',
+        parameters: {
+          type: 'object',
+          properties: {
+            reason: {
+              type: 'string',
+              description: 'Why the step failed',
+            },
+          },
+          required: ['reason'],
+        },
+        execute(_toolCallId: string, params: { reason: string }) {
+          if (!signalFired) {
+            signalFired = true;
+            resolveSignal({ status: 'fail', reason: params.reason });
+          }
+          return { content: [{ type: 'text' as const, text: 'Step marked as failed.' }] };
+        },
+      });
+    },
+  ];
+
+  const agentDone = runAgent(agent, prompt, (chunk) => {
+    if (chunk.type === 'text') {
+      responseText += chunk.text;
+    } else if (chunk.type === 'tool_call') {
+      onEvent({ type: 'tool_call', ts: Date.now(), tool: chunk.tool, input: chunk.input });
+    } else if (chunk.type === 'tool_result') {
+      onEvent({ type: 'tool_result', ts: Date.now(), tool: chunk.tool, output: chunk.output });
+    } else if (chunk.type === 'error') {
+      onEvent({ type: 'error', ts: Date.now(), message: chunk.message });
+    }
+  }, { channelId, extraTools });
+
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Agent step timed out')), timeoutMs)
+  );
+
+  // Race: agent finishes naturally, agent calls a signal tool, or timeout
+  const result = await Promise.race([
+    agentDone.then(() => signalFired
+      ? signalPromise
+      : { status: 'complete' as const, output: responseText.trim() }
     ),
+    signalPromise,
+    timeout,
   ]);
 
-  const trimmed = responseText.trim();
-
-  // Check for agent-reported failure
-  // Convention: agent includes "STEP_FAILED:" or "FAILED:" in output to signal failure
-  // Also supports custom fail_if regex pattern in step config
-  const failIf = config.fail_if as string | undefined;
-  const failMatch = trimmed.match(/(?:STEP_FAILED|FAILED):\s*(.*)/s);
-  if (failMatch) {
-    const reason = failMatch[1]?.trim().slice(0, 200) || 'Agent reported failure';
-    throw new Error(reason);
-  }
-  if (failIf) {
-    const regex = new RegExp(failIf, 'i');
-    if (regex.test(trimmed)) {
-      throw new Error(`Output matched fail_if pattern: ${failIf}`);
-    }
+  if (result.status === 'fail') {
+    throw new StepFailure(result.reason ?? 'Agent reported failure');
   }
 
-  try { return JSON.parse(trimmed); } catch { return trimmed; }
+  const output = result.output;
+  if (typeof output === 'string') {
+    try { return JSON.parse(output); } catch { return output; }
+  }
+  return output;
 }
 
 // ── Transition evaluation ─────────────────────────────────────────────────
@@ -159,7 +245,7 @@ export async function executeWorkflow(
   const allResults: StepResult[] = [];
   const abortCtrl = new AbortController();
   const runKey = `${agentId}:${run.id}`;
-  activeRuns.set(runKey, abortCtrl);
+  activeRuns.set(runKey, { ctrl: abortCtrl, agentId });
 
   // Pre-create all run_steps as pending
   const runStepMap = new Map<string, string>(); // stepId → runStepId
@@ -181,6 +267,7 @@ export async function executeWorkflow(
       }
       updateRun(agentId, run.id, { status: 'cancelled', finishedAt: Date.now() });
       activeRuns.delete(runKey);
+      await closeBrowserTabs(agentId);
       return run.id;
     }
     const runStepId = runStepMap.get(currentStep.id)!;
@@ -242,6 +329,21 @@ export async function executeWorkflow(
         currentStep = workflow.steps.find((s) => s.position === nextPos) ?? null;
       }
     } catch (err) {
+      // If the abort signal fired (cancel), treat as cancellation not failure
+      if (abortCtrl.signal.aborted) {
+        updateRunStep(agentId, runStepId, { status: 'skipped', startedAt });
+        for (const step of workflow.steps) {
+          const rsId = runStepMap.get(step.id)!;
+          if (rsId !== runStepId && !allResults.some(r => r.stepId === step.id)) {
+            updateRunStep(agentId, rsId, { status: 'skipped' });
+          }
+        }
+        updateRun(agentId, run.id, { status: 'cancelled', finishedAt: Date.now() });
+        activeRuns.delete(runKey);
+        await closeBrowserTabs(agentId);
+        return run.id;
+      }
+
       const finishedAt = Date.now();
       const message = err instanceof Error ? err.message : String(err);
       updateRunStep(agentId, runStepId, {
@@ -269,6 +371,7 @@ export async function executeWorkflow(
       const failSummary = `**Workflow "${workflow.name}" failed** at step "${currentStep?.name}"\n\nError: ${message}`;
       saveMessage({ id: randomUUID(), agentId, channelId: 'ui', role: 'assistant', content: failSummary });
 
+      await closeBrowserTabs(agentId);
       return run.id;
     }
   }
@@ -284,5 +387,6 @@ export async function executeWorkflow(
   const summary = `**Workflow "${workflow.name}" completed** (${allResults.length} steps)\n\nFinal output:\n${outputPreview}`;
   saveMessage({ id: randomUUID(), agentId, channelId: 'ui', role: 'assistant', content: summary });
 
+  await closeBrowserTabs(agentId);
   return run.id;
 }

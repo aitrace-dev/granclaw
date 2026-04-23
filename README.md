@@ -155,7 +155,7 @@ Before cutting a release, run the prepublish gate locally:
 npm run gate -w granclaw
 ```
 
-See [CLAUDE.md](./CLAUDE.md) for the full developer guide.
+See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for the full developer guide.
 
 ---
 

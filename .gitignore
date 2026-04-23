@@ -75,3 +75,4 @@ CLAUDE.md
 
 # Local agents config — seeded on first `npm run dev` from packages/cli/templates/agents.config.json
 agents.config.json
+img.png

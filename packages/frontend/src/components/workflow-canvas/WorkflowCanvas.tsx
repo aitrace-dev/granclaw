@@ -4,6 +4,8 @@ import {
   addEdge,
   useNodesState,
   useEdgesState,
+  useReactFlow,
+  ReactFlowProvider,
   Controls,
   MiniMap,
   Background,
@@ -13,6 +15,7 @@ import {
   type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import dagre from '@dagrejs/dagre';
 
 import { nodeTypes } from './nodes';
 import { NodeConfigPanel } from './NodeConfigPanel';
@@ -93,22 +96,61 @@ function fromReactFlowEdges(edges: Edge[]): Omit<WorkflowEdge, 'workflowId'>[] {
   }));
 }
 
+const NODE_WIDTH = 200;
+const NODE_HEIGHT = 80;
+
+function layoutGraph(nodes: Node[], edges: Edge[]): Node[] {
+  const g = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 100, marginx: 40, marginy: 40 });
+
+  for (const node of nodes) {
+    g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  }
+  for (const edge of edges) {
+    g.setEdge(edge.source, edge.target);
+  }
+
+  dagre.layout(g);
+
+  return nodes.map(node => {
+    const pos = g.node(node.id);
+    return { ...node, position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 } };
+  });
+}
+
 let nodeIdCounter = 0;
 
-export function WorkflowCanvas({ agentId, workflowId }: Props) {
+function WorkflowCanvasInner({ agentId, workflowId }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const loaded = useRef(false);
+  const { fitView } = useReactFlow();
+
+  const applyLayout = useCallback(() => {
+    setNodes(nds => {
+      const laid = layoutGraph(nds, edges);
+      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+      return laid;
+    });
+    setDirty(true);
+  }, [edges, fitView]);
 
   // Load graph
   useEffect(() => {
     fetchWorkflowGraph(agentId, workflowId).then(graph => {
       if (graph.nodes.length > 0) {
-        setNodes(graph.nodes.map(toReactFlowNode));
-        setEdges(graph.edges.map(toReactFlowEdge));
+        const rfNodes = graph.nodes.map(toReactFlowNode);
+        const rfEdges = graph.edges.map(toReactFlowEdge);
+        const allAtOrigin = rfNodes.every(n => n.position.x === 0 && n.position.y === 0);
+        if (allAtOrigin) {
+          setNodes(layoutGraph(rfNodes, rfEdges));
+        } else {
+          setNodes(rfNodes);
+        }
+        setEdges(rfEdges);
       } else {
         // Empty graph — seed with trigger + end
         const triggerId = crypto.randomUUID();
@@ -229,6 +271,12 @@ export function WorkflowCanvas({ agentId, workflowId }: Props) {
         </span>
         <button
           className={buttonGhost + ' !text-[10px]'}
+          onClick={applyLayout}
+        >
+          Auto Layout
+        </button>
+        <button
+          className={buttonGhost + ' !text-[10px]'}
           onClick={handleSave}
           disabled={saving || !dirty}
         >
@@ -289,5 +337,13 @@ export function WorkflowCanvas({ agentId, workflowId }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+export function WorkflowCanvas(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <WorkflowCanvasInner {...props} />
+    </ReactFlowProvider>
   );
 }

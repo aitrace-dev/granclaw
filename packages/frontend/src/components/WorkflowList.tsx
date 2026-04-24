@@ -6,7 +6,6 @@ import {
   triggerWorkflowRun,
   createWorkflow,
   type Workflow,
-  type WorkflowWithSteps,
   type WorkflowRun,
 } from '../lib/api.ts';
 import { WorkflowDetail } from './WorkflowDetail.tsx';
@@ -17,7 +16,7 @@ import { useT } from '../lib/i18n.tsx';
 export function WorkflowList({ agentId }: { agentId: string }) {
   const { t } = useT();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [selected, setSelected] = useState<WorkflowWithSteps | null>(null);
+  const [selected, setSelected] = useState<Workflow | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);

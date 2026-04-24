@@ -3,7 +3,8 @@
     {
       "id": "test",
       "name": "demo-agent",
-      "model": "deepseek/deepseek-v3.2",
+      "model": "deepseek/deepseek-chat",
+      "provider": "openrouter",
       "workspaceDir": "./workspaces/test",
       "allowedTools": [
         "filesystem",

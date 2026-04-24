@@ -12,6 +12,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 
 const pool = new Map<string, Database.Database>();
 
@@ -87,7 +88,7 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id, created_at);
   `);
 
-  // ── workflows + steps + runs + run_steps (from workflows-db) ─────────────
+  // ── workflows + runs + run_steps (from workflows-db) ─────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS workflows (
       id          TEXT PRIMARY KEY,
@@ -98,17 +99,6 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
       created_at  INTEGER NOT NULL,
       updated_at  INTEGER NOT NULL
     );
-
-    CREATE TABLE IF NOT EXISTS steps (
-      id          TEXT PRIMARY KEY,
-      workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-      position    INTEGER NOT NULL,
-      name        TEXT NOT NULL,
-      type        TEXT NOT NULL CHECK(type IN ('code','llm','agent')),
-      config      TEXT NOT NULL,
-      transitions TEXT DEFAULT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_steps_workflow ON steps(workflow_id, position);
 
     CREATE TABLE IF NOT EXISTS runs (
       id          TEXT PRIMARY KEY,
@@ -138,12 +128,80 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_run_steps_run ON run_steps(run_id, started_at);
   `);
 
+  // ── workflow graph (nodes + edges) ───────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow_nodes (
+      id          TEXT PRIMARY KEY,
+      workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+      node_type   TEXT NOT NULL CHECK(node_type IN ('agent','foreach','conditional','merge','trigger','end')),
+      name        TEXT NOT NULL,
+      config      TEXT NOT NULL DEFAULT '{}',
+      position_x  REAL NOT NULL DEFAULT 0,
+      position_y  REAL NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_nodes_workflow ON workflow_nodes(workflow_id);
+
+    CREATE TABLE IF NOT EXISTS workflow_edges (
+      id            TEXT PRIMARY KEY,
+      workflow_id   TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+      source_id     TEXT NOT NULL REFERENCES workflow_nodes(id) ON DELETE CASCADE,
+      target_id     TEXT NOT NULL REFERENCES workflow_nodes(id) ON DELETE CASCADE,
+      source_handle TEXT NOT NULL DEFAULT 'default',
+      condition     TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_edges_workflow ON workflow_edges(workflow_id);
+  `);
+
+  // Migration: add node_id and iteration columns to run_steps for graph-based runs
+  const rsColsGraph = (db.prepare(`PRAGMA table_info(run_steps)`).all() as { name: string }[]);
+  if (rsColsGraph.length > 0 && !rsColsGraph.some(c => c.name === 'node_id')) {
+    db.exec(`ALTER TABLE run_steps ADD COLUMN node_id TEXT`);
+    db.exec(`ALTER TABLE run_steps ADD COLUMN iteration INTEGER`);
+    console.log('[workspace-pool] migrated run_steps table (added node_id, iteration columns)');
+  }
+
+  // Migration: drop legacy `steps` table (linear workflows replaced by graph nodes + edges).
+  const stepsTableExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='steps'`).get();
+  if (stepsTableExists) {
+    db.exec(`DROP TABLE IF EXISTS steps`);
+    console.log('[workspace-pool] dropped legacy steps table (linear workflows removed)');
+  }
+
   // Migration: ensure run_steps has an events column (added 2026-04-22 so
   // the workflow RunDetail view can show live tool calls for agent steps).
   const runStepsCols = (db.prepare(`PRAGMA table_info(run_steps)`).all() as { name: string }[]);
   if (runStepsCols.length > 0 && !runStepsCols.some(c => c.name === 'events')) {
     db.exec(`ALTER TABLE run_steps ADD COLUMN events TEXT`);
     console.log('[workspace-pool] migrated run_steps table (added events column)');
+  }
+
+  // Migration: make step_id nullable in run_steps (graph-based runs use node_id instead)
+  const rsInfo = db.prepare(`PRAGMA table_info(run_steps)`).all() as { name: string; notnull: number }[];
+  const stepIdCol = rsInfo.find(c => c.name === 'step_id');
+  if (stepIdCol && stepIdCol.notnull === 1) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS run_steps_new (
+        id          TEXT PRIMARY KEY,
+        run_id      TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        step_id     TEXT,
+        node_id     TEXT,
+        iteration   INTEGER,
+        status      TEXT NOT NULL DEFAULT 'pending'
+                      CHECK(status IN ('pending','running','completed','failed','skipped')),
+        input       TEXT,
+        output      TEXT,
+        error       TEXT,
+        events      TEXT,
+        started_at  INTEGER,
+        finished_at INTEGER,
+        duration_ms INTEGER
+      );
+      INSERT INTO run_steps_new SELECT id, run_id, step_id, node_id, iteration, status, input, output, error, events, started_at, finished_at, duration_ms FROM run_steps;
+      DROP TABLE run_steps;
+      ALTER TABLE run_steps_new RENAME TO run_steps;
+      CREATE INDEX IF NOT EXISTS idx_run_steps_run ON run_steps(run_id, started_at);
+    `);
+    console.log('[workspace-pool] migrated run_steps: step_id is now nullable (graph runs use node_id)');
   }
 
   // Migration: detect old tasks schema (no tags column) → destroy and recreate.
@@ -187,28 +245,6 @@ export function getWorkspaceDb(workspaceDir: string): Database.Database {
     db.prepare('INSERT INTO task_columns (id, label, position, created_at) VALUES (?, ?, ?, ?)').run('done', 'Done', 2, seedNow);
   }
 
-  // Migration: ensure steps.type allows 'agent' (existing workflows.sqlite compat)
-  const stepsSchema = (db.prepare(
-    `SELECT sql FROM sqlite_master WHERE type='table' AND name='steps'`
-  ).get() as { sql: string } | undefined);
-  if (stepsSchema?.sql && !stepsSchema.sql.includes('agent')) {
-    db.exec(`
-      CREATE TABLE steps_new (
-        id          TEXT PRIMARY KEY,
-        workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-        position    INTEGER NOT NULL,
-        name        TEXT NOT NULL,
-        type        TEXT NOT NULL CHECK(type IN ('code','llm','agent')),
-        config      TEXT NOT NULL,
-        transitions TEXT DEFAULT NULL
-      );
-      INSERT INTO steps_new SELECT * FROM steps;
-      DROP TABLE steps;
-      ALTER TABLE steps_new RENAME TO steps;
-      CREATE INDEX IF NOT EXISTS idx_steps_workflow ON steps(workflow_id, position);
-    `);
-    console.log('[workspace-pool] migrated steps table (added agent type)');
-  }
 
   // Migration: allow 'schedule' in runs.trigger for scheduled workflow execution
   const runsSchema = (db.prepare(

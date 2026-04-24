@@ -355,23 +355,32 @@ export type WorkflowStatus = 'active' | 'paused' | 'archived';
 export type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 export type RunStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
-export interface StepConfig {
-  prompt: string;
-  timeout_ms?: number;
-}
+// ── Graph model types ─────────────────────────────────────────────────
 
-export interface Condition {
-  expr: string;
-  goto: string;
-}
+export type NodeType = 'agent' | 'foreach' | 'conditional' | 'merge' | 'trigger' | 'end';
 
-export interface WorkflowStep {
+export interface WorkflowNode {
   id: string;
   workflowId: string;
-  position: number;
+  nodeType: NodeType;
   name: string;
-  config: StepConfig;
-  transitions: { conditions: Condition[] } | null;
+  config: Record<string, unknown>;
+  positionX: number;
+  positionY: number;
+}
+
+export interface WorkflowEdge {
+  id: string;
+  workflowId: string;
+  sourceId: string;
+  targetId: string;
+  sourceHandle: string;
+  condition: string | null;
+}
+
+export interface WorkflowGraph {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
 }
 
 export interface Workflow {
@@ -384,10 +393,6 @@ export interface Workflow {
   /** Most recent run, if any — populated by GET /agents/:id/workflows so
    *  the list can show an at-a-glance run-status badge. */
   lastRun?: WorkflowRun | null;
-}
-
-export interface WorkflowWithSteps extends Workflow {
-  steps: WorkflowStep[];
 }
 
 export interface WorkflowRun {
@@ -412,6 +417,10 @@ export interface WorkflowRunStep {
   id: string;
   runId: string;
   stepId: string;
+  nodeId: string | null;
+  nodeName?: string | null;
+  nodeType?: string | null;
+  iteration: number | null;
   status: RunStepStatus;
   input: unknown;
   output: unknown;
@@ -717,10 +726,10 @@ export async function fetchWorkflows(agentId: string): Promise<Workflow[]> {
   return res.json() as Promise<Workflow[]>;
 }
 
-export async function fetchWorkflow(agentId: string, workflowId: string): Promise<WorkflowWithSteps> {
+export async function fetchWorkflow(agentId: string, workflowId: string): Promise<Workflow> {
   const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}`);
   if (!res.ok) throw new Error(`fetchWorkflow: ${res.status}`);
-  return res.json() as Promise<WorkflowWithSteps>;
+  return res.json() as Promise<Workflow>;
 }
 
 export async function fetchWorkflowRuns(agentId: string, workflowId: string): Promise<WorkflowRun[]> {
@@ -778,51 +787,26 @@ export async function deleteWorkflow(agentId: string, workflowId: string): Promi
   if (!res.ok) throw new Error(`deleteWorkflow: ${res.status}`);
 }
 
-export interface StepInput {
-  name: string;
-  config: StepConfig;
-  transitions?: { conditions: Condition[] } | null;
-  position?: number;
+// ── Workflow Graph ───────────────────────────────────────────────────────────
+
+export async function fetchWorkflowGraph(agentId: string, workflowId: string): Promise<WorkflowGraph> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/graph`);
+  if (!res.ok) throw new Error(`fetchWorkflowGraph: ${res.status}`);
+  return res.json() as Promise<WorkflowGraph>;
 }
 
-export async function createStep(
+export async function saveWorkflowGraph(
   agentId: string,
   workflowId: string,
-  data: StepInput,
-): Promise<WorkflowStep> {
-  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/steps`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) throw new Error(`createStep: ${res.status}`);
-  return res.json() as Promise<WorkflowStep>;
-}
-
-export async function updateStep(
-  agentId: string,
-  workflowId: string,
-  stepId: string,
-  data: Partial<StepInput>,
-): Promise<WorkflowStep> {
-  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/steps/${stepId}`, {
+  graph: { nodes: Omit<WorkflowNode, 'workflowId'>[]; edges: Omit<WorkflowEdge, 'workflowId'>[] },
+): Promise<WorkflowGraph> {
+  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/graph`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    body: JSON.stringify(graph),
   });
-  if (!res.ok) throw new Error(`updateStep: ${res.status}`);
-  return res.json() as Promise<WorkflowStep>;
-}
-
-export async function deleteStep(
-  agentId: string,
-  workflowId: string,
-  stepId: string,
-): Promise<void> {
-  const res = await fetch(`${BASE}/agents/${agentId}/workflows/${workflowId}/steps/${stepId}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) throw new Error(`deleteStep: ${res.status}`);
+  if (!res.ok) throw new Error(`saveWorkflowGraph: ${res.status}`);
+  return res.json() as Promise<WorkflowGraph>;
 }
 
 // ── Workflow Schedules ───────────────────────────────────────────────────────

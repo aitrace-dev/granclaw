@@ -45,12 +45,14 @@ import { saveMessage, getMessages, deleteMessages, queryMessages, Message } from
 import { listTasks, getTask, createTask, updateTask, deleteTask, clearTasks, listComments, createComment, listColumns, createColumn, deleteColumn } from '../tasks-db.js';
 import {
   listWorkflows, getWorkflow, createWorkflow, updateWorkflow, deleteWorkflow,
-  addStep, updateStep, removeStep,
   listRuns, getRun,
   getRunningRuns,
   getLatestRun,
+  getWorkflowGraph, saveWorkflowGraph,
+  addNode, updateNode, removeNode, addEdge, removeEdge,
+  type NodeType,
 } from '../workflows-db.js';
-import { executeWorkflow, cancelWorkflowRun } from '../workflows/runner.js';
+import { executeGraphWorkflow, cancelGraphRun } from '../workflows/runner-graph.js';
 import { bootstrapWorkspace, compactAgentSession } from '../agent/runner-pi.js';
 import { listSchedules, getSchedule, createSchedule, updateSchedule as updateScheduleDb, deleteSchedule, createScheduleRun, listScheduleRuns, getSchedulesForWorkflow } from '../schedules-db.js';
 import { startScheduler } from '../scheduler.js';
@@ -1193,43 +1195,94 @@ export function createServer() {
     res.json({ ok: true });
   });
 
-  // ── Workflow Steps ─────────────────────────────────────────────────────
+  // ── Workflow Graph ─────────────────────────────────────────────────────
 
-  app.post('/agents/:id/workflows/:wfId/steps', (req, res) => {
+  app.get('/agents/:id/workflows/:wfId/graph', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const { name, config, transitions, position } = req.body;
-    if (!name || !config) { res.status(400).json({ error: 'name and config required' }); return; }
-    const step = addStep(req.params.id, req.params.wfId, { name, config, transitions, position });
-    res.status(201).json(step);
+    const graph = getWorkflowGraph(req.params.id, req.params.wfId);
+    res.json(graph);
   });
 
-  app.put('/agents/:id/workflows/:wfId/steps/:stepId', (req, res) => {
+  app.put('/agents/:id/workflows/:wfId/graph', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const { name, config, transitions, position } = req.body;
-    const step = updateStep(req.params.id, req.params.stepId, { name, config, transitions, position });
-    if (!step) { res.status(404).json({ error: 'Step not found' }); return; }
-    res.json(step);
+    const { nodes, edges } = req.body as {
+      nodes: { id: string; nodeType: NodeType; name: string; config: Record<string, unknown>; positionX: number; positionY: number }[];
+      edges: { id: string; sourceId: string; targetId: string; sourceHandle: string; condition?: string | null }[];
+    };
+    if (!Array.isArray(nodes) || !Array.isArray(edges)) {
+      res.status(400).json({ error: 'nodes and edges arrays required' }); return;
+    }
+    try {
+      const graph = saveWorkflowGraph(req.params.id, req.params.wfId, { nodes, edges });
+      res.json(graph);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: message });
+    }
   });
 
-  app.delete('/agents/:id/workflows/:wfId/steps/:stepId', (req, res) => {
+  // ── Workflow Nodes (individual CRUD) ────────────────────────────────
+
+  app.post('/agents/:id/workflows/:wfId/nodes', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const deleted = removeStep(req.params.id, req.params.stepId);
-    if (!deleted) { res.status(404).json({ error: 'Step not found' }); return; }
+    const { nodeType, name, config, positionX, positionY } = req.body;
+    if (!nodeType || !name) { res.status(400).json({ error: 'nodeType and name required' }); return; }
+    const node = addNode(req.params.id, req.params.wfId, { nodeType, name, config, positionX, positionY });
+    res.status(201).json(node);
+  });
+
+  app.put('/agents/:id/workflows/:wfId/nodes/:nodeId', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const { name, config, positionX, positionY } = req.body;
+    const node = updateNode(req.params.id, req.params.nodeId, { name, config, positionX, positionY });
+    if (!node) { res.status(404).json({ error: 'Node not found' }); return; }
+    res.json(node);
+  });
+
+  app.delete('/agents/:id/workflows/:wfId/nodes/:nodeId', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const deleted = removeNode(req.params.id, req.params.nodeId);
+    if (!deleted) { res.status(404).json({ error: 'Node not found' }); return; }
+    res.json({ ok: true });
+  });
+
+  // ── Workflow Edges (individual CRUD) ────────────────────────────────
+
+  app.post('/agents/:id/workflows/:wfId/edges', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const { sourceId, targetId, sourceHandle, condition } = req.body;
+    if (!sourceId || !targetId) { res.status(400).json({ error: 'sourceId and targetId required' }); return; }
+    const edge = addEdge(req.params.id, req.params.wfId, { sourceId, targetId, sourceHandle, condition });
+    res.status(201).json(edge);
+  });
+
+  app.delete('/agents/:id/workflows/:wfId/edges/:edgeId', (req, res) => {
+    const managed = getManagedAgent(req.params.id);
+    if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
+    const deleted = removeEdge(req.params.id, req.params.edgeId);
+    if (!deleted) { res.status(404).json({ error: 'Edge not found' }); return; }
     res.json({ ok: true });
   });
 
   // ── Workflow Runs ──────────────────────────────────────────────────────
 
-  app.post('/agents/:id/workflows/:wfId/run', async (req, res) => {
+  app.post('/agents/:id/workflows/:wfId/run', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
     try {
-      const runId = await executeWorkflow(req.params.id, req.params.wfId, 'manual');
-      res.status(201).json({ runId });
-      capture('workflow_run', { agentId: req.params.id, workflowId: req.params.wfId });
+      const runPromise = executeGraphWorkflow(req.params.id, req.params.wfId, 'manual');
+      runPromise.then(() => {
+        capture('workflow_run', { agentId: req.params.id, workflowId: req.params.wfId });
+      }).catch(err => {
+        console.error('[workflow-run] error:', err instanceof Error ? err.message : err);
+      });
+      res.status(202).json({ status: 'started' });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });
@@ -1253,7 +1306,7 @@ export function createServer() {
   app.post('/agents/:id/workflows/:wfId/runs/:runId/cancel', (req, res) => {
     const managed = getManagedAgent(req.params.id);
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
-    const cancelled = cancelWorkflowRun(req.params.id, req.params.runId);
+    const cancelled = cancelGraphRun(req.params.id, req.params.runId);
     if (!cancelled) { res.status(404).json({ error: 'Run not active or not found' }); return; }
     res.json({ ok: true });
   });

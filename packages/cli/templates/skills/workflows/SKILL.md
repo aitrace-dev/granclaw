@@ -1,70 +1,13 @@
 ---
 name: workflows
-description: Create and manage automated workflows with code, LLM, and agent steps via the orchestrator REST API. Use when the user asks to automate a multi-step process.
+description: Create and manage automated DAG workflows with agent nodes, foreach loops, conditionals, and merges via the orchestrator REST API. Use when the user asks to automate a multi-step process.
 user-invocable: false
 allowed-tools: [bash]
 ---
 
 # Workflow Manager Skill
 
-You can create, edit, and trigger automated workflows that chain shell scripts, LLM calls, and full agent sessions into repeatable pipelines. Every operation goes through the **orchestrator REST API** — never touch SQLite directly.
-
-## MANDATORY — decompose into multiple steps, do NOT create single-step workflows
-
-**Before you write any `curl -X POST .../workflows` call, you MUST plan 2 or more steps and write them down.** A workflow with one step is not a workflow — it is a scheduled agent run. For that, use the `schedules` skill instead; do not create it here.
-
-### The rule
-
-Every workflow you create must have at least two steps. If your plan has one step, **stop and use `schedules`**. The value of a workflow comes from structured, inspectable output flowing between steps; cramming everything into a single agent step throws that value away and makes debugging impossible.
-
-### Decomposition ladder — write this out BEFORE any API call
-
-For any user request that starts with "automate …" or "set up a workflow for …", answer these in order and jot the plan in plain text first:
-
-1. **What concrete facts/data does the workflow need at the start?** → a **`code` step** (curl, jq, DB fetch, file read). Deterministic. Returns JSON.
-2. **How should those facts be filtered, scored, or classified?** → an **`llm` step** with an explicit `output_schema`. One-shot, structured.
-3. **Is there a decision that short-circuits the rest?** → add `transitions` on the previous step (`goto: "END"` when not worth continuing).
-4. **What's the final action that changes the world (post, message, write, update)?** → an **`agent` step** — but only if the action truly needs iterative tools (browser, vault, multi-file edits). If it's a single HTTP call, that's a `code` step.
-5. **Do we need to record the outcome?** → a final **`code` step** that writes a summary line somewhere inspectable.
-
-Only reach for `agent` steps when the action genuinely needs the full toolset. **Don't wrap a single curl in an `agent` step.** **Don't wrap a deterministic text transform in an `agent` step** — that's what `llm` is for.
-
-### Anti-pattern vs good
-
-BAD — one "do everything" agent step (this is what you must NOT do):
-
-```json
-[
-  {
-    "name": "Do everything",
-    "type": "agent",
-    "position": 0,
-    "config": {
-      "prompt": "Fetch the latest top 25 posts from r/MachineLearning, rank them by engagement, pick the top 5, and post a digest to the user's Telegram."
-    }
-  }
-]
-```
-
-GOOD — three steps, each with structured output the next step consumes:
-
-```json
-[
-  { "name": "Fetch posts",    "type": "code",  "position": 0, "config": { "script": "curl -s https://www.reddit.com/r/MachineLearning/top.json?limit=25 | jq '[.data.children[].data | {id, title, score, num_comments, permalink}]'" } },
-  { "name": "Rank top 5",     "type": "llm",   "position": 1, "config": { "prompt": "Rank these by engagement (score + num_comments), pick 5:\n\n{{prev.output}}\n\nReturn JSON {\"top5\":[{\"id\":string,\"title\":string,\"reason\":string}]}.", "output_schema": {"top5":"array"} } },
-  { "name": "Send to Telegram","type": "agent","position": 2, "config": { "prompt": "Send this digest to the user via telegram_send, one line per post, with a link:\n{{prev.output}}" } }
-]
-```
-
-Notice in the GOOD example: names are verbs + objects, positions are explicit, and each step's output is referenced by the next via `{{prev.output}}`. That is what "a workflow" means.
-
-### Sanity checklist — tick every box before creating
-
-- [ ] Does my plan have ≥ 2 steps? (If no → stop, use `schedules`.)
-- [ ] Does each step have a name that describes ONE concrete action?
-- [ ] Do later steps reference earlier output explicitly (`{{prev.output}}` or `{{steps.<name>.output}}`)?
-- [ ] Are `code` steps used for deterministic work, `llm` for structured transforms, `agent` reserved for real tool-use actions?
-- [ ] Is every step's `position` explicitly set (0-indexed)?
+You can create, edit, and trigger automated **graph workflows** (directed acyclic graphs) that chain agent steps, loops, branches, and merges into repeatable pipelines. Every operation goes through the **orchestrator REST API** — never touch SQLite directly.
 
 ## Connection
 
@@ -75,298 +18,226 @@ Two environment variables are injected into every agent process:
 | `GRANCLAW_API_URL` | Base URL, e.g. `http://localhost:3001` (dev) or `http://localhost:8787` (published) |
 | `GRANCLAW_AGENT_ID` | Your own agent ID, e.g. `lucia` |
 
-All workflow endpoints are rooted at `$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows`.
+All endpoints are rooted at `$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows`.
 
-**Sanity check before your first call:**
 ```bash
 echo "API: $GRANCLAW_API_URL  Agent: $GRANCLAW_AGENT_ID"
 curl -sf "$GRANCLAW_API_URL/health" && echo " — orchestrator reachable"
 ```
 
-## Object model
+## Concepts
 
-A **workflow** is a named, ordered list of **steps**. Each step is one of three types:
+A **workflow** is a DAG of **nodes** connected by **edges**. When triggered, the runner executes nodes in topological order — each node runs only after all its incoming edges are resolved.
 
-- **`code`** — a shell script the runner executes in your workspace
-- **`llm`** — a structured Claude call returning JSON
-- **`agent`** — a full Claude session with all your tools (browser, bash, vault, etc.)
+### Node types
 
-Steps execute in order by `position`, unless a step defines **transitions** that redirect flow based on its output. A **run** is one execution of a workflow; the runner records a **run_step** row for each step executed in that run.
-
-### Workflow fields (JSON shape from the API)
-
-| Field | Type | Notes |
+| Type | Purpose | Config |
 |---|---|---|
-| `id` | string | `WF-NNN`, **auto-assigned by the server** on create. You never pick it. |
-| `name` | string | Human-readable name, keep concise. |
-| `description` | string | What the workflow does. Markdown supported. |
-| `status` | string | `active`, `paused`, or `archived`. |
-| `createdAt` | number | Unix ms. |
-| `updatedAt` | number | Unix ms. |
-| `steps` | array | Present on `GET /workflows/:wfId` — the ordered list of step objects. |
+| `trigger` | Entry point. Every workflow needs exactly one. | `{}` |
+| `agent` | Runs a full agent session with tools (browser, bash, vault, etc.) | `{ prompt, timeout_ms }` |
+| `foreach` | Iterates over an array from upstream, running the body subgraph once per item | `{ expression }` — defaults to `input` (the whole upstream output) |
+| `conditional` | Agent-based routing — evaluates input and picks a branch | `{ prompt, handles, timeout_ms }` |
+| `merge` | Waits for all incoming edges, combines their outputs | `{}` |
+| `end` | Terminal node. Marks the workflow as complete. | `{}` |
 
-### Step fields
+### Edges
 
-| Field | Type | Notes |
-|---|---|---|
-| `id` | string | UUID, **auto-assigned by the server** on create. |
-| `workflowId` | string | Parent workflow. |
-| `position` | number | 0-indexed execution order. |
-| `name` | string | Human-readable step name (shows in dashboard). |
-| `type` | string | `code`, `llm`, or `agent`. |
-| `config` | object | JSON shape depends on type — see below. |
-| `transitions` | object \| null | Optional branching rules — see below. |
+An edge connects a source node to a target node. Each edge has:
+- `sourceId` — the node it comes from
+- `targetId` — the node it goes to
+- `sourceHandle` — which output port (`default`, `body`, `done`, `true`, `false`, etc.)
+- `condition` — optional label for conditional routing
 
-### Run and run_step (read-only)
+ForEach nodes have two output handles: `body` (runs per item) and `done` (fires after all iterations with the collected results array).
 
-The runner creates `run` and `run_step` records when a workflow executes. You fetch them via `GET /workflows/:wfId/runs` — **you never create or modify them.**
+Conditional nodes have handles matching their `handles` config (e.g. `true`, `false`, or custom names).
 
-## Step config shapes
+All other nodes use `default`.
 
-### Code step
+### Agent node prompts
 
-```json
-{
-  "script": "curl -s https://api.example.com/data | jq '.items[:5]'",
-  "shell": "bash",
-  "timeout_ms": 30000
-}
+When an agent node runs, the runner automatically:
+1. Injects workflow context (previous step outputs, iteration data)
+2. Registers a `workflow_step_complete` tool — the agent calls this when done
+
+**You do NOT need to mention `workflow_step_complete` in the prompt.** The runner handles it.
+
+If downstream nodes expect structured data (e.g. a JSON array for a ForEach), instruct the agent to return that format:
+
+```
+Search for 10 AI news articles. Return a JSON array of objects with keys: title, summary, url, date.
 ```
 
-The script runs in your workspace directory with your `.env` vars loaded. Output should be valid JSON when possible — the runner parses stdout as JSON, falling back to raw string.
+The agent will call `workflow_step_complete` with the output automatically.
 
-### LLM step
+## API Reference
 
-```json
-{
-  "prompt": "Analyze this data and decide if we should proceed:\n\n{{prev.output}}\n\nRespond with JSON: {\"proceed\": true/false, \"reason\": \"...\"}",
-  "model": "claude-sonnet-4-5",
-  "output_schema": {
-    "proceed": "boolean",
-    "reason": "string"
-  }
-}
-```
-
-Templates in prompts:
-- `{{prev.output}}` — JSON output of the previous step
-- `{{steps.<step-name>.output}}` — JSON output of any earlier step referenced by name
-
-Always include clear "return JSON with schema X" instructions in the prompt.
-
-### Agent step
-
-A full Claude session with all your tools. Use when a task needs multiple tool calls, iterative work, or any non-deterministic reasoning.
-
-```json
-{
-  "prompt": "Research the latest AI news. Browse LinkedIn and tech sites. Save a summary of the top 5 findings to vault/journal/today/research.md",
-  "timeout_ms": 300000
-}
-```
-
-Templates are the same as LLM steps (`{{prev.output}}`, `{{steps.<name>.output}}`).
-
-**When to pick which step type:**
-- `code` — deterministic scripts (curl, jq, data transforms)
-- `llm` — one-shot structured text transformation
-- `agent` — anything that needs the full tool set (browsing, writing files, iterating)
-
-**Signaling failure from an agent step:** return text starting with `FAILED:` followed by the reason. Example: `FAILED: LinkedIn auth expired, cannot browse posts`. The runner marks the step failed and stops the workflow. You can also add `"fail_if": "<regex>"` to the step config for automatic failure detection.
-
-## Transitions
-
-```json
-{
-  "conditions": [
-    { "expr": "output.proceed === true", "goto": "<step-uuid>" },
-    { "expr": "output.proceed === false", "goto": "END" }
-  ]
-}
-```
-
-- `expr` is a JS expression evaluated against the step's output (`output` is the variable name)
-- `goto` is a target step UUID or the literal `"END"` to stop the workflow
-- If no condition matches, the runner proceeds to `position + 1`
-- If `transitions` is absent/null, the runner always proceeds linearly
-
-## Operations
-
-### List workflows
+### Workflow CRUD
 
 ```bash
+# List all workflows
 curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows"
-```
 
-Returns an array of workflow summaries.
-
-### Get a workflow with its steps
-
-```bash
-curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001"
-```
-
-### Create a workflow
-
-```bash
-curl -sf -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"name":"LinkedIn Scout","description":"Scrape and analyze LinkedIn posts"}' \
+# Create a workflow
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"name":"My Workflow","description":"Does X then Y"}' \
   "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows"
-```
+# Returns { id: "WF-001", ... } — save the id
 
-Returns the new workflow with its auto-assigned `WF-NNN` id. Save that id — you need it for every subsequent call.
+# Get a workflow
+curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001"
 
-### Update a workflow
-
-```bash
-curl -sf -X PUT \
-  -H "Content-Type: application/json" \
+# Update a workflow
+curl -sf -X PUT -H "Content-Type: application/json" \
   -d '{"status":"paused"}' \
   "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001"
-```
 
-Send only the fields you want to change.
-
-### Delete a workflow
-
-```bash
+# Delete a workflow
 curl -sf -X DELETE "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001"
 ```
 
-Steps, runs, and run_steps cascade.
-
-### Add a step to a workflow
+### Graph — full save (replace all nodes and edges at once)
 
 ```bash
-# Step 0 — code: fetch posts
-cat > /tmp/step.json <<'EOF'
-{
-  "name": "Scrape posts",
-  "type": "code",
-  "position": 0,
-  "config": {
-    "script": "curl -s https://api.example.com/posts | jq '.[:5]'",
-    "timeout_ms": 15000
-  }
-}
-EOF
-curl -sf -X POST \
-  -H "Content-Type: application/json" \
-  --data-binary @/tmp/step.json \
-  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/steps"
-rm /tmp/step.json
+# Get the current graph
+curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/graph"
+
+# Save entire graph (replaces all nodes and edges)
+curl -sf -X PUT -H "Content-Type: application/json" \
+  -d '{"nodes":[...],"edges":[...]}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/graph"
 ```
 
-The server assigns the step UUID. `position` is optional — if omitted, the step appends to the end.
-
-### Update a step
+### Nodes — individual CRUD
 
 ```bash
-curl -sf -X PUT \
-  -H "Content-Type: application/json" \
-  -d '{"config":{"script":"echo new","timeout_ms":5000}}' \
-  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/steps/<step-uuid>"
+# Add a node
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"nodeType":"agent","name":"Fetch Data","config":{"prompt":"...","timeout_ms":120000}}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/nodes"
+# Returns the node with auto-assigned UUID id
+
+# Update a node
+curl -sf -X PUT -H "Content-Type: application/json" \
+  -d '{"name":"New Name","config":{"prompt":"updated prompt","timeout_ms":60000}}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/nodes/<node-id>"
+
+# Delete a node
+curl -sf -X DELETE \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/nodes/<node-id>"
 ```
 
-### Remove a step
+### Edges — individual CRUD
 
 ```bash
-curl -sf -X DELETE "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/steps/<step-uuid>"
+# Add an edge
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"sourceId":"<node-id>","targetId":"<node-id>","sourceHandle":"default"}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/edges"
+
+# Delete an edge
+curl -sf -X DELETE \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/edges/<edge-id>"
 ```
 
-### Trigger a workflow run
+Common sourceHandle values: `default`, `body` (foreach body), `done` (foreach completion), or custom branch names for conditionals.
+
+### Runs
 
 ```bash
-curl -sf -X POST \
-  -H "Content-Type: application/json" \
-  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/run"
-```
+# Trigger a run
+curl -sf -X POST "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/run"
+# Returns 202 { status: "started" }
 
-Returns `{"runId":"..."}` immediately; the run executes asynchronously on the orchestrator.
-
-### List runs for a workflow
-
-```bash
+# List runs
 curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/runs"
-```
 
-Newest first. Each entry includes `status` (`running`, `completed`, `failed`, `cancelled`), `trigger`, `startedAt`, `finishedAt`.
-
-### Get a single run with step details
-
-```bash
+# Get run detail with step results
 curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/WF-001/runs/<run-id>"
 ```
 
-Returns the run plus its `steps` (or `runSteps`) array — each with `status`, `input`, `output`, `error`, `durationMs`. Use this to debug failed runs.
-
-## End-to-end example: create and run a three-step workflow
+## End-to-end example: AI News Digest workflow
 
 ```bash
-# 1. Create the workflow, capture the WF-NNN id
-WF=$(curl -sf -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Scout","description":"Scrape → analyze → build"}' \
-  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows" \
-  | jq -r '.id')
-echo "Created $WF"
+# 1. Create the workflow
+WF=$(curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"name":"AI News Digest","description":"Fetch AI news, summarize in Spanish"}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows" | jq -r '.id')
 
-# 2. Add step 0 — code
-curl -sf -X POST \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"Scrape posts\",\"type\":\"code\",\"position\":0,\"config\":{\"script\":\"curl -s https://api.example.com/posts | jq '.[:5]'\",\"timeout_ms\":15000}}" \
-  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/steps"
+# 2. Add nodes one by one
+T1=$(curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"nodeType":"trigger","name":"Start"}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/nodes" | jq -r '.id')
 
-# 3. Add step 1 — llm with a branch to END if not worthy
-curl -sf -X POST \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"Analyze engagement\",\"type\":\"llm\",\"position\":1,\"config\":{\"prompt\":\"Analyze these posts:\n\n{{prev.output}}\n\nReturn JSON: {\\\"worthy\\\": true/false, \\\"reason\\\": \\\"...\\\"}\",\"output_schema\":{\"worthy\":\"boolean\",\"reason\":\"string\"}},\"transitions\":{\"conditions\":[{\"expr\":\"output.worthy === false\",\"goto\":\"END\"}]}}" \
-  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/steps"
+A1=$(curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"nodeType":"agent","name":"Fetch AI News","config":{"prompt":"Search for 10 recent AI news articles. Return a JSON array with keys: title, summary, url, date.","timeout_ms":120000}}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/nodes" | jq -r '.id')
 
-# 4. Add step 2 — code (only reached if worthy)
-curl -sf -X POST \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"Build prototype\",\"type\":\"code\",\"position\":2,\"config\":{\"script\":\"echo 'building...' && mkdir -p output && echo '{\\\"status\\\":\\\"built\\\"}' > output/result.json\",\"timeout_ms\":60000}}" \
-  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/steps"
+FE=$(curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"nodeType":"foreach","name":"Process Each Article"}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/nodes" | jq -r '.id')
+
+A2=$(curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"nodeType":"agent","name":"Summarise & Translate","config":{"prompt":"Summarize this article in Spanish. If it is older than 1 month, return {\"discarded\": true}. Otherwise return {\"discarded\": false, \"title\": \"...\", \"summary_es\": \"...\"}","timeout_ms":180000}}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/nodes" | jq -r '.id')
+
+A3=$(curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"nodeType":"agent","name":"Final Summary","config":{"prompt":"Compile a final executive digest in Spanish from all the article summaries. Skip any that were discarded.","timeout_ms":120000}}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/nodes" | jq -r '.id')
+
+E1=$(curl -sf -X POST -H "Content-Type: application/json" \
+  -d '{"nodeType":"end","name":"Done"}' \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/nodes" | jq -r '.id')
+
+# 3. Connect them with edges
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d "{\"sourceId\":\"$T1\",\"targetId\":\"$A1\",\"sourceHandle\":\"default\"}" \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/edges"
+
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d "{\"sourceId\":\"$A1\",\"targetId\":\"$FE\",\"sourceHandle\":\"default\"}" \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/edges"
+
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d "{\"sourceId\":\"$FE\",\"targetId\":\"$A2\",\"sourceHandle\":\"body\"}" \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/edges"
+
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d "{\"sourceId\":\"$FE\",\"targetId\":\"$A3\",\"sourceHandle\":\"done\"}" \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/edges"
+
+curl -sf -X POST -H "Content-Type: application/json" \
+  -d "{\"sourceId\":\"$A3\",\"targetId\":\"$E1\",\"sourceHandle\":\"default\"}" \
+  "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/edges"
+
+# 4. Verify the graph
+curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/graph" | jq '.nodes | length, .edges | length'
 
 # 5. Trigger a run
-RUN=$(curl -sf -X POST "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/run" | jq -r '.runId')
-echo "Run started: $RUN"
+curl -sf -X POST "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/run"
 
-# 6. Poll for completion
-curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/runs/$RUN"
+# 6. Check status
+curl -sf "$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/workflows/$WF/runs" | jq '.[0]'
 ```
 
-**Tip:** keep complex payloads in temp files and use `--data-binary @file` when the JSON gets unreadable inline. The example above shows both styles.
+## When to use full graph save vs individual node/edge CRUD
+
+- **Creating a new workflow from scratch** — use the full graph `PUT .../graph` with all nodes and edges in one call. Simpler, atomic.
+- **Modifying an existing workflow** — use individual `POST/PUT/DELETE .../nodes/:id` and `.../edges/:id`. Avoids clobbering the entire graph for a small change.
+- **Complex restructuring** — `GET .../graph`, modify in memory, `PUT .../graph` back.
 
 ## Best practices
 
-1. **Keep code steps small.** Each should do one thing. Chain steps instead of writing megascripts.
-2. **Use structured output.** Always instruct LLM steps to return JSON with a clear schema.
-3. **Name steps descriptively.** Step names appear in the dashboard.
-4. **Test scripts first.** Run your shell script manually before wrapping it as a code step.
-5. **Use transitions for branching.** Don't embed conditional logic in a script — use the runner's transition system so the dashboard can visualize the flow.
-6. **Parse JSON responses with `jq` when capturing IDs.** See the end-to-end example — capturing `WF` from the create response is the ergonomic way to chain calls.
-7. **Check run status before claiming success.** Trigger a run, then `GET /runs/:runId` to confirm it completed without error. A 201 from `/run` only means the run was queued, not that it succeeded.
-
-## Error handling
-
-- **Empty env vars** — if `$GRANCLAW_API_URL` or `$GRANCLAW_AGENT_ID` is unset, the orchestrator isn't exposing them; report and stop.
-- **`curl: (7) Failed to connect`** — orchestrator is down or on a different port. Don't guess.
-- **`404 Not Found`** — the workflow, step, or run id doesn't exist. List first to confirm.
-- **`400 Bad Request`** — usually a missing required field. Workflows need `name`. Steps need `name`, `type`, `config`. Step updates reject unknown types.
-- **Agent step hangs** — raise its `timeout_ms`. The default is generous but not infinite.
+1. **Every workflow needs a trigger and an end node.** The trigger is the entry point; the end captures the final output.
+2. **Keep agent prompts focused.** Each agent node should do one thing well. Use ForEach for iteration, Conditional for branching.
+3. **Return structured data from agents.** If a downstream ForEach needs an array, say so in the prompt. The agent will format it.
+4. **Don't mention `workflow_step_complete` in prompts.** The runner auto-injects instructions for the agent to call this tool.
+5. **Use ForEach for batch processing.** Instead of "process all 10 items", make the upstream agent return an array and let ForEach iterate.
+6. **Check run status after triggering.** `POST .../run` returns 202 immediately — poll `GET .../runs` for completion.
 
 ## Prohibited operations
 
-**NEVER do any of these:**
-
-- Open or write to `workflows.sqlite` (or any `.sqlite` file) directly. The database is the orchestrator's implementation detail; you only ever talk to it through REST.
-- `INSERT` / `UPDATE` / `DELETE` on `runs` or `run_steps` tables. Those are the runner's territory.
-- Call the old hardcoded `http://localhost:3001/agents/main-agent/...` URL. Use `$GRANCLAW_API_URL/agents/$GRANCLAW_AGENT_ID/...` so the skill works for every agent on every port.
-- Generate `WF-NNN` ids or step UUIDs yourself. The server picks them on create.
-
-## Why this uses the REST API, not SQLite
-
-Earlier versions of this skill ran `sqlite3` directly against `workflows.sqlite`. That bypassed the orchestrator, which broke live dashboard updates, skipped validation, and made it impossible for multiple processes (agent, workflow runner, dashboard) to coordinate safely on the same database. The orchestrator is now the single writer: it owns mutation, fires dashboard updates, and manages the lifecycle of runs. Treat the REST API as the contract; SQLite is an implementation detail you never touch.
+- Never open or write to SQLite files directly
+- Never create run or run_step records — those are the runner's territory
+- Never hardcode `http://localhost:3001` — use `$GRANCLAW_API_URL`
+- Never generate node/workflow IDs yourself — the server auto-assigns them

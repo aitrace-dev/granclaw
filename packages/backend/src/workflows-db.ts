@@ -17,6 +17,8 @@ export type WorkflowStatus = 'active' | 'paused' | 'archived';
 export type RunStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 export type RunStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
+export type NodeType = 'agent' | 'foreach' | 'conditional' | 'merge' | 'trigger' | 'end';
+
 export interface Workflow {
   id: string;
   name: string;
@@ -26,18 +28,32 @@ export interface Workflow {
   updatedAt: number;
 }
 
-export interface Step {
+export interface WorkflowNode {
   id: string;
   workflowId: string;
-  position: number;
+  nodeType: NodeType;
   name: string;
-  type: string;
   config: Record<string, unknown>;
-  transitions: { conditions: { expr: string; goto: string }[] } | null;
+  positionX: number;
+  positionY: number;
 }
 
-export interface WorkflowWithSteps extends Workflow {
-  steps: Step[];
+export interface WorkflowEdge {
+  id: string;
+  workflowId: string;
+  sourceId: string;
+  targetId: string;
+  sourceHandle: string;
+  condition: string | null;
+}
+
+export interface WorkflowGraph {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+}
+
+export interface WorkflowWithGraph extends Workflow {
+  graph: WorkflowGraph;
 }
 
 export interface Run {
@@ -51,7 +67,7 @@ export interface Run {
 
 /**
  * Live events produced by an agent-type step while it runs. The runner
- * buffers these in workflows/runner.ts and flushes them to the DB every
+ * buffers these in workflows/runner-graph.ts and flushes them to the DB every
  * few events so the frontend RunDetail view can show what the agent is
  * doing in real time (polls every 1.5 s). Other step types
  * (code, llm) don't emit events — only the final output is captured.
@@ -69,6 +85,8 @@ export interface RunStep {
   id: string;
   runId: string;
   stepId: string;
+  nodeId: string | null;
+  iteration: number | null;
   status: RunStepStatus;
   input: unknown;
   output: unknown;
@@ -104,18 +122,6 @@ function rowToWorkflow(r: Record<string, unknown>): Workflow {
   };
 }
 
-function rowToStep(r: Record<string, unknown>): Step {
-  return {
-    id: r.id as string,
-    workflowId: r.workflow_id as string,
-    position: r.position as number,
-    name: r.name as string,
-    type: r.type as string,
-    config: JSON.parse(r.config as string),
-    transitions: r.transitions ? JSON.parse(r.transitions as string) : null,
-  };
-}
-
 function rowToRun(r: Record<string, unknown>): Run {
   return {
     id: r.id as string,
@@ -132,6 +138,8 @@ function rowToRunStep(r: Record<string, unknown>): RunStep {
     id: r.id as string,
     runId: r.run_id as string,
     stepId: r.step_id as string,
+    nodeId: (r.node_id as string) ?? null,
+    iteration: (r.iteration as number) ?? null,
     status: r.status as RunStepStatus,
     input: r.input ? JSON.parse(r.input as string) : null,
     output: r.output ? JSON.parse(r.output as string) : null,
@@ -140,6 +148,29 @@ function rowToRunStep(r: Record<string, unknown>): RunStep {
     startedAt: (r.started_at as number) ?? null,
     finishedAt: (r.finished_at as number) ?? null,
     durationMs: (r.duration_ms as number) ?? null,
+  };
+}
+
+function rowToNode(r: Record<string, unknown>): WorkflowNode {
+  return {
+    id: r.id as string,
+    workflowId: r.workflow_id as string,
+    nodeType: r.node_type as NodeType,
+    name: r.name as string,
+    config: JSON.parse(r.config as string),
+    positionX: r.position_x as number,
+    positionY: r.position_y as number,
+  };
+}
+
+function rowToEdge(r: Record<string, unknown>): WorkflowEdge {
+  return {
+    id: r.id as string,
+    workflowId: r.workflow_id as string,
+    sourceId: r.source_id as string,
+    targetId: r.target_id as string,
+    sourceHandle: r.source_handle as string,
+    condition: (r.condition as string) ?? null,
   };
 }
 
@@ -155,13 +186,11 @@ export function listWorkflows(agentId: string): Workflow[] {
   return (db.prepare(`SELECT * FROM workflows ORDER BY created_at DESC`).all() as Record<string, unknown>[]).map(rowToWorkflow);
 }
 
-export function getWorkflow(agentId: string, workflowId: string): WorkflowWithSteps | null {
+export function getWorkflow(agentId: string, workflowId: string): Workflow | null {
   const db = getDb(agentId);
   const row = db.prepare(`SELECT * FROM workflows WHERE id = ?`).get(workflowId);
   if (!row) return null;
-  const workflow = rowToWorkflow(row as Record<string, unknown>);
-  const steps = (db.prepare(`SELECT * FROM steps WHERE workflow_id = ? ORDER BY position`).all(workflowId) as Record<string, unknown>[]).map(rowToStep);
-  return { ...workflow, steps };
+  return rowToWorkflow(row as Record<string, unknown>);
 }
 
 export function createWorkflow(agentId: string, data: { name: string; description?: string }): Workflow {
@@ -198,54 +227,6 @@ export function deleteWorkflow(agentId: string, workflowId: string): boolean {
   return result.changes > 0;
 }
 
-// ── Step CRUD ─────────────────────────────────────────────────────────────
-
-export function addStep(agentId: string, workflowId: string, data: {
-  name: string; config: Record<string, unknown>;
-  transitions?: { conditions: { expr: string; goto: string }[] }; position?: number;
-}): Step {
-  const db = getDb(agentId);
-  const id = randomUUID();
-  const pos = data.position ?? (db.prepare(`SELECT COALESCE(MAX(position), -1) + 1 AS next FROM steps WHERE workflow_id = ?`).get(workflowId) as { next: number }).next;
-  db.prepare(`
-    INSERT INTO steps (id, workflow_id, position, name, type, config, transitions)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, workflowId, pos, data.name, 'agent', JSON.stringify(data.config), data.transitions ? JSON.stringify(data.transitions) : null);
-  db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), workflowId);
-  return rowToStep(db.prepare(`SELECT * FROM steps WHERE id = ?`).get(id) as Record<string, unknown>);
-}
-
-export function updateStep(agentId: string, stepId: string, data: {
-  name?: string; config?: Record<string, unknown>;
-  transitions?: { conditions: { expr: string; goto: string }[] } | null; position?: number;
-}): Step | null {
-  const db = getDb(agentId);
-  const existing = db.prepare(`SELECT * FROM steps WHERE id = ?`).get(stepId) as Record<string, unknown> | undefined;
-  if (!existing) return null;
-  const step = rowToStep(existing);
-  db.prepare(`
-    UPDATE steps SET name = ?, type = ?, config = ?, transitions = ?, position = ? WHERE id = ?
-  `).run(
-    data.name ?? step.name,
-    'agent',
-    data.config ? JSON.stringify(data.config) : existing.config as string,
-    data.transitions !== undefined ? (data.transitions ? JSON.stringify(data.transitions) : null) : existing.transitions as string | null,
-    data.position ?? step.position,
-    stepId,
-  );
-  db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), step.workflowId);
-  return rowToStep(db.prepare(`SELECT * FROM steps WHERE id = ?`).get(stepId) as Record<string, unknown>);
-}
-
-export function removeStep(agentId: string, stepId: string): boolean {
-  const db = getDb(agentId);
-  const step = db.prepare(`SELECT workflow_id FROM steps WHERE id = ?`).get(stepId) as { workflow_id: string } | undefined;
-  if (!step) return false;
-  db.prepare(`DELETE FROM steps WHERE id = ?`).run(stepId);
-  db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), step.workflow_id);
-  return true;
-}
-
 // ── Run management ────────────────────────────────────────────────────────
 
 export function createRun(agentId: string, workflowId: string, trigger: string): Run {
@@ -274,10 +255,13 @@ export function getRun(agentId: string, runId: string): RunWithSteps | null {
   if (!row) return null;
   const run = rowToRun(row as Record<string, unknown>);
   const steps = (db.prepare(`
-    SELECT rs.*, s.name as step_name, s.type as step_type, s.position as step_position
-    FROM run_steps rs JOIN steps s ON rs.step_id = s.id
-    WHERE rs.run_id = ? ORDER BY s.position
-  `).all(runId) as Record<string, unknown>[]).map(rowToRunStep);
+    SELECT rs.*, wn.name as node_name, wn.node_type as node_type
+    FROM run_steps rs LEFT JOIN workflow_nodes wn ON rs.node_id = wn.id
+    WHERE rs.run_id = ? ORDER BY rs.started_at
+  `).all(runId) as Record<string, unknown>[]).map(r => {
+    const step = rowToRunStep(r);
+    return { ...step, nodeName: (r.node_name as string) ?? null, nodeType: (r.node_type as string) ?? null };
+  });
   return { ...run, steps };
 }
 
@@ -391,6 +375,146 @@ export function getLatestRun(agentId: string, workflowId: string): Run | null {
     `).get(workflowId);
     return row ? rowToRun(row as Record<string, unknown>) : null;
   } catch { return null; }
+}
+
+// ── Graph CRUD (nodes + edges) ───────────────────────────────────────
+
+export function getWorkflowGraph(agentId: string, workflowId: string): WorkflowGraph {
+  const db = getDb(agentId);
+  const nodes = (db.prepare(`SELECT * FROM workflow_nodes WHERE workflow_id = ?`).all(workflowId) as Record<string, unknown>[]).map(rowToNode);
+  const edges = (db.prepare(`SELECT * FROM workflow_edges WHERE workflow_id = ?`).all(workflowId) as Record<string, unknown>[]).map(rowToEdge);
+  return { nodes, edges };
+}
+
+export function saveWorkflowGraph(agentId: string, workflowId: string, graph: {
+  nodes: { id: string; nodeType: NodeType; name: string; config: Record<string, unknown>; positionX: number; positionY: number }[];
+  edges: { id: string; sourceId: string; targetId: string; sourceHandle: string; condition?: string | null }[];
+}): WorkflowGraph {
+  const db = getDb(agentId);
+
+  // Validate DAG (reject cycles)
+  const adj = new Map<string, string[]>();
+  for (const n of graph.nodes) adj.set(n.id, []);
+  for (const e of graph.edges) {
+    const list = adj.get(e.sourceId);
+    if (list) list.push(e.targetId);
+  }
+  const visited = new Set<string>();
+  const stack = new Set<string>();
+  function hasCycle(node: string): boolean {
+    if (stack.has(node)) return true;
+    if (visited.has(node)) return false;
+    visited.add(node);
+    stack.add(node);
+    for (const next of adj.get(node) ?? []) {
+      if (hasCycle(next)) return true;
+    }
+    stack.delete(node);
+    return false;
+  }
+  for (const n of graph.nodes) {
+    if (hasCycle(n.id)) throw new Error('Workflow graph contains a cycle — only DAGs are allowed');
+  }
+
+  const txn = db.transaction(() => {
+    db.prepare(`DELETE FROM workflow_edges WHERE workflow_id = ?`).run(workflowId);
+    db.prepare(`DELETE FROM workflow_nodes WHERE workflow_id = ?`).run(workflowId);
+
+    const insertNode = db.prepare(`
+      INSERT INTO workflow_nodes (id, workflow_id, node_type, name, config, position_x, position_y)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const n of graph.nodes) {
+      insertNode.run(n.id, workflowId, n.nodeType, n.name, JSON.stringify(n.config), n.positionX, n.positionY);
+    }
+
+    const insertEdge = db.prepare(`
+      INSERT INTO workflow_edges (id, workflow_id, source_id, target_id, source_handle, condition)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const e of graph.edges) {
+      insertEdge.run(e.id, workflowId, e.sourceId, e.targetId, e.sourceHandle, e.condition ?? null);
+    }
+
+    db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), workflowId);
+  });
+  txn();
+
+  return getWorkflowGraph(agentId, workflowId);
+}
+
+export function addNode(agentId: string, workflowId: string, data: {
+  nodeType: NodeType; name: string; config?: Record<string, unknown>;
+  positionX?: number; positionY?: number;
+}): WorkflowNode {
+  const db = getDb(agentId);
+  const id = randomUUID();
+  db.prepare(`
+    INSERT INTO workflow_nodes (id, workflow_id, node_type, name, config, position_x, position_y)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, workflowId, data.nodeType, data.name, JSON.stringify(data.config ?? {}), data.positionX ?? 0, data.positionY ?? 0);
+  db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), workflowId);
+  return rowToNode(db.prepare(`SELECT * FROM workflow_nodes WHERE id = ?`).get(id) as Record<string, unknown>);
+}
+
+export function updateNode(agentId: string, nodeId: string, data: {
+  name?: string; config?: Record<string, unknown>; positionX?: number; positionY?: number;
+}): WorkflowNode | null {
+  const db = getDb(agentId);
+  const existing = db.prepare(`SELECT * FROM workflow_nodes WHERE id = ?`).get(nodeId) as Record<string, unknown> | undefined;
+  if (!existing) return null;
+  const node = rowToNode(existing);
+  db.prepare(`
+    UPDATE workflow_nodes SET name = ?, config = ?, position_x = ?, position_y = ? WHERE id = ?
+  `).run(
+    data.name ?? node.name,
+    data.config ? JSON.stringify(data.config) : existing.config as string,
+    data.positionX ?? node.positionX,
+    data.positionY ?? node.positionY,
+    nodeId,
+  );
+  db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), node.workflowId);
+  return rowToNode(db.prepare(`SELECT * FROM workflow_nodes WHERE id = ?`).get(nodeId) as Record<string, unknown>);
+}
+
+export function removeNode(agentId: string, nodeId: string): boolean {
+  const db = getDb(agentId);
+  const node = db.prepare(`SELECT workflow_id FROM workflow_nodes WHERE id = ?`).get(nodeId) as { workflow_id: string } | undefined;
+  if (!node) return false;
+  db.prepare(`DELETE FROM workflow_nodes WHERE id = ?`).run(nodeId);
+  db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), node.workflow_id);
+  return true;
+}
+
+export function addEdge(agentId: string, workflowId: string, data: {
+  sourceId: string; targetId: string; sourceHandle?: string; condition?: string;
+}): WorkflowEdge {
+  const db = getDb(agentId);
+  const id = randomUUID();
+  db.prepare(`
+    INSERT INTO workflow_edges (id, workflow_id, source_id, target_id, source_handle, condition)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, workflowId, data.sourceId, data.targetId, data.sourceHandle ?? 'default', data.condition ?? null);
+  db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), workflowId);
+  return rowToEdge(db.prepare(`SELECT * FROM workflow_edges WHERE id = ?`).get(id) as Record<string, unknown>);
+}
+
+export function removeEdge(agentId: string, edgeId: string): boolean {
+  const db = getDb(agentId);
+  const edge = db.prepare(`SELECT workflow_id FROM workflow_edges WHERE id = ?`).get(edgeId) as { workflow_id: string } | undefined;
+  if (!edge) return false;
+  db.prepare(`DELETE FROM workflow_edges WHERE id = ?`).run(edgeId);
+  db.prepare(`UPDATE workflows SET updated_at = ? WHERE id = ?`).run(Date.now(), edge.workflow_id);
+  return true;
+}
+
+export function createRunStepForNode(agentId: string, data: { runId: string; nodeId: string; iteration?: number }): RunStep {
+  const db = getDb(agentId);
+  const id = randomUUID();
+  db.prepare(`
+    INSERT INTO run_steps (id, run_id, step_id, node_id, iteration, status) VALUES (?, ?, NULL, ?, ?, 'pending')
+  `).run(id, data.runId, data.nodeId, data.iteration ?? null);
+  return rowToRunStep(db.prepare(`SELECT * FROM run_steps WHERE id = ?`).get(id) as Record<string, unknown>);
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────

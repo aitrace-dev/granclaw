@@ -12,7 +12,7 @@ import { getManagedAgents } from './orchestrator/agent-manager.js';
 import { getDueSchedules, updateSchedule } from './schedules-db.js';
 import { enqueue } from './agent-db.js';
 import { REPO_ROOT } from './config.js';
-import { executeWorkflow } from './workflows/runner.js';
+import { executeGraphWorkflow } from './workflows/runner-graph.js';
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -36,7 +36,7 @@ function tick(): void {
     for (const schedule of due) {
       if (schedule.workflowId) {
         console.log(`[scheduler] triggering workflow "${schedule.workflowId}" for schedule "${schedule.name}" (agent "${agentId}")`);
-        executeWorkflow(agentId, schedule.workflowId, 'schedule').catch((err) => {
+        executeGraphWorkflow(agentId, schedule.workflowId, 'schedule').catch((err) => {
           console.error(`[scheduler] workflow "${schedule.workflowId}" failed:`, err);
         });
       } else {

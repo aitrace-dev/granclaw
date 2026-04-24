@@ -1258,8 +1258,17 @@ export function createServer() {
     if (!managed) { res.status(404).json({ error: 'Agent not found' }); return; }
     const { sourceId, targetId, sourceHandle, condition } = req.body;
     if (!sourceId || !targetId) { res.status(400).json({ error: 'sourceId and targetId required' }); return; }
-    const edge = addEdge(req.params.id, req.params.wfId, { sourceId, targetId, sourceHandle, condition });
-    res.status(201).json(edge);
+    try {
+      const edge = addEdge(req.params.id, req.params.wfId, { sourceId, targetId, sourceHandle, condition });
+      res.status(201).json(edge);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('FOREIGN KEY')) {
+        res.status(400).json({ error: 'sourceId or targetId does not reference an existing node' });
+      } else {
+        res.status(500).json({ error: msg });
+      }
+    }
   });
 
   app.delete('/agents/:id/workflows/:wfId/edges/:edgeId', (req, res) => {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseArgs } from './index.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { parseArgs, checkNodeVersion } from './index.js';
 
 describe('parseArgs', () => {
   it('defaults to `start` with no args', () => {

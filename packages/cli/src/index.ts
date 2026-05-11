@@ -12,6 +12,27 @@ import { initCliTelemetry, captureCliEvent, getInstallId } from './telemetry.js'
 const pkg = require('../package.json') as { name: string; version: string };
 
 const DEFAULT_PORT = 8787;
+const REQUIRED_NODE_MAJOR = 20;
+
+/**
+ * Check that the running Node.js version meets the minimum requirement.
+ * Exits with code 1 and a friendly message if not.
+ */
+export function checkNodeVersion(): void {
+  const required = REQUIRED_NODE_MAJOR;
+  const current = process.versions.node;
+  const major = Number(current.split('.')[0]);
+
+  if (major < required) {
+    console.error(
+      `error: Node.js ${required}+ is required (found v${current}).\n\n` +
+      `GranClaw requires Node.js ${required} or newer. Please upgrade:\n` +
+      `  https://nodejs.org\n\n` +
+      `You can check your version with: node --version`,
+    );
+    process.exit(1);
+  }
+}
 
 // ANSI colour helpers — no external deps
 const c = {
@@ -299,6 +320,8 @@ function startServer(parsed: ParsedArgs): void {
 }
 
 export function main(argv: string[]): void {
+  checkNodeVersion();
+
   let parsed: ParsedArgs;
   try {
     parsed = parseArgs(argv);

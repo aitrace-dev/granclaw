@@ -62,6 +62,7 @@ interface ChatMessage {
   // "took too long" error.
   isCompacting?: boolean;
   compactions?: number;
+  attachments?: Array<{ type: 'image'; url: string; mimeType: string }>;
 }
 
 // ── Typing indicator ──────────────────────────────────────────────────────
@@ -580,6 +581,22 @@ export function ChatPage() {
                           prose-th:border prose-th:border-outline-variant/40 prose-th:px-2 prose-th:py-1 prose-th:bg-surface-dim prose-th:text-left prose-th:font-medium
                           prose-td:border prose-td:border-outline-variant/40 prose-td:px-2 prose-td:py-1">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{m.text}</ReactMarkdown>
+                          {m.attachments && m.attachments.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {m.attachments.map((attachment, idx) => (
+                                attachment.type === 'image' && (
+                                  <a key={idx} href={attachment.url} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={attachment.url}
+                                      alt={`Attachment ${idx + 1}`}
+                                      className="max-w-[400px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                      loading="lazy"
+                                    />
+                                  </a>
+                                )
+                              ))}
+                            </div>
+                          )}
                         </div>
                       : <TypingDots />
                 }
